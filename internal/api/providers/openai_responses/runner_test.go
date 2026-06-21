@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestRunStreaming_RetriesOnceWithoutInvalidPreviousResponseID(t *testing.T) {
@@ -41,7 +41,7 @@ func TestRunStreaming_RetriesOnceWithoutInvalidPreviousResponseID(t *testing.T) 
 				Body:       io.NopCloser(strings.NewReader("")),
 			}, nil
 		},
-		StreamHandler: func(_ context.Context, _ *http.Response, spinner *ui.Spinner) (string, string, error) {
+		StreamHandler: func(_ context.Context, _ *http.Response, spinner *uiruntime.Spinner) (string, string, error) {
 			spinner.Stop()
 			return "ok", "resp_new", nil
 		},

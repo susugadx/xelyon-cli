@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	reviewdomain "github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 )
 
 const maxReviewProgressDetailRunes = 140
@@ -95,7 +99,7 @@ func (r *ReviewRunner) emitProgress(event ReviewProgressEvent) {
 	r.progressSink.emit(event)
 }
 
-func reviewEvidenceProgressDetail(bundle ReviewEvidenceBundle) string {
+func reviewEvidenceProgressDetail(bundle reviewevidence.ReviewEvidenceBundle) string {
 	staged, unstaged := reviewChangedFileStageCounts(bundle.ChangedFiles)
 	untracked := len(bundle.Inventory.Untracked)
 	if untracked == 0 {
@@ -114,7 +118,7 @@ func reviewEvidenceProgressDetail(bundle ReviewEvidenceBundle) string {
 	return strings.Join(parts, " · ")
 }
 
-func reviewChangedFileStageCounts(files []ReviewChangedFile) (int, int) {
+func reviewChangedFileStageCounts(files []reviewevidence.ReviewChangedFile) (int, int) {
 	staged := 0
 	unstaged := 0
 	for _, file := range files {
@@ -128,7 +132,7 @@ func reviewChangedFileStageCounts(files []ReviewChangedFile) (int, int) {
 	return staged, unstaged
 }
 
-func countReviewProgressContextFiles(files []ReviewContextFileEvidence) int {
+func countReviewProgressContextFiles(files []reviewevidence.ReviewContextFileEvidence) int {
 	count := 0
 	for _, file := range files {
 		if !file.Skipped {
@@ -157,7 +161,7 @@ type reviewProgressProbeScope struct {
 	startedID string
 }
 
-func reviewProgressProbeScopeForRequest(req ReviewProbeRequest) reviewProgressProbeScope {
+func reviewProgressProbeScopeForRequest(req reviewprobe.ReviewProbeRequest) reviewProgressProbeScope {
 	commandIndex := 0
 	if len(req.Commands) == 0 {
 		commandIndex = -1
@@ -175,7 +179,7 @@ func (scope reviewProgressProbeScope) eventID(commandIndex int) string {
 	return reviewProgressProbeID(scope.probeID, commandIndex)
 }
 
-func reviewProgressProbeLabel(mode ReviewProbeMode) string {
+func reviewProgressProbeLabel(mode reviewdomain.ReviewProbeMode) string {
 	modeText := strings.TrimSpace(string(mode))
 	if modeText == "" {
 		return "probe"
@@ -183,25 +187,25 @@ func reviewProgressProbeLabel(mode ReviewProbeMode) string {
 	return "probe " + modeText
 }
 
-func reviewProgressProbeDetail(req ReviewProbeRequest) string {
+func reviewProgressProbeDetail(req reviewprobe.ReviewProbeRequest) string {
 	if len(req.Commands) == 0 {
 		if strings.TrimSpace(req.Purpose) != "" {
 			return truncateReviewProgressDetail(req.Purpose)
 		}
 		return truncateReviewProgressDetail(req.ID)
 	}
-	return truncateReviewProgressDetail(formatProbeCommand(req.Commands[0].Command, req.Commands[0].Args))
+	return truncateReviewProgressDetail(reviewprobe.FormatProbeCommand(req.Commands[0].Command, req.Commands[0].Args))
 }
 
-func reviewProgressProbeCommandDetail(result ReviewProbeCommandResult) string {
-	detail := formatProbeCommand(result.Command, result.Args)
+func reviewProgressProbeCommandDetail(result reviewprobe.ReviewProbeCommandResult) string {
+	detail := reviewprobe.FormatProbeCommand(result.Command, result.Args)
 	if strings.TrimSpace(detail) == "" && strings.TrimSpace(result.Error) != "" {
 		detail = result.Error
 	}
 	return truncateReviewProgressDetail(detail)
 }
 
-func reviewProgressProbeResultDetail(result ReviewProbeResult) string {
+func reviewProgressProbeResultDetail(result reviewprobe.ReviewProbeResult) string {
 	if strings.TrimSpace(result.Error) != "" {
 		return truncateReviewProgressDetail(result.Error)
 	}
@@ -211,9 +215,9 @@ func reviewProgressProbeResultDetail(result ReviewProbeResult) string {
 	return ""
 }
 
-func reviewProgressStatusForProbeStatus(status ReviewProbeStatus) ReviewProgressStatus {
+func reviewProgressStatusForProbeStatus(status reviewdomain.ReviewProbeStatus) ReviewProgressStatus {
 	switch status {
-	case ReviewProbePassed:
+	case reviewdomain.ReviewProbePassed:
 		return ReviewProgressOK
 	default:
 		return ReviewProgressError

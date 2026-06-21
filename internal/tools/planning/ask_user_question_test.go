@@ -10,7 +10,8 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type askUserQuestionResponse struct {
@@ -29,11 +30,11 @@ func newTestExecCtx(input string, stdout io.Writer) tools.ExecutionContext {
 }
 
 type askQuestionPrompter struct {
-	reqs []ui.PromptRequest
-	resp ui.PromptResponse
+	reqs []uiprompt.PromptRequest
+	resp uiprompt.PromptResponse
 }
 
-func (p *askQuestionPrompter) Prompt(_ context.Context, req ui.PromptRequest) (ui.PromptResponse, error) {
+func (p *askQuestionPrompter) Prompt(_ context.Context, req uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	p.reqs = append(p.reqs, req)
 	return p.resp, nil
 }
@@ -151,8 +152,8 @@ func TestAskUserQuestionTool_Run_DiscardDoesNotLeakProcessStdout(t *testing.T) {
 
 func TestAskUserQuestionTool_Run_UsesPrompter(t *testing.T) {
 	tool := &AskUserQuestionTool{}
-	prompter := &askQuestionPrompter{resp: ui.PromptResponse{Value: "No"}}
-	runtime := ui.NewRuntime(strings.NewReader("Yes\n"), io.Discard, io.Discard)
+	prompter := &askQuestionPrompter{resp: uiprompt.PromptResponse{Value: "No"}}
+	runtime := uiruntime.NewRuntime(strings.NewReader("Yes\n"), io.Discard, io.Discard)
 	runtime.SetPrompter(prompter)
 	execCtx := tools.ExecutionContext{
 		Runtime: runtime,
@@ -173,7 +174,7 @@ func TestAskUserQuestionTool_Run_UsesPrompter(t *testing.T) {
 	if len(prompter.reqs) != 1 {
 		t.Fatalf("prompt calls = %d, want 1", len(prompter.reqs))
 	}
-	if prompter.reqs[0].Kind != ui.PromptKindSingleChoice {
+	if prompter.reqs[0].Kind != uiprompt.PromptKindSingleChoice {
 		t.Fatalf("Kind = %q, want single_choice", prompter.reqs[0].Kind)
 	}
 
@@ -188,8 +189,8 @@ func TestAskUserQuestionTool_Run_UsesPrompter(t *testing.T) {
 
 func TestAskUserQuestionTool_Run_MultiChoicePrompter(t *testing.T) {
 	tool := &AskUserQuestionTool{}
-	prompter := &askQuestionPrompter{resp: ui.PromptResponse{Values: []string{"A", "C"}}}
-	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	prompter := &askQuestionPrompter{resp: uiprompt.PromptResponse{Values: []string{"A", "C"}}}
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	runtime.SetPrompter(prompter)
 
 	result, _, err := tool.Run(tools.ExecutionContext{
@@ -206,7 +207,7 @@ func TestAskUserQuestionTool_Run_MultiChoicePrompter(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if len(prompter.reqs) != 1 || prompter.reqs[0].Kind != ui.PromptKindMultiChoice {
+	if len(prompter.reqs) != 1 || prompter.reqs[0].Kind != uiprompt.PromptKindMultiChoice {
 		t.Fatalf("prompt requests = %#v, want multi_choice", prompter.reqs)
 	}
 
@@ -221,8 +222,8 @@ func TestAskUserQuestionTool_Run_MultiChoicePrompter(t *testing.T) {
 
 func TestAskUserQuestionTool_Run_FreeTextPrompter(t *testing.T) {
 	tool := &AskUserQuestionTool{}
-	prompter := &askQuestionPrompter{resp: ui.PromptResponse{Text: "details"}}
-	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	prompter := &askQuestionPrompter{resp: uiprompt.PromptResponse{Text: "details"}}
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	runtime.SetPrompter(prompter)
 
 	result, _, err := tool.Run(tools.ExecutionContext{
@@ -238,7 +239,7 @@ func TestAskUserQuestionTool_Run_FreeTextPrompter(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if len(prompter.reqs) != 1 || prompter.reqs[0].Kind != ui.PromptKindText {
+	if len(prompter.reqs) != 1 || prompter.reqs[0].Kind != uiprompt.PromptKindText {
 		t.Fatalf("prompt requests = %#v, want text", prompter.reqs)
 	}
 

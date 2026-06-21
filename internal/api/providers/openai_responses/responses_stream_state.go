@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // StreamingOptions は Responses API streaming 解析時の provider 差分を表す。
@@ -36,7 +36,7 @@ type responsesStreamStateOptions struct {
 type responsesStreamState struct {
 	providerName              string
 	debugName                 string
-	spinner                   *ui.Spinner
+	spinner                   *uiruntime.Spinner
 	errOut                    io.Writer
 	debug                     bool
 	debugRawPayload           bool
@@ -56,7 +56,7 @@ type responsesStreamState struct {
 	lastUsage                 *api.Usage
 }
 
-func newResponsesStreamState(spinner *ui.Spinner, errOut io.Writer) *responsesStreamState {
+func newResponsesStreamState(spinner *uiruntime.Spinner, errOut io.Writer) *responsesStreamState {
 	return newResponsesStreamStateWithOptions(spinner, errOut, responsesStreamStateOptions{
 		providerName:    "OpenAI",
 		debugName:       "OpenAI",
@@ -65,7 +65,7 @@ func newResponsesStreamState(spinner *ui.Spinner, errOut io.Writer) *responsesSt
 	})
 }
 
-func newResponsesStreamStateWithOptions(spinner *ui.Spinner, errOut io.Writer, options responsesStreamStateOptions) *responsesStreamState {
+func newResponsesStreamStateWithOptions(spinner *uiruntime.Spinner, errOut io.Writer, options responsesStreamStateOptions) *responsesStreamState {
 	providerName := strings.TrimSpace(options.providerName)
 	if providerName == "" {
 		providerName = "OpenAI"
@@ -165,7 +165,7 @@ func (s *responsesStreamState) handleErrorEvent(chunk StreamChunk) (bool, error)
 
 // HandleStreaming は Responses API のストリーミングを処理する。
 // Response ID も抽出して返却する（content, responseID, error）。
-func HandleStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner, options StreamingOptions) (string, string, error) {
+func HandleStreaming(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner, options StreamingOptions) (string, string, error) {
 	errOut := options.DebugWriter
 	if errOut == nil {
 		errOut = api.ErrorWriterFromContext(ctx)

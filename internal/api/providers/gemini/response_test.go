@@ -14,7 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // ===== extractCodeBlockToolJSON unit tests =====
@@ -236,8 +236,8 @@ func newGeminiSSETestContext(idleSeconds, thinkingSeconds int) context.Context {
 	cfg.Streaming.IdleTimeoutSeconds = idleSeconds
 	cfg.Streaming.ThinkingTimeoutSeconds = thinkingSeconds
 
-	runtime := ui.NewRuntime(nil, &bytes.Buffer{}, &bytes.Buffer{})
-	ctx := ui.WithRuntime(context.Background(), runtime)
+	runtime := uiruntime.NewRuntime(nil, &bytes.Buffer{}, &bytes.Buffer{})
+	ctx := uiruntime.WithRuntime(context.Background(), runtime)
 	return config.WithContext(ctx, cfg)
 }
 

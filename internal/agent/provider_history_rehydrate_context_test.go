@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
 	"github.com/susugadx/xelyon-cli/internal/token"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestProviderHistoryRehydrateContextDefaultOffDoesNotChangeActiveContext(t *testing.T) {
@@ -221,7 +221,7 @@ func TestProviderHistoryRehydrateContextTokenEstimateMatchesProviderRequest(t *t
 func TestHandleTokensCommand_ShowsProviderHistoryRehydratedEvidenceTokens(t *testing.T) {
 	var out bytes.Buffer
 	agent, _, _ := newProviderHistoryRehydrateContextFixture(t, activeContextOpenAIResponses)
-	agent.Runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	agent.Runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 
 	activeTokens := agent.EstimateActiveContextTokens()
 	if activeTokens <= 0 {

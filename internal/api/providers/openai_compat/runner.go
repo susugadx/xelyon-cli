@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // ChatCompletionsExecutor は OpenAI 互換 request を送信できる provider の最小契約。
@@ -22,8 +22,8 @@ type ChatCompletionsRunOptions struct {
 	SpinnerSuffix      string
 	ForceStreaming     bool
 	RequestErrorPrefix string
-	StreamHandler      func(context.Context, *http.Response, *ui.Spinner) (string, error)
-	NonStreamHandler   func(context.Context, *http.Response, *ui.Spinner) (string, error)
+	StreamHandler      func(context.Context, *http.Response, *uiruntime.Spinner) (string, error)
+	NonStreamHandler   func(context.Context, *http.Response, *uiruntime.Spinner) (string, error)
 }
 
 // RunChatCompletions は共通の送信、spinner、HTTP status、stream 分岐を処理する。

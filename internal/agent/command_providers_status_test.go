@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleProvidersCommand_UsesRuntimeOutput(t *testing.T) {
@@ -13,7 +13,7 @@ func TestHandleProvidersCommand_UsesRuntimeOutput(t *testing.T) {
 	agent := &Agent{
 		ProviderName: "ollama",
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 
@@ -49,7 +49,7 @@ func TestHandleProvidersCommand_MarksOnlyClaudeOwnerAsCurrent(t *testing.T) {
 		ProviderName:      "claude",
 		ProviderConfigKey: "claude",
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 
@@ -75,7 +75,7 @@ func TestHandleProvidersCommand_MarksOnlyAnthropicOwnerAsCurrent(t *testing.T) {
 		ProviderName:      "claude",
 		ProviderConfigKey: "anthropic",
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 

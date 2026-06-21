@@ -9,7 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	displayui "github.com/susugadx/xelyon-cli/internal/ui"
+	displayui "github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 func TestCompressHistory_TUIUsesStructuredCompressionDisplay(t *testing.T) {

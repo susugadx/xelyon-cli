@@ -5,14 +5,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestRuntimeFromContext(t *testing.T) {
 	t.Run("context with runtime returns that runtime", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		runtime := ui.NewRuntime(nil, buf, buf)
-		ctx := ui.WithRuntime(context.Background(), runtime)
+		runtime := uiruntime.NewRuntime(nil, buf, buf)
+		ctx := uiruntime.WithRuntime(context.Background(), runtime)
 
 		got := RuntimeFromContext(ctx)
 		if got != runtime {
@@ -33,7 +33,7 @@ func TestRuntimeFromContext(t *testing.T) {
 func TestRuntimeOrDefault(t *testing.T) {
 	t.Run("non-nil runtime is returned as-is", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		runtime := ui.NewRuntime(nil, buf, buf)
+		runtime := uiruntime.NewRuntime(nil, buf, buf)
 
 		got := RuntimeOrDefault(runtime)
 		if got != runtime {
@@ -52,8 +52,8 @@ func TestRuntimeOrDefault(t *testing.T) {
 func TestOutputWriterFromContext(t *testing.T) {
 	t.Run("context with runtime returns runtime output", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		runtime := ui.NewRuntime(nil, buf, nil)
-		ctx := ui.WithRuntime(context.Background(), runtime)
+		runtime := uiruntime.NewRuntime(nil, buf, nil)
+		ctx := uiruntime.WithRuntime(context.Background(), runtime)
 
 		got := OutputWriterFromContext(ctx)
 		if got == nil {
@@ -86,10 +86,10 @@ func TestOutputWriterFromContext(t *testing.T) {
 func TestSpinnerFromContext(t *testing.T) {
 	t.Run("context with runtime that has spinner", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		runtime := ui.NewRuntime(nil, buf, buf)
+		runtime := uiruntime.NewRuntime(nil, buf, buf)
 		spinner := runtime.NewSpinner()
 		runtime.SetSpinner(spinner)
-		ctx := ui.WithRuntime(context.Background(), runtime)
+		ctx := uiruntime.WithRuntime(context.Background(), runtime)
 
 		got := SpinnerFromContext(ctx)
 		if got != spinner {
@@ -99,8 +99,8 @@ func TestSpinnerFromContext(t *testing.T) {
 
 	t.Run("context with runtime without spinner", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		runtime := ui.NewRuntime(nil, buf, buf)
-		ctx := ui.WithRuntime(context.Background(), runtime)
+		runtime := uiruntime.NewRuntime(nil, buf, buf)
+		ctx := uiruntime.WithRuntime(context.Background(), runtime)
 
 		got := SpinnerFromContext(ctx)
 		if got != nil {

@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
-func newTestSpinner() *ui.Spinner {
-	return ui.NewSpinnerWithWriter(io.Discard)
+func newTestSpinner() *uiruntime.Spinner {
+	return uiruntime.NewSpinnerWithWriter(io.Discard)
 }
 
 func newTestStreamState() *bedrockStreamState {

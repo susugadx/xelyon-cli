@@ -6,12 +6,13 @@ import (
 	"io"
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 type streamOutputState struct {
 	ctx                 context.Context
-	spinner             *ui.Spinner
+	spinner             *uiruntime.Spinner
 	out                 io.Writer
 	streamAssistantText bool
 
@@ -27,7 +28,7 @@ type streamOutputState struct {
 	contentNewlineEmitted bool
 }
 
-func newStreamOutputState(ctx context.Context, spinner *ui.Spinner) *streamOutputState {
+func newStreamOutputState(ctx context.Context, spinner *uiruntime.Spinner) *streamOutputState {
 	return &streamOutputState{
 		ctx:                 ctx,
 		spinner:             spinner,
@@ -118,9 +119,9 @@ func (s *streamOutputState) startToolSpinnerIfNeeded() {
 	msg := "Preparing..."
 	responseStr := s.response()
 	if strings.Contains(responseStr, "write_file") {
-		msg = ui.SpinnerMessageForTool("write_file")
+		msg = uitoolview.SpinnerMessageForTool("write_file")
 	} else if strings.Contains(responseStr, "str_replace") {
-		msg = ui.SpinnerMessageForTool("str_replace")
+		msg = uitoolview.SpinnerMessageForTool("str_replace")
 	}
 	s.spinner.Start(msg)
 }

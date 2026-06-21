@@ -14,7 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tui"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
 type dummyTeaModel struct{}
@@ -244,18 +244,18 @@ func TestTUIPromptBridge_BlocksUntilResponse(t *testing.T) {
 		t.Fatal("expected runtime prompter")
 	}
 
-	done := make(chan ui.PromptResponse, 1)
+	done := make(chan uiprompt.PromptResponse, 1)
 	go func() {
-		resp, _ := prompter.Prompt(context.Background(), ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"})
+		resp, _ := prompter.Prompt(context.Background(), uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"})
 		done <- resp
 	}()
 
 	open := <-openCh
-	open.Respond <- ui.PromptResponse{Action: ui.PromptActionYes}
+	open.Respond <- uiprompt.PromptResponse{Action: uiprompt.PromptActionYes}
 
 	select {
 	case resp := <-done:
-		if resp.Action != ui.PromptActionYes {
+		if resp.Action != uiprompt.PromptActionYes {
 			t.Fatalf("response = %#v, want yes", resp)
 		}
 	case <-time.After(2 * time.Second):
@@ -277,9 +277,9 @@ func TestTUIPromptBridge_ContextCancelSendsCancelPrompt(t *testing.T) {
 	defer bridge.shutdown()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan ui.PromptResponse, 1)
+	done := make(chan uiprompt.PromptResponse, 1)
 	go func() {
-		resp, _ := agent.RuntimeUI().Prompter().Prompt(ctx, ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"})
+		resp, _ := agent.RuntimeUI().Prompter().Prompt(ctx, uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"})
 		done <- resp
 	}()
 
@@ -305,7 +305,7 @@ func TestTUIPromptBridge_ContextCancelSendsCancelPrompt(t *testing.T) {
 
 	select {
 	case resp := <-done:
-		if resp.Action != ui.PromptActionNo || !resp.Cancelled {
+		if resp.Action != uiprompt.PromptActionNo || !resp.Cancelled {
 			t.Fatalf("response = %#v, want cancelled no", resp)
 		}
 	case <-time.After(2 * time.Second):
@@ -327,9 +327,9 @@ func TestTUIPromptBridge_ShutdownReleasesWaiter(t *testing.T) {
 	bridge.start()
 	defer close(bridge.outgoing)
 
-	done := make(chan ui.PromptResponse, 1)
+	done := make(chan uiprompt.PromptResponse, 1)
 	go func() {
-		resp, _ := agent.RuntimeUI().Prompter().Prompt(context.Background(), ui.PromptRequest{Kind: ui.PromptKindConfirm, Message: "Proceed?"})
+		resp, _ := agent.RuntimeUI().Prompter().Prompt(context.Background(), uiprompt.PromptRequest{Kind: uiprompt.PromptKindConfirm, Message: "Proceed?"})
 		done <- resp
 	}()
 	<-openCh
@@ -337,7 +337,7 @@ func TestTUIPromptBridge_ShutdownReleasesWaiter(t *testing.T) {
 
 	select {
 	case resp := <-done:
-		if resp.Action != ui.PromptActionNo || !resp.Cancelled {
+		if resp.Action != uiprompt.PromptActionNo || !resp.Cancelled {
 			t.Fatalf("response = %#v, want cancelled no", resp)
 		}
 	case <-time.After(2 * time.Second):

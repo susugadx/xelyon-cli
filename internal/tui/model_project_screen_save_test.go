@@ -18,16 +18,17 @@ func TestProjectScreen_ContextEditAndSave(t *testing.T) {
 	m := newProjectTestModel(agent)
 
 	m = sendProjectKey(m, "enter")
-	if m.projectScreen.editMode != projectEditContext {
-		t.Fatalf("editMode = %d, want context edit", m.projectScreen.editMode)
+	if got := projectSnapshot(t, m).EditMode; got != "context" {
+		t.Fatalf("editMode = %s, want context", got)
 	}
-	m.projectScreen.contextArea.SetValue("new context\nsecond line")
+	m = sendProjectText(m, "new context\nsecond line")
 	m = sendProjectCtrlS(m)
 
-	if !m.projectScreen.dirty {
+	snapshot := projectSnapshot(t, m)
+	if !snapshot.Dirty {
 		t.Fatal("project screen should be dirty after context edit")
 	}
-	if got := m.projectScreen.pc.Context; got != "new context\nsecond line" {
+	if got := snapshot.Config.Context; got != "new context\nsecond line" {
 		t.Fatalf("Context = %q", got)
 	}
 
@@ -38,7 +39,7 @@ func TestProjectScreen_ContextEditAndSave(t *testing.T) {
 	if got := agent.lastSavedProject.Context; got != "new context\nsecond line" {
 		t.Fatalf("saved Context = %q", got)
 	}
-	if m.projectScreen.dirty {
+	if projectSnapshot(t, m).Dirty {
 		t.Fatal("dirty should be false after save")
 	}
 }
@@ -59,8 +60,8 @@ func TestProjectScreen_SaveKeepsDirtyWhenEditedAfterSaveStarts(t *testing.T) {
 	if saveCmd == nil {
 		t.Fatal("saveCmd should not be nil")
 	}
-	if m.projectScreen.saveStatus != projectStatusSaving {
-		t.Fatalf("saveStatus = %d, want projectStatusSaving(%d)", m.projectScreen.saveStatus, projectStatusSaving)
+	if got := projectSnapshot(t, m).SaveStatus; got != "saving" {
+		t.Fatalf("saveStatus = %s, want saving", got)
 	}
 
 	m = editProjectContext(t, m, "late edit")
@@ -70,14 +71,15 @@ func TestProjectScreen_SaveKeepsDirtyWhenEditedAfterSaveStarts(t *testing.T) {
 	if m.screen != screenProject {
 		t.Fatalf("screen = %d, want screenProject", m.screen)
 	}
-	if got := m.projectScreen.pc.Context; got != "late edit" {
+	snapshot := projectSnapshot(t, m)
+	if got := snapshot.Config.Context; got != "late edit" {
 		t.Fatalf("Context after stale save = %q, want late edit", got)
 	}
-	if !m.projectScreen.dirty {
+	if !snapshot.Dirty {
 		t.Fatal("dirty should stay true when project config changed after save started")
 	}
-	if m.projectScreen.saveStatus != projectStatusModified {
-		t.Fatalf("saveStatus after stale save = %d, want projectStatusModified(%d)", m.projectScreen.saveStatus, projectStatusModified)
+	if snapshot.SaveStatus != "modified" {
+		t.Fatalf("saveStatus after stale save = %s, want modified", snapshot.SaveStatus)
 	}
 	if got := agent.lastSavedProject.Context; got != "saved snapshot" {
 		t.Fatalf("saved Context = %q, want saved snapshot", got)
@@ -107,7 +109,7 @@ func TestProjectScreen_SaveWhileInFlightQueuesLatestSnapshot(t *testing.T) {
 	if immediateSecondSaveCmd != nil {
 		t.Fatalf("second save while in flight returned cmd %v, want queued save", immediateSecondSaveCmd)
 	}
-	if !m.projectScreen.saveQueued {
+	if !projectSnapshot(t, m).SaveQueued {
 		t.Fatal("saveQueued should be true after saving during in-flight save")
 	}
 
@@ -131,10 +133,11 @@ func TestProjectScreen_SaveWhileInFlightQueuesLatestSnapshot(t *testing.T) {
 	if got := agent.savedProjects[1].Context; got != "second snapshot" {
 		t.Fatalf("queued saved Context = %q, want second snapshot", got)
 	}
-	if m.projectScreen.dirty {
+	snapshot := projectSnapshot(t, m)
+	if snapshot.Dirty {
 		t.Fatal("dirty should be false after queued save")
 	}
-	if m.projectScreen.saveInFlight {
+	if snapshot.SaveInFlight {
 		t.Fatal("saveInFlight should be false after queued save")
 	}
 }
@@ -151,7 +154,7 @@ func TestProjectScreen_SaveAndQuitDoesNotCloseIfEditedAfterSaveStarts(t *testing
 
 	m = editProjectContext(t, m, "saved snapshot")
 	m = sendProjectKey(m, "q")
-	if !m.projectScreen.confirmQuit {
+	if !projectSnapshot(t, m).ConfirmQuit {
 		t.Fatal("confirmQuit should be true before save and quit")
 	}
 	updated, saveCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -159,7 +162,7 @@ func TestProjectScreen_SaveAndQuitDoesNotCloseIfEditedAfterSaveStarts(t *testing
 	if saveCmd == nil {
 		t.Fatal("saveCmd should not be nil")
 	}
-	if !m.projectScreen.pendingClose {
+	if !projectSnapshot(t, m).PendingClose {
 		t.Fatal("pendingClose should be true while save and quit is in flight")
 	}
 
@@ -170,17 +173,18 @@ func TestProjectScreen_SaveAndQuitDoesNotCloseIfEditedAfterSaveStarts(t *testing
 	if m.screen != screenProject {
 		t.Fatalf("screen = %d, want screenProject when late edits remain unsaved", m.screen)
 	}
-	if m.projectScreen.pendingClose {
+	snapshot := projectSnapshot(t, m)
+	if snapshot.PendingClose {
 		t.Fatal("pendingClose should be cleared after stale save result")
 	}
-	if got := m.projectScreen.pc.Context; got != "late edit" {
+	if got := snapshot.Config.Context; got != "late edit" {
 		t.Fatalf("Context after stale save-and-quit = %q, want late edit", got)
 	}
-	if !m.projectScreen.dirty {
+	if !snapshot.Dirty {
 		t.Fatal("dirty should remain true after stale save-and-quit")
 	}
-	if m.projectScreen.saveStatus != projectStatusModified {
-		t.Fatalf("saveStatus after stale save-and-quit = %d, want projectStatusModified(%d)", m.projectScreen.saveStatus, projectStatusModified)
+	if snapshot.SaveStatus != "modified" {
+		t.Fatalf("saveStatus after stale save-and-quit = %s, want modified", snapshot.SaveStatus)
 	}
 }
 
@@ -209,7 +213,7 @@ func TestProjectScreen_DiscardQuitDisabledWhileSaveInFlight(t *testing.T) {
 	if m.screen != screenProject {
 		t.Fatalf("screen = %d, want screenProject while save is in flight", m.screen)
 	}
-	if !m.projectScreen.confirmQuit {
+	if !projectSnapshot(t, m).ConfirmQuit {
 		t.Fatal("confirmQuit should remain true while discard is blocked")
 	}
 
@@ -244,10 +248,10 @@ func TestProjectScreen_StaleSaveDoesNotCancelNewerSaveAndQuit(t *testing.T) {
 	if queuedImmediately != nil {
 		t.Fatalf("save-and-quit during in-flight save returned cmd %v, want nil queued save", queuedImmediately)
 	}
-	if !m.projectScreen.pendingClose {
+	if !projectSnapshot(t, m).PendingClose {
 		t.Fatal("pendingClose should be true for newer save-and-quit")
 	}
-	if !m.projectScreen.saveQueued {
+	if !projectSnapshot(t, m).SaveQueued {
 		t.Fatal("saveQueued should be true for newer save-and-quit")
 	}
 
@@ -259,8 +263,8 @@ func TestProjectScreen_StaleSaveDoesNotCancelNewerSaveAndQuit(t *testing.T) {
 	if queuedSaveAndQuitCmd == nil {
 		t.Fatal("queued save-and-quit command should start after first save completes")
 	}
-	if m.projectScreen.saveStatus != projectStatusSaving {
-		t.Fatalf("saveStatus after starting queued save = %d, want projectStatusSaving(%d)", m.projectScreen.saveStatus, projectStatusSaving)
+	if got := projectSnapshot(t, m).SaveStatus; got != "saving" {
+		t.Fatalf("saveStatus after starting queued save = %s, want saving", got)
 	}
 
 	updated, _ = m.Update(queuedSaveAndQuitCmd())
@@ -299,16 +303,16 @@ func TestProjectScreen_SaveAndQuitCanBeCanceledWhileSaveInFlight(t *testing.T) {
 	if saveCmd == nil {
 		t.Fatal("saveCmd should not be nil")
 	}
-	if !m.projectScreen.pendingClose {
+	if !projectSnapshot(t, m).PendingClose {
 		t.Fatal("pendingClose should be true after save-and-quit")
 	}
 
 	m = sendProjectKey(m, "q")
-	if !m.projectScreen.confirmQuit {
+	if !projectSnapshot(t, m).ConfirmQuit {
 		t.Fatal("confirmQuit should be true before canceling pending close")
 	}
 	m = sendProjectKey(m, "esc")
-	if m.projectScreen.pendingClose {
+	if projectSnapshot(t, m).PendingClose {
 		t.Fatal("pendingClose should be false after canceling close intent")
 	}
 
@@ -317,7 +321,7 @@ func TestProjectScreen_SaveAndQuitCanBeCanceledWhileSaveInFlight(t *testing.T) {
 	if m.screen != screenProject {
 		t.Fatalf("screen after canceled save-and-quit = %d, want screenProject", m.screen)
 	}
-	if m.projectScreen.dirty {
+	if projectSnapshot(t, m).Dirty {
 		t.Fatal("dirty should be false after save completes")
 	}
 }
@@ -340,28 +344,30 @@ func TestProjectScreen_SaveAndQuitDoesNotCloseOverActiveEditDraft(t *testing.T) 
 	}
 
 	m = sendProjectKey(m, "enter")
-	if m.projectScreen.editMode != projectEditContext {
-		t.Fatalf("editMode = %d, want projectEditContext(%d)", m.projectScreen.editMode, projectEditContext)
+	if got := projectSnapshot(t, m).EditMode; got != "context" {
+		t.Fatalf("editMode = %s, want context", got)
 	}
-	m.projectScreen.contextArea.SetValue("draft after save")
+	m = sendProjectText(m, "draft after save")
 
 	updated, _ = m.Update(saveCmd())
 	m = updated.(Model)
 	if m.screen != screenProject {
 		t.Fatalf("screen after save with active draft = %d, want screenProject", m.screen)
 	}
-	if m.projectScreen.editMode != projectEditContext {
-		t.Fatalf("editMode after save = %d, want projectEditContext(%d)", m.projectScreen.editMode, projectEditContext)
+	snapshot := projectSnapshot(t, m)
+	if snapshot.EditMode != "context" {
+		t.Fatalf("editMode after save = %s, want context", snapshot.EditMode)
 	}
-	if m.projectScreen.pendingClose {
+	if snapshot.PendingClose {
 		t.Fatal("pendingClose should be false after starting an edit")
 	}
 
 	m = sendProjectCtrlS(m)
-	if got := m.projectScreen.pc.Context; got != "draft after save" {
+	snapshot = projectSnapshot(t, m)
+	if got := snapshot.Config.Context; got != "draft after save" {
 		t.Fatalf("Context after confirming draft = %q, want draft after save", got)
 	}
-	if !m.projectScreen.dirty {
+	if !snapshot.Dirty {
 		t.Fatal("confirming the draft after save should mark the screen dirty")
 	}
 }

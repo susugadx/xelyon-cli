@@ -9,7 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func setupTestEnvironment(t *testing.T) {
@@ -43,7 +43,7 @@ func setupTestConfirm(t *testing.T, result bool) {
 	common.SimpleConfirm = func(msg string) bool {
 		return result
 	}
-	common.SimpleConfirmWithIO = func(_ ui.PromptIO, msg string) bool {
+	common.SimpleConfirmWithIO = func(_ uiruntime.PromptIO, msg string) bool {
 		return result
 	}
 	t.Cleanup(func() {

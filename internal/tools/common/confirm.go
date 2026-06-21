@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // ConfirmAction is the normalized action returned by confirmation prompts.
@@ -61,16 +62,16 @@ func (o ConfirmOptions) EffectivePolicy() config.ExecutionPolicy {
 // 空入力は無視してリトライする（AI実行中のEnter押下対策）
 // ただしEOF時はfalseを返して終了する
 // NOTE: テスト時は setupTestConfirm() でモックされる
-var SimpleConfirmWithIO = func(promptIO ui.PromptIO, message string) bool {
-	promptIO = ui.NormalizePromptIO(promptIO)
+var SimpleConfirmWithIO = func(promptIO uiruntime.PromptIO, message string) bool {
+	promptIO = uiruntime.NormalizePromptIO(promptIO)
 	if prompter := promptIO.Prompter(); prompter != nil {
-		resp, err := prompter.Prompt(promptIO.PromptContext(), ui.PromptRequest{
-			Kind:                ui.PromptKindConfirm,
+		resp, err := prompter.Prompt(promptIO.PromptContext(), uiprompt.PromptRequest{
+			Kind:                uiprompt.PromptKindConfirm,
 			Message:             message,
 			AllowComment:        false,
-			ConfirmSubmitPolicy: ui.PromptConfirmSubmitExplicit,
+			ConfirmSubmitPolicy: uiprompt.PromptConfirmSubmitExplicit,
 		})
-		return err == nil && !resp.Cancelled && resp.Action == ui.PromptActionYes
+		return err == nil && !resp.Cancelled && resp.Action == uiprompt.PromptActionYes
 	}
 
 	reader := promptIO.BufioReader()
@@ -82,14 +83,14 @@ var SimpleConfirmWithIO = func(promptIO ui.PromptIO, message string) bool {
 		response, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF && response != "" {
-				response = ui.StripBracketedPaste(response)
+				response = uiruntime.StripBracketedPaste(response)
 				response = strings.ToLower(strings.TrimSpace(response))
 				return response == "y" || response == "yes" || response == "ｙ" || response == "はい"
 			}
 			// EOF または読み取りエラー時は終了
 			return false
 		}
-		response = ui.StripBracketedPaste(response)
+		response = uiruntime.StripBracketedPaste(response)
 		response = strings.ToLower(strings.TrimSpace(response))
 
 		// 空入力は無視してリトライ
@@ -102,18 +103,18 @@ var SimpleConfirmWithIO = func(promptIO ui.PromptIO, message string) bool {
 }
 
 var SimpleConfirm = func(message string) bool {
-	return SimpleConfirmWithIO(ui.DefaultPromptIO(), message)
+	return SimpleConfirmWithIO(uiruntime.DefaultPromptIO(), message)
 }
 
 // Confirm asks user for confirmation and optionally captures feedback.
 // If interactive confirmation is enabled, it supports y/n/c and multi-line comments.
 // Otherwise it falls back to legacy y/n confirm.
 func Confirm(message string) ConfirmDecision {
-	return ConfirmWithIO(ui.DefaultPromptIO(), message)
+	return ConfirmWithIO(uiruntime.DefaultPromptIO(), message)
 }
 
 // ConfirmWithIO は入出力先を指定して確認を行う。
-func ConfirmWithIO(promptIO ui.PromptIO, message string) ConfirmDecision {
+func ConfirmWithIO(promptIO uiruntime.PromptIO, message string) ConfirmDecision {
 	if !IsInteractiveModeEnabled() {
 		approved := SimpleConfirmWithIO(promptIO, message)
 		if approved {
@@ -140,7 +141,7 @@ func ConfirmApproved(message string) bool {
 }
 
 // ConfirmWithAutoApproveDecisionAndOptions は ToolConfirmContext なしの互換ラッパー。
-func ConfirmWithAutoApproveDecisionAndOptions(promptIO ui.PromptIO, options ConfirmOptions, toolName, message string) ConfirmDecision {
+func ConfirmWithAutoApproveDecisionAndOptions(promptIO uiruntime.PromptIO, options ConfirmOptions, toolName, message string) ConfirmDecision {
 	return ConfirmToolAction(promptIO, options, toolName, message, ToolConfirmContext{})
 }
 
@@ -155,8 +156,8 @@ const MassChangeThreshold = 5
 //  3. execution policy ベースの判定（workspace / trusted / full_auto）
 //  4. フォールバック: 旧 tool_confirm 設定
 //  5. 通常の確認プロンプト
-func ConfirmToolAction(promptIO ui.PromptIO, options ConfirmOptions, toolName, message string, tc ToolConfirmContext) ConfirmDecision {
-	promptIO = ui.NormalizePromptIO(promptIO)
+func ConfirmToolAction(promptIO uiruntime.PromptIO, options ConfirmOptions, toolName, message string, tc ToolConfirmContext) ConfirmDecision {
+	promptIO = uiruntime.NormalizePromptIO(promptIO)
 	out := NewOutput(promptIO.Out, promptIO.Err)
 	policy := options.EffectivePolicy()
 

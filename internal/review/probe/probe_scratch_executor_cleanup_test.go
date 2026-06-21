@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestScratchOnlyExecutor_BlocksScratchDirInsideRepoAndCleansUp(t *testing.T) {
@@ -28,14 +30,14 @@ func TestScratchOnlyExecutor_BlocksScratchDirInsideRepoAndCleansUp(t *testing.T)
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:   "scratch-inside-repo",
-		Mode: ReviewProbeScratchOnly,
+		Mode: domain.ReviewProbeScratchOnly,
 		Commands: []ReviewProbeCommand{
 			{Command: "cat", Args: []string{"check.txt"}},
 		},
 	})
 
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbeBlocked, result.Error)
 	}
 	if len(result.CommandResults) != 0 {
 		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
@@ -74,7 +76,7 @@ func TestScratchOnlyExecutor_AppendsCleanupErrorOnPassedResult(t *testing.T) {
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:   "scratch-cleanup-error-passed",
-		Mode: ReviewProbeScratchOnly,
+		Mode: domain.ReviewProbeScratchOnly,
 		Files: []ReviewProbeFile{
 			{Path: "check.txt", Content: "ok\n"},
 		},
@@ -83,8 +85,8 @@ func TestScratchOnlyExecutor_AppendsCleanupErrorOnPassedResult(t *testing.T) {
 		},
 	})
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if !strings.Contains(result.Error, "failed to remove scratch directory") {
 		t.Fatalf("Error = %q, want to contain cleanup error", result.Error)
@@ -111,14 +113,14 @@ func TestScratchOnlyExecutor_AppendsCleanupErrorOnBlockedResult(t *testing.T) {
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:   "scratch-cleanup-error-blocked",
-		Mode: ReviewProbeScratchOnly,
+		Mode: domain.ReviewProbeScratchOnly,
 		Commands: []ReviewProbeCommand{
 			{Command: "cat", Args: []string{"check.txt"}},
 		},
 	})
 
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbeBlocked, result.Error)
 	}
 	if len(result.CommandResults) != 0 {
 		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))

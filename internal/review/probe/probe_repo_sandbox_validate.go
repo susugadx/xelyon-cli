@@ -3,13 +3,15 @@ package probe
 import (
 	"fmt"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 type repoSandboxCommand = probePlannedCommand
 
 type repoSandboxRequest struct {
 	id             string
-	mode           ReviewProbeMode
+	mode           domain.ReviewProbeMode
 	timeout        time.Duration
 	maxOutputBytes int64
 	files          []repoSandboxFile
@@ -19,7 +21,7 @@ type repoSandboxRequest struct {
 func (e *repoSandboxExecutor) validateRequest(req ReviewProbeRequest, dirs repoSandboxDirs, commandEnv []string) (repoSandboxRequest, error) {
 	req = normalizeProbeRequestExecutionLimits(req)
 
-	if req.Mode != ReviewProbeRepoSandbox {
+	if req.Mode != domain.ReviewProbeRepoSandbox {
 		return repoSandboxRequest{}, fmt.Errorf("repo_sandbox runner received mode %q", req.Mode)
 	}
 	if len(req.Commands) == 0 {

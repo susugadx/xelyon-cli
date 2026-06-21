@@ -16,7 +16,7 @@ import (
 	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestRefreshProjectPrompt_ReusesCachedProjectMapWithoutRelogging(t *testing.T) {
@@ -45,7 +45,7 @@ func TestRefreshProjectPrompt_ReusesCachedProjectMapWithoutRelogging(t *testing.
 	var out bytes.Buffer
 	cfg := config.DefaultConfig()
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -103,7 +103,7 @@ func TestRefreshProjectPrompt_UpdatesOnlyFocusOverlayWhenQueryChanges(t *testing
 	var out bytes.Buffer
 	cfg := config.DefaultConfig()
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -170,7 +170,7 @@ func TestRefreshProjectPrompt_ProjectMapStaysInDynamicSystemBlock(t *testing.T) 
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -260,7 +260,7 @@ func TestRefreshProjectPrompt_RebuildsProjectMapWhenRepoStateChanges(t *testing.
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -317,7 +317,7 @@ func TestRefreshProjectPrompt_RebuildsProjectMapWhenNonGitNestedFileAdded(t *tes
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -365,7 +365,7 @@ func TestRefreshProjectPrompt_ClearsProjectMapStateWhenProjectRootDisappears(t *
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -435,7 +435,7 @@ func TestRefreshProjectPromptIfDirty_ClearsProjectMapStateWhenProjectMapDisabled
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",
@@ -553,7 +553,7 @@ func TestRefreshProjectPromptIfDirty_RebuildsProjectMapAfterToolMutation(t *test
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(config.DefaultConfig())
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, io.Discard)
 	agent := &Agent{
 		Runtime:      runtime,
 		SystemPrompt: "base prompt",

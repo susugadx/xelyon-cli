@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
 )
 
@@ -17,7 +18,7 @@ type composerSubmission struct {
 	kind         composerSubmissionKind
 	commandInput string
 	payload      string
-	attachments  []composerAttachment
+	attachments  []tuiattachments.Attachment
 }
 
 func (m Model) buildComposerSubmission() (composerSubmission, bool) {

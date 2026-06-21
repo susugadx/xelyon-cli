@@ -16,12 +16,29 @@ CLI root wiring は次の owner に分ける。
 
 Phase 1 後の対話実行と TUI の依存方向は次の owner に分ける。
 
-- `internal/agent`: conversation / turn / tool orchestration の core。`internal/tui`、Bubble Tea、Lip Gloss を直接知らない。`internal/ui` は interactive surface / runtime output contract として許可する。
+- `internal/agent`: conversation / turn / tool orchestration の core。`internal/tui`、Bubble Tea、Lip Gloss を直接知らない。interactive surface は `internal/uiprompt`、`internal/uiruntime`、`internal/uiplanview`、`internal/uisummary`、`internal/uitoolview` などの owner package 経由で扱う。
 - `internal/app`: CLI mode wiring と TUI startup の owner。TUI 起動時の package 接続をここで扱う。
 - `internal/tuiagent`: `internal/agent` と `tui.AgentInterface` の adapter owner。agent の状態やイベントを TUI が扱う interface へ変換する。
 - `internal/tui`: UI lifecycle、message、rendering の owner。Bubble Tea / Lip Gloss への直接依存はここに閉じる。
 
 `internal/agent/package_boundaries_test.go` は、`internal/agent` 配下から `internal/tui`、Bubble Tea、Lip Gloss への import を禁止する。subpackage は禁止対象に含めるが、`internal/tuiagent` のように import path が似ている別 package は禁止しない。
+
+## UI owner package boundary
+
+旧 `internal/ui` は複数 owner に分割し、単一 package へ runtime、prompt、file/tool/plan display、config editor を再集約しない。
+
+- `internal/uiprompt`: `PromptRequest` / `PromptResponse` / prompt kind/action/options の pure prompt contract owner。
+- `internal/uiruntime`: injected stdin/stdout/stderr、PromptIO、multiline input、selector、spinner/progress/pager/log runtime の owner。
+- `internal/termtext`: table、display width、pad/truncate の pure terminal text owner。
+- `internal/uistyle`: color palette、file-op palette、box/divider の低レベル描画 owner。runtime はここを使うが、ここから runtime へ依存しない。
+- `internal/uifileview`: diff / patch / file operation display owner。
+- `internal/uitoolview`: tool execution line、tool target、parallel group、tool output collapse、tool spinner message owner。
+- `internal/uiplanview`: plan display、plan review display、plan approval prompt request owner。
+- `internal/uisummary`: task summary rendering owner。
+- `internal/uiconfig`: classic `/config` menu/editor UI owner。
+- `internal/configedit`: classic `/config` と TUI config screen が共有する pure config edit/value helper owner。config schema/default/validation は `internal/config` 側に残す。
+
+各 package の `package_boundaries_test.go` は、UI owner package から `internal/agent`、`internal/tui`、`internal/api`、Bubble Tea、Lip Gloss への import を禁止する。`internal/uistyle` は追加で `internal/uiruntime` への import も禁止し、低レベル style から runtime へ依存方向が戻らないことを固定する。
 
 ## Phase 2-A: provider history / token boundary
 

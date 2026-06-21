@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestProbeRunner_RepoSandbox_CopiesUntrackedFileAndLeavesOriginalClean(t *testing.T) {
@@ -18,7 +20,7 @@ func TestProbeRunner_RepoSandbox_CopiesUntrackedFileAndLeavesOriginalClean(t *te
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "repo-sandbox-untracked",
-		Mode:           ReviewProbeRepoSandbox,
+		Mode:           domain.ReviewProbeRepoSandbox,
 		Timeout:        10 * time.Second,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -28,8 +30,8 @@ func TestProbeRunner_RepoSandbox_CopiesUntrackedFileAndLeavesOriginalClean(t *te
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if !strings.Contains(result.CommandResults[0].Output, "untracked") {
 		t.Fatalf("output = %q, want copied untracked file", result.CommandResults[0].Output)
@@ -44,7 +46,7 @@ func TestProbeRunner_RepoSandbox_GeneratedPassingAndFailingTests(t *testing.T) {
 		name       string
 		file       ReviewProbeFile
 		runPattern string
-		wantStatus ReviewProbeStatus
+		wantStatus domain.ReviewProbeStatus
 	}{
 		{
 			name: "passing generated test",
@@ -54,7 +56,7 @@ func TestProbeRunner_RepoSandbox_GeneratedPassingAndFailingTests(t *testing.T) {
 					"func TestGeneratedPass(t *testing.T) { if Add(1, 2) != 3 { t.Fatal(\"bad add\") } }\n",
 			},
 			runPattern: "^TestGeneratedPass$",
-			wantStatus: ReviewProbePassed,
+			wantStatus: domain.ReviewProbePassed,
 		},
 		{
 			name: "failing generated test",
@@ -64,7 +66,7 @@ func TestProbeRunner_RepoSandbox_GeneratedPassingAndFailingTests(t *testing.T) {
 					"func TestGeneratedFail(t *testing.T) { t.Fatal(\"intentional failure\") }\n",
 			},
 			runPattern: "^TestGeneratedFail$",
-			wantStatus: ReviewProbeFailed,
+			wantStatus: domain.ReviewProbeFailed,
 		},
 	}
 
@@ -75,7 +77,7 @@ func TestProbeRunner_RepoSandbox_GeneratedPassingAndFailingTests(t *testing.T) {
 
 			result, err := runner.Run(context.Background(), ReviewProbeRequest{
 				ID:             "repo-sandbox-generated-test",
-				Mode:           ReviewProbeRepoSandbox,
+				Mode:           domain.ReviewProbeRepoSandbox,
 				Timeout:        probeNestedGoTestTimeout,
 				MaxOutputBytes: 8 * 1024,
 				Files:          []ReviewProbeFile{tt.file},
@@ -105,7 +107,7 @@ func TestProbeRunner_RepoSandbox_RelativeWorkDirAndSandboxMutationDoNotMarkOrigi
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "repo-sandbox-workdir",
-		Mode:           ReviewProbeRepoSandbox,
+		Mode:           domain.ReviewProbeRepoSandbox,
 		Timeout:        probeNestedGoTestTimeout,
 		MaxOutputBytes: 4 * 1024,
 		Files: []ReviewProbeFile{{
@@ -120,8 +122,8 @@ func TestProbeRunner_RepoSandbox_RelativeWorkDirAndSandboxMutationDoNotMarkOrigi
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbePassed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbePassed, result.Error, firstCommandOutput(result))
 	}
 	if result.MutatedWorktree {
 		t.Fatalf("MutatedWorktree = true, want false")
@@ -137,7 +139,7 @@ func TestProbeRunner_RepoSandbox_ProcessSandboxBlocksOriginalRepoMutation(t *tes
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "repo-sandbox-original-mutation",
-		Mode:           ReviewProbeRepoSandbox,
+		Mode:           domain.ReviewProbeRepoSandbox,
 		Timeout:        15 * time.Second,
 		MaxOutputBytes: 4 * 1024,
 		Files: []ReviewProbeFile{{
@@ -152,8 +154,8 @@ func TestProbeRunner_RepoSandbox_ProcessSandboxBlocksOriginalRepoMutation(t *tes
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbePassed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbePassed, result.Error, firstCommandOutput(result))
 	}
 	if result.MutatedWorktree {
 		t.Fatal("MutatedWorktree = true, want false")
@@ -179,7 +181,7 @@ func TestProbeRunner_RepoSandbox_ProcessSandboxBlocksHostFileRead(t *testing.T) 
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "repo-sandbox-host-file-read",
-		Mode:           ReviewProbeRepoSandbox,
+		Mode:           domain.ReviewProbeRepoSandbox,
 		Timeout:        15 * time.Second,
 		MaxOutputBytes: 4 * 1024,
 		Files: []ReviewProbeFile{{
@@ -194,8 +196,8 @@ func TestProbeRunner_RepoSandbox_ProcessSandboxBlocksHostFileRead(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbePassed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbePassed, result.Error, firstCommandOutput(result))
 	}
 	if result.MutatedWorktree {
 		t.Fatal("MutatedWorktree = true, want false")
@@ -231,7 +233,7 @@ func TestRepoSandboxExecutor_ChildProcessUsesHardenedEnvAndCleansUp(t *testing.T
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:             "repo-sandbox-env-child",
-		Mode:           ReviewProbeRepoSandbox,
+		Mode:           domain.ReviewProbeRepoSandbox,
 		Timeout:        15 * time.Second,
 		MaxOutputBytes: 8 * 1024,
 		Files: []ReviewProbeFile{{
@@ -253,8 +255,8 @@ func TestRepoSandboxExecutor_ChildProcessUsesHardenedEnvAndCleansUp(t *testing.T
 		},
 	})
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, ReviewProbePassed, result.Error, firstCommandOutput(result))
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q output=%q)", result.Status, domain.ReviewProbePassed, result.Error, firstCommandOutput(result))
 	}
 
 	envMap := decodeEnvMapFromFirstCommandOutput(t, result)
@@ -296,7 +298,7 @@ func TestRepoSandboxExecutor_AppendsCleanupErrorWithoutChangingStatus(t *testing
 
 	result := executor.run(context.Background(), ReviewProbeRequest{
 		ID:             "repo-sandbox-cleanup-error",
-		Mode:           ReviewProbeRepoSandbox,
+		Mode:           domain.ReviewProbeRepoSandbox,
 		Timeout:        10 * time.Second,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -304,8 +306,8 @@ func TestRepoSandboxExecutor_AppendsCleanupErrorWithoutChangingStatus(t *testing
 		},
 	})
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if !strings.Contains(result.Error, "failed to remove repo_sandbox root") {
 		t.Fatalf("Error = %q, want cleanup error", result.Error)

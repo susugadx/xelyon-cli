@@ -3,12 +3,13 @@ package tui
 import (
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
+	"github.com/susugadx/xelyon-cli/internal/tui/reviewscreen"
 )
 
 // ReviewRunResult は /review 実行結果と、その実行単位の表示用 usage summary を表す。
 type ReviewRunResult struct {
-	Report review.ReviewReport
+	Report reviewreport.ReviewReport
 	Usage  ReviewRunUsageSummary
 }
 
@@ -35,4 +36,12 @@ func (s ReviewRunUsageSummary) statusText() string {
 		return ""
 	}
 	return "Review: " + inline
+}
+
+func reviewRunTimelineMessage(result ReviewRunResult) string {
+	lines := reviewscreen.PlainLines(result.Report)
+	if usage := result.Usage.inlineText(); usage != "" {
+		lines = append(lines[:1], append([]string{"Usage: " + usage}, lines[1:]...)...)
+	}
+	return strings.Join(lines, "\n")
 }

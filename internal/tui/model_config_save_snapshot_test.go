@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func TestConfigScreen_SaveSnapshot_Isolation(t *testing.T) {
@@ -12,11 +13,10 @@ func TestConfigScreen_SaveSnapshot_Isolation(t *testing.T) {
 	m := newModelWithViewport(agent)
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
-	cs := m.configScreen
+	m.configScreen = configscreen.New(cfg)
 
-	cs.cfg.DefaultModel = "gpt-5.4"
-	cs.dirty = true
+	cfg.DefaultModel = "gpt-5.4"
+	setConfigDirtyForTest(t, &m, true)
 
 	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
 	updated, saveCmd := m.Update(sMsg)
@@ -38,7 +38,7 @@ func TestConfigScreen_SaveSnapshot_Isolation(t *testing.T) {
 		t.Fatalf("saved.DefaultModel = %q, want \"gpt-5.4\"", saved.DefaultModel)
 	}
 
-	m.configScreen.cfg.DefaultModel = "gpt-5.4-mini"
+	cfg.DefaultModel = "gpt-5.4-mini"
 
 	agent.mu.RLock()
 	savedAfter := agent.lastSavedConfig
@@ -47,9 +47,9 @@ func TestConfigScreen_SaveSnapshot_Isolation(t *testing.T) {
 		t.Fatalf("savedAfter.DefaultModel = %q, want \"gpt-5.4\" (snapshot should be isolated)", savedAfter.DefaultModel)
 	}
 
-	if pm, ok := m.configScreen.cfg.ProviderModels["openai"]; ok {
+	if pm, ok := cfg.ProviderModels["openai"]; ok {
 		pm.DefaultModel = "mutated"
-		m.configScreen.cfg.ProviderModels["openai"] = pm
+		cfg.ProviderModels["openai"] = pm
 	}
 	agent.mu.RLock()
 	savedPM := agent.lastSavedConfig.ProviderModels["openai"]
@@ -64,9 +64,9 @@ func TestConfigScreen_SaveCmd_SnapshotIsolation(t *testing.T) {
 	m := newModelWithViewport(agent)
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
-	m.configScreen.cfg.DefaultModel = "at-save-time"
-	m.configScreen.dirty = true
+	m.configScreen = configscreen.New(cfg)
+	cfg.DefaultModel = "at-save-time"
+	setConfigDirtyForTest(t, &m, true)
 
 	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
 	updated, saveCmd := m.Update(sMsg)
@@ -75,7 +75,7 @@ func TestConfigScreen_SaveCmd_SnapshotIsolation(t *testing.T) {
 		t.Fatal("saveCmd is nil")
 	}
 
-	m.configScreen.cfg.DefaultModel = "mutated-after-save"
+	cfg.DefaultModel = "mutated-after-save"
 
 	resultMsg := saveCmd()
 	updated, _ = m.Update(resultMsg)

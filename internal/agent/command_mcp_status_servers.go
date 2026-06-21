@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/termtext"
 	"io"
 	"time"
 )
@@ -19,7 +19,7 @@ func printMCPStatusServerTable(out io.Writer, snapshot mcp.StatusSnapshot, surfa
 
 	visibleByServer, omittedByServer := mcpStatusSurfaceCounts(surface)
 	surfaceByServer := mcpStatusServerSurfaceByName(analysis)
-	table := ui.NewTable().SetHeaders("Server", "State", "Tools", "Tokens", "Schema", "Omitted reasons", "Approval", "Timeouts", "Last healthy")
+	table := termtext.NewTable().SetHeaders("Server", "State", "Tools", "Tokens", "Schema", "Omitted reasons", "Approval", "Timeouts", "Last healthy")
 	for _, server := range snapshot.Servers {
 		serverSurface := surfaceByServer[server.Name]
 		table.AddRow(

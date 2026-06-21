@@ -4,12 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
-)
-
-const (
-	defaultReviewProbeTimeout        = 30 * time.Second
-	defaultReviewProbeMaxOutputBytes = 64 * 1024
 )
 
 type hostReadOnlyExecutor struct {
@@ -26,84 +20,6 @@ func newHostReadOnlyExecutor(repoRoot string) *hostReadOnlyExecutor {
 		removeAll: os.RemoveAll,
 		baseEnv:   os.Environ(),
 	}
-}
-
-type hostReadOnlyCommand struct {
-	command     string
-	commandPath string
-	args        []string
-	workDir     string
-}
-
-type hostReadOnlyRequest struct {
-	id             string
-	mode           ReviewProbeMode
-	timeout        time.Duration
-	maxOutputBytes int64
-	commands       []hostReadOnlyCommand
-}
-
-type hostReadOnlyRuntime struct {
-	request hostReadOnlyRequest
-	env     []string
-	sandbox probeProcessSandbox
-}
-
-type hostReadOnlyResultReducer struct {
-	result ReviewProbeResult
-}
-
-func newHostReadOnlyResultReducer(req ReviewProbeRequest) *hostReadOnlyResultReducer {
-	return &hostReadOnlyResultReducer{
-		result: ReviewProbeResult{
-			ID:     req.ID,
-			Mode:   req.Mode,
-			Status: ReviewProbePassed,
-		},
-	}
-}
-
-func (r *hostReadOnlyResultReducer) applyValidationError(err error) {
-	r.result.Status = ReviewProbeBlocked
-	r.result.Error = err.Error()
-}
-
-func (r *hostReadOnlyResultReducer) applyNormalizedRequest(req hostReadOnlyRequest) {
-	r.result.ID = req.id
-	r.result.Mode = req.mode
-}
-
-func (r *hostReadOnlyResultReducer) applySnapshotError(phase string, err error) {
-	r.result.Status = ReviewProbeBlocked
-	r.result.Error = appendError(r.result.Error, fmt.Sprintf("failed to capture worktree snapshot %s probe: %v", phase, err))
-}
-
-func (r *hostReadOnlyResultReducer) applyCommandResult(cmd hostReadOnlyCommand, cmdResult ReviewProbeCommandResult) (stop bool) {
-	r.result.CommandResults = append(r.result.CommandResults, cmdResult)
-	r.result.OutputTruncated = r.result.OutputTruncated || cmdResult.OutputTruncated
-
-	nextStatus, message, stop := buildProbeCommandTransition(cmdResult.Status, cmd.command, cmd.args)
-	if !stop {
-		return false
-	}
-	r.result.Status = nextStatus
-	r.result.Error = appendError(r.result.Error, message)
-	return true
-}
-
-func (r *hostReadOnlyResultReducer) applyMutation(mutatedFiles []string) {
-	if len(mutatedFiles) == 0 {
-		return
-	}
-
-	r.result.MutatedWorktree = true
-	r.result.MutatedFiles = mutatedFiles
-	r.result.Status = ReviewProbeMutatedWorktree
-	r.result.Error = appendError(r.result.Error, "probe command changed the working tree")
-}
-
-func (r *hostReadOnlyResultReducer) resultValue() ReviewProbeResult {
-	return r.result
 }
 
 func (e *hostReadOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) (result ReviewProbeResult) {
@@ -147,47 +63,4 @@ func (e *hostReadOnlyExecutor) run(ctx context.Context, req ReviewProbeRequest) 
 
 	reducer.applyMutation(diffWorktreeSnapshots(beforeSnapshot, afterSnapshot))
 	return reducer.resultValue()
-}
-
-func (e *hostReadOnlyExecutor) prepareRuntime(req ReviewProbeRequest, runtimeRoot string) (hostReadOnlyRuntime, error) {
-	if err := validateHostReadOnlyRuntimeRootOutsideRepo(e.repoRoot, runtimeRoot); err != nil {
-		return hostReadOnlyRuntime{}, err
-	}
-
-	dirs, err := prepareHostReadOnlyRuntimeDirs(runtimeRoot)
-	if err != nil {
-		return hostReadOnlyRuntime{}, newBlockedCommandErrorf("failed to prepare host_readonly runtime directories: %v", err)
-	}
-	env := buildHostReadOnlyEnv(e.baseEnv, e.repoRoot, dirs)
-
-	normalized, err := e.validateRequest(req, env, dirs.RootDir)
-	if err != nil {
-		return hostReadOnlyRuntime{}, err
-	}
-
-	sandboxReadOnlyBinds := probeGoModuleCacheReadOnlyBinds(e.baseEnv, e.repoRoot, dirs.GoModCacheDir)
-	sandbox, err := newHostReadOnlyProcessSandbox(e.repoRoot, dirs.RootDir, sandboxReadOnlyBinds...)
-	if err != nil {
-		return hostReadOnlyRuntime{}, err
-	}
-
-	return hostReadOnlyRuntime{
-		request: normalized,
-		env:     env,
-		sandbox: sandbox,
-	}, nil
-}
-
-func (e *hostReadOnlyExecutor) cleanupHostReadOnlyRuntimeRoot(result *ReviewProbeResult, runtimeRoot string) {
-	if err := e.removeAll(runtimeRoot); err != nil {
-		appendHostReadOnlyCleanupError(result, runtimeRoot, err)
-	}
-}
-
-func appendHostReadOnlyCleanupError(result *ReviewProbeResult, runtimeRoot string, err error) {
-	appendIsolatedCleanupError(result, "host_readonly runtime root", runtimeRoot, err)
-}
-
-func validateHostReadOnlyRuntimeRootOutsideRepo(repoRoot, runtimeRoot string) error {
-	return validateIsolatedRootOutsideRepo(repoRoot, runtimeRoot, "host_readonly runtime")
 }

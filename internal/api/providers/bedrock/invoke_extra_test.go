@@ -14,7 +14,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newBedrockStreamOutput(reader *fakeResponseStreamReader) *bedrockruntime.InvokeModelWithResponseStreamOutput {
@@ -43,7 +43,7 @@ func TestInvokeClaudeMessagesStream_SuccessAndMarshalFailure(t *testing.T) {
 		}
 		p := &Provider{client: mockClient}
 
-		ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
+		ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 		ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
 		got, err := p.invokeClaudeMessagesStream(ctx, "model-id", BedrockClaudeMessagesRequest{

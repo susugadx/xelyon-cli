@@ -1,6 +1,10 @@
 package probe
 
-import "time"
+import (
+	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+)
 
 // ReviewProbeRequest は ProbeRunner.Run に渡す runtime 内部の検証実行要求を表す。
 // LLM から直接 decode する schema ではなく、将来の validated ReviewProbePlan から
@@ -11,7 +15,7 @@ import "time"
 type ReviewProbeRequest struct {
 	ID             string
 	Purpose        string
-	Mode           ReviewProbeMode
+	Mode           domain.ReviewProbeMode
 	Files          []ReviewProbeFile
 	Commands       []ReviewProbeCommand
 	Timeout        time.Duration
@@ -35,8 +39,8 @@ type ReviewProbeCommand struct {
 // ReviewProbeResult は probe 実行結果を表す。
 type ReviewProbeResult struct {
 	ID              string
-	Mode            ReviewProbeMode
-	Status          ReviewProbeStatus
+	Mode            domain.ReviewProbeMode
+	Status          domain.ReviewProbeStatus
 	CommandResults  []ReviewProbeCommandResult
 	MutatedWorktree bool
 	MutatedFiles    []string
@@ -49,7 +53,7 @@ type ReviewProbeCommandResult struct {
 	Command         string
 	Args            []string
 	WorkDir         string
-	Status          ReviewProbeStatus
+	Status          domain.ReviewProbeStatus
 	ExitCode        int
 	Output          string
 	OutputTruncated bool

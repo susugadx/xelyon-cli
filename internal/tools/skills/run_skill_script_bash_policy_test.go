@@ -9,7 +9,7 @@ import (
 	skillcatalog "github.com/susugadx/xelyon-cli/internal/skills"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestRunSkillScriptTool_Run_DoesNotBypassBashPolicyOrConfirmation(t *testing.T) {
@@ -27,7 +27,7 @@ func TestRunSkillScriptTool_Run_DoesNotBypassBashPolicyOrConfirmation(t *testing
 		origSimple := common.SimpleConfirm
 		origSimpleWithIO := common.SimpleConfirmWithIO
 		common.SimpleConfirm = func(_ string) bool { return false }
-		common.SimpleConfirmWithIO = func(_ ui.PromptIO, _ string) bool { return false }
+		common.SimpleConfirmWithIO = func(_ uiruntime.PromptIO, _ string) bool { return false }
 		t.Cleanup(func() {
 			common.SimpleConfirm = origSimple
 			common.SimpleConfirmWithIO = origSimpleWithIO

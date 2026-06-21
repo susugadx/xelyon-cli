@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/susugadx/xelyon-cli/internal/resumecwd"
+	"github.com/susugadx/xelyon-cli/internal/tui/sessionpickerscreen"
 )
 
 type openSessionPickerMsg struct {
@@ -31,7 +32,7 @@ func (m Model) openSessionPicker(all bool, startup bool) (Model, tea.Cmd) {
 		m.setTransientStatus("No sessions found")
 		return m, nil
 	}
-	m.sessionPicker = newSessionPickerState(candidates, all, startup)
+	m.sessionPicker = sessionpickerscreen.New(sessionPickerCandidates(candidates), all, startup)
 	m.clearSlashSuggestions()
 	m.chromeDirty = true
 	return m, nil
@@ -66,55 +67,23 @@ func (m Model) handleSessionPickerKeyMsg(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	switch {
-	case msg.Type == tea.KeyEsc || msg.Type == tea.KeyCtrlC:
+	result := m.sessionPicker.HandleKey(msg)
+	switch result.Command {
+	case sessionpickerscreen.CommandClose:
 		m.closeSessionPicker("Resume cancelled")
-	case msg.Type == tea.KeyUp || (!m.sessionPicker.filtering && msg.String() == "k"):
-		m.sessionPicker.moveSelection(-1)
-	case msg.Type == tea.KeyDown || (!m.sessionPicker.filtering && msg.String() == "j"):
-		m.sessionPicker.moveSelection(1)
-	case msg.String() == "/":
-		m.sessionPicker.filtering = true
-		m.sessionPicker.filter = ""
-		m.sessionPicker.selected = 0
-	case isBackspaceKey(msg):
-		m.handleSessionPickerBackspace()
-	case isEnterKey(msg):
-		return m.submitSessionPickerSelection()
-	case m.sessionPicker.filtering && msg.Type == tea.KeyRunes:
-		m.sessionPicker.filter += string(msg.Runes)
-		m.sessionPicker.selected = 0
+	case sessionpickerscreen.CommandResume:
+		if m.rejectCrossWorkingDirSessionSelection(result.Candidate) {
+			return m, nil
+		}
+		return m.resumeSessionByID(result.Candidate.ID)
 	}
 
-	m.sessionPicker.clampSelection()
 	m.chromeDirty = true
 	return m, nil
 }
 
-func (m *Model) handleSessionPickerBackspace() {
-	if !m.sessionPicker.filtering || m.sessionPicker.filter == "" {
-		return
-	}
-	runes := []rune(m.sessionPicker.filter)
-	m.sessionPicker.filter = string(runes[:len(runes)-1])
-	m.sessionPicker.selected = 0
-	m.sessionPicker.clampSelection()
-	m.chromeDirty = true
-}
-
-func (m Model) submitSessionPickerSelection() (Model, tea.Cmd) {
-	row, ok := m.sessionPicker.selectedSession()
-	if !ok {
-		return m, nil
-	}
-	if m.rejectCrossWorkingDirSessionSelection(row) {
-		return m, nil
-	}
-	return m.resumeSessionByID(row.ID)
-}
-
-func (m *Model) rejectCrossWorkingDirSessionSelection(row SessionCandidate) bool {
-	if m.sessionPicker == nil || m.sessionPicker.all {
+func (m *Model) rejectCrossWorkingDirSessionSelection(row sessionpickerscreen.Candidate) bool {
+	if m.sessionPicker == nil || m.sessionPicker.All() {
 		return false
 	}
 	if resumecwd.Matches(row.WorkingDir, m.workingDir) {
@@ -131,7 +100,7 @@ func (m Model) resumeSessionByID(sessionID string) (Model, tea.Cmd) {
 		m.setTransientStatus("Session ID is required")
 		return m, nil
 	}
-	if m.sessionPicker != nil && m.sessionPicker.startup {
+	if m.sessionPicker != nil && m.sessionPicker.Startup() {
 		if err := m.sessions.ResumeStartupSession(sessionID); err != nil {
 			m.setTransientStatus(err.Error())
 			return m, nil
@@ -147,6 +116,21 @@ func (m Model) resumeSessionByID(sessionID string) (Model, tea.Cmd) {
 	m.refreshStatusLine()
 	m.setTransientStatus("Session resumed")
 	return m, nil
+}
+
+func sessionPickerCandidates(candidates []SessionCandidate) []sessionpickerscreen.Candidate {
+	rows := make([]sessionpickerscreen.Candidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		rows = append(rows, sessionpickerscreen.Candidate{
+			ID:           candidate.ID,
+			Preview:      candidate.Preview,
+			Model:        candidate.Model,
+			ProviderName: candidate.ProviderName,
+			WorkingDir:   candidate.WorkingDir,
+			LastModified: candidate.LastModified,
+		})
+	}
+	return rows
 }
 
 func (m Model) resumeLastSession(all bool) (Model, tea.Cmd) {

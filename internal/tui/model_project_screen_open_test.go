@@ -32,11 +32,12 @@ func TestProjectCommand_OpensProjectScreen(t *testing.T) {
 	if m.projectScreen == nil {
 		t.Fatal("projectScreen is nil")
 	}
-	if m.projectScreen.missing {
+	snapshot := projectSnapshot(t, m)
+	if snapshot.Missing {
 		t.Fatal("projectScreen should not be missing")
 	}
-	if m.projectScreen.pc.Context != "project context" {
-		t.Fatalf("project context = %q", m.projectScreen.pc.Context)
+	if snapshot.Config.Context != "project context" {
+		t.Fatalf("project context = %q", snapshot.Config.Context)
 	}
 }
 
@@ -81,11 +82,12 @@ func TestProjectScreen_MissingConfigCreatesTemplate(t *testing.T) {
 	if m.projectScreen == nil {
 		t.Fatal("projectScreen is nil")
 	}
-	if m.projectScreen.missing {
+	snapshot := projectSnapshot(t, m)
+	if snapshot.Missing {
 		t.Fatal("projectScreen should no longer be missing")
 	}
-	if m.projectScreen.pc.Context != "" {
-		t.Fatalf("template context = %q, want empty", m.projectScreen.pc.Context)
+	if snapshot.Config.Context != "" {
+		t.Fatalf("template context = %q, want empty", snapshot.Config.Context)
 	}
 	if view := m.View(); !strings.Contains(view, "template created") {
 		t.Fatalf("View() missing template-created status: %q", view)
@@ -101,8 +103,8 @@ func TestProjectScreen_MissingConfigIgnoresDuplicateCreateWhileSaving(t *testing
 	if firstCmd == nil {
 		t.Fatal("first template creation command should not be nil")
 	}
-	if m.projectScreen.saveStatus != projectStatusSaving {
-		t.Fatalf("saveStatus = %d, want projectStatusSaving(%d)", m.projectScreen.saveStatus, projectStatusSaving)
+	if got := projectSnapshot(t, m).SaveStatus; got != "saving" {
+		t.Fatalf("saveStatus = %s, want saving", got)
 	}
 
 	updated, secondCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -113,7 +115,7 @@ func TestProjectScreen_MissingConfigIgnoresDuplicateCreateWhileSaving(t *testing
 
 	updated, _ = m.Update(firstCmd())
 	m = updated.(Model)
-	if m.projectScreen == nil || m.projectScreen.missing {
+	if m.projectScreen == nil || projectSnapshot(t, m).Missing {
 		t.Fatal("projectScreen should show created config after first command completes")
 	}
 	if view := m.View(); strings.Contains(view, "already exists") {
@@ -130,7 +132,7 @@ func TestProjectScreen_StaleTemplateCreateDoesNotReplaceReopenedScreen(t *testin
 	if createCmd == nil {
 		t.Fatal("template creation command should not be nil")
 	}
-	oldScreenID := m.projectScreen.screenID
+	oldScreenID := projectSnapshot(t, m).ScreenID
 
 	m = sendProjectKey(m, "esc")
 	if m.screen != screenChat {
@@ -143,7 +145,7 @@ func TestProjectScreen_StaleTemplateCreateDoesNotReplaceReopenedScreen(t *testin
 	if m.projectScreen == nil {
 		t.Fatal("projectScreen is nil after reopening")
 	}
-	if m.projectScreen.screenID == oldScreenID {
+	if projectSnapshot(t, m).ScreenID == oldScreenID {
 		t.Fatal("reopened project screen should have a new screenID")
 	}
 	m = editProjectContext(t, m, "reopened draft")
@@ -151,10 +153,11 @@ func TestProjectScreen_StaleTemplateCreateDoesNotReplaceReopenedScreen(t *testin
 	updated, _ = m.Update(createCmd())
 	m = updated.(Model)
 
-	if got := m.projectScreen.pc.Context; got != "reopened draft" {
+	snapshot := projectSnapshot(t, m)
+	if got := snapshot.Config.Context; got != "reopened draft" {
 		t.Fatalf("stale template result replaced reopened screen context = %q, want reopened draft", got)
 	}
-	if !m.projectScreen.dirty {
+	if !snapshot.Dirty {
 		t.Fatal("reopened draft should remain dirty after stale template result")
 	}
 }

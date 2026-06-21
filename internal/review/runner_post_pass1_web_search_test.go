@@ -2,34 +2,37 @@ package review
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	reviewartifact "github.com/susugadx/xelyon-cli/internal/review/artifact"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 )
 
 func TestReviewRunnerRunUsesPostPass1WebSearchEvidenceForReport(t *testing.T) {
 	events := []string{}
 	initialBundle := newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")
-	initialBundle.WebSearchEvidence = ReviewWebSearchEvidence{
+	initialBundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 		Enabled: true,
-		Queries: []ReviewWebSearchEvidenceQuery{
+		Queries: []externaldoc.WebSearchEvidenceQuery{
 			{Query: "OpenAI API web_search official documentation", Reason: "pre-pass1"},
 		},
 		Inconclusive: true,
 	}
 	mergedEvidence := initialBundle.WebSearchEvidence
-	mergedEvidence.Queries = append(mergedEvidence.Queries, ReviewWebSearchEvidenceQuery{
+	mergedEvidence.Queries = append(mergedEvidence.Queries, externaldoc.WebSearchEvidenceQuery{
 		Query:  "OAuth 2.0 redirect URI specification",
 		Reason: "intent=spec; expected_source_type=technical_specification; confidence=high; reason=pass1 plan protocol/spec signal",
 	})
-	mergedEvidence.ExternalDocs = []ReviewExternalDocEvidence{
+	mergedEvidence.ExternalDocs = []externaldoc.Evidence{
 		{
 			DocID:             "external-doc-post",
 			URL:               "https://docs.example.test/oauth",
-			SourceCredibility: ReviewExternalDocSourceCredibilityUnknown,
-			Snippets: []ReviewExternalDocSnippetEvidence{
+			SourceCredibility: externaldoc.SourceCredibilityUnknown,
+			Snippets: []externaldoc.SnippetEvidence{
 				{
 					SnippetID:   "external-doc-post-snippet-1",
 					Content:     "Post-pass1 OAuth redirect URI snippet.",
@@ -74,8 +77,8 @@ func TestReviewRunnerRunUsesPostPass1WebSearchEvidenceForReport(t *testing.T) {
 	if evidence.postCalls != 1 {
 		t.Fatalf("postCalls = %d, want 1", evidence.postCalls)
 	}
-	if evidence.seenPlan.SchemaVersion != ReviewProbePlanSchemaVersionV2 {
-		t.Fatalf("seen plan schema = %q, want %q", evidence.seenPlan.SchemaVersion, ReviewProbePlanSchemaVersionV2)
+	if evidence.seenPlan.SchemaVersion != reviewprobeplan.ReviewProbePlanSchemaVersionV2 {
+		t.Fatalf("seen plan schema = %q, want %q", evidence.seenPlan.SchemaVersion, reviewprobeplan.ReviewProbePlanSchemaVersionV2)
 	}
 	if strings.Contains(model.requests[0].Prompt, "external-doc-post") {
 		t.Fatalf("Pass1 prompt contains post-pass1 evidence:\n%s", model.requests[0].Prompt)
@@ -88,19 +91,19 @@ func TestReviewRunnerRunUsesPostPass1WebSearchEvidenceForReport(t *testing.T) {
 func TestReviewRunnerWebSearchDiscoveryCompactKeepsRawArtifactsAndExternalDocSnippets(t *testing.T) {
 	tests := []struct {
 		name               string
-		mode               ReviewPromptReductionMode
+		mode               reviewpromptreduction.ReviewPromptReductionMode
 		wantPromptCompact  bool
 		wantReplacementCnt int
 	}{
 		{
 			name:               "apply compacts provider prompt only",
-			mode:               ReviewPromptReductionModeApply,
+			mode:               reviewpromptreduction.ReviewPromptReductionModeApply,
 			wantPromptCompact:  true,
 			wantReplacementCnt: 1,
 		},
 		{
 			name:               "dry run records candidate without compacting prompt",
-			mode:               ReviewPromptReductionModeDryRun,
+			mode:               reviewpromptreduction.ReviewPromptReductionModeDryRun,
 			wantPromptCompact:  false,
 			wantReplacementCnt: 0,
 		},
@@ -112,14 +115,14 @@ func TestReviewRunnerWebSearchDiscoveryCompactKeepsRawArtifactsAndExternalDocSni
 			externalSnippet := "CITATION_CAPABLE_EXTERNAL_DOC_SNIPPET_MUST_STAY_FOR_FINDING_EVIDENCE"
 			secondExternalSnippet := "SECOND_CITATION_CAPABLE_EXTERNAL_DOC_SNIPPET_MUST_STAY_FOR_SUPPORT"
 			initialBundle := newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")
-			initialBundle.WebSearchEvidence = ReviewWebSearchEvidence{
+			initialBundle.WebSearchEvidence = externaldoc.WebSearchEvidence{
 				Enabled:  true,
 				Provider: "gemini",
-				Queries: []ReviewWebSearchEvidenceQuery{
+				Queries: []externaldoc.WebSearchEvidenceQuery{
 					{
 						Query:  "OpenAI Responses API previous_response_id official docs",
 						Reason: "pre-pass1 external contract signal",
-						Results: []ReviewWebSearchEvidenceResult{
+						Results: []externaldoc.WebSearchEvidenceResult{
 							{
 								Title:        "OpenAI Responses API docs",
 								URL:          "https://platform.openai.com/docs/responses",
@@ -133,16 +136,16 @@ func TestReviewRunnerWebSearchDiscoveryCompactKeepsRawArtifactsAndExternalDocSni
 			}
 			mergedEvidence := initialBundle.WebSearchEvidence
 			mergedEvidence.Inconclusive = false
-			mergedEvidence.ExternalDocs = []ReviewExternalDocEvidence{
+			mergedEvidence.ExternalDocs = []externaldoc.Evidence{
 				{
 					DocID:                   "external-doc-openai",
 					URL:                     "https://platform.openai.com/docs/responses",
 					SourceDomain:            "platform.openai.com",
-					SourceCredibility:       ReviewExternalDocSourceCredibilityOfficialCandidate,
+					SourceCredibility:       externaldoc.SourceCredibilityOfficialCandidate,
 					SourceCredibilityReason: "official_candidate: trusted source domain and reference signal are present",
 					FetchedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 					ContentHash:             "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-					Snippets: []ReviewExternalDocSnippetEvidence{
+					Snippets: []externaldoc.SnippetEvidence{
 						{
 							SnippetID:   "external-doc-openai-snippet-1",
 							Content:     externalSnippet,
@@ -154,11 +157,11 @@ func TestReviewRunnerWebSearchDiscoveryCompactKeepsRawArtifactsAndExternalDocSni
 					DocID:                   "external-doc-openai-reference",
 					URL:                     "https://platform.openai.com/docs/api-reference/responses",
 					SourceDomain:            "platform.openai.com",
-					SourceCredibility:       ReviewExternalDocSourceCredibilityOfficialCandidate,
+					SourceCredibility:       externaldoc.SourceCredibilityOfficialCandidate,
 					SourceCredibilityReason: "official_candidate: trusted source domain and reference signal are present",
 					FetchedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 					ContentHash:             "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-					Snippets: []ReviewExternalDocSnippetEvidence{
+					Snippets: []externaldoc.SnippetEvidence{
 						{
 							SnippetID:   "external-doc-openai-reference-snippet-1",
 							Content:     secondExternalSnippet,
@@ -182,9 +185,9 @@ func TestReviewRunnerWebSearchDiscoveryCompactKeepsRawArtifactsAndExternalDocSni
 				},
 			}
 			artifactDir := t.TempDir()
-			artifactWriter, err := NewReviewRunDirectoryArtifactWriter(artifactDir)
+			artifactWriter, err := reviewartifact.NewReviewRunDirectoryArtifactWriter(artifactDir)
 			if err != nil {
-				t.Fatalf("NewReviewRunDirectoryArtifactWriter() error = %v, want nil", err)
+				t.Fatalf("reviewartifact.NewReviewRunDirectoryArtifactWriter() error = %v, want nil", err)
 			}
 			runner, err := NewReviewRunner(ReviewRunnerOptions{
 				EvidenceBuilder:     evidence,
@@ -254,114 +257,5 @@ func TestReviewRunnerWebSearchDiscoveryCompactKeepsRawArtifactsAndExternalDocSni
 				t.Fatalf("PromptReductionReport() = %#v, want web discovery candidate and %d replacement", reductionReport, tt.wantReplacementCnt)
 			}
 		})
-	}
-}
-
-func TestCompactReviewWebSearchDiscoveryEvidenceKeepsUnsafeExternalSupport(t *testing.T) {
-	longSearchSnippet := strings.Repeat("RAW_DISCOVERY_SNIPPET_MUST_STAY_WITH_UNSAFE_EXTERNAL_SUPPORT ", 400)
-	tests := []struct {
-		name     string
-		evidence ReviewWebSearchEvidence
-	}{
-		{
-			name: "unknown source credibility",
-			evidence: reviewWebSearchDiscoveryCompactEvidenceForTest(longSearchSnippet, []ReviewExternalDocEvidence{
-				reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-unknown", ReviewExternalDocSourceCredibilityUnknown, false, "unknown source snippet"),
-				reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official", ReviewExternalDocSourceCredibilityOfficialCandidate, false, "official source snippet"),
-			}),
-		},
-		{
-			name: "truncated external doc",
-			evidence: reviewWebSearchDiscoveryCompactEvidenceForTest(longSearchSnippet, []ReviewExternalDocEvidence{
-				reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-truncated", ReviewExternalDocSourceCredibilityOfficialCandidate, true, "truncated source snippet"),
-				reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official", ReviewExternalDocSourceCredibilityOfficialCandidate, false, "official source snippet"),
-			}),
-		},
-		{
-			name: "official confirmation false",
-			evidence: reviewWebSearchDiscoveryCompactEvidenceForTest(longSearchSnippet, []ReviewExternalDocEvidence{
-				reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-single", ReviewExternalDocSourceCredibilityOfficialCandidate, false, "single official snippet"),
-			}),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			bundle := newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")
-			bundle.WebSearchEvidence = tt.evidence
-			compacted, savedBytes, savedTokens, ok := compactReviewWebSearchDiscoveryEvidence(bundle)
-			if ok || savedBytes != 0 || savedTokens != 0 || compacted.WebSearchEvidence.Enabled {
-				t.Fatalf("compactReviewWebSearchDiscoveryEvidence() = (%#v, %d, %d, %t), want conservative keep", compacted.WebSearchEvidence, savedBytes, savedTokens, ok)
-			}
-		})
-	}
-}
-
-type runnerPostPass1WebSearchEvidenceBuilder struct {
-	runnerFakeEvidenceBuilder
-	postEvidence ReviewWebSearchEvidence
-	postCalls    int
-	seenPlan     ReviewProbePlan
-}
-
-func (b *runnerPostPass1WebSearchEvidenceBuilder) CollectPostPass1WebSearchEvidence(_ context.Context, _ ReviewEvidenceBundle, plan ReviewProbePlan) ReviewWebSearchEvidence {
-	b.postCalls++
-	b.seenPlan = plan
-	if b.events != nil {
-		*b.events = append(*b.events, "post_search")
-	}
-	return b.postEvidence
-}
-
-func readReviewRunArtifactForTest(t *testing.T, dir, name string) string {
-	t.Helper()
-
-	content, err := os.ReadFile(filepath.Join(dir, name))
-	if err != nil {
-		t.Fatalf("os.ReadFile(%q) error = %v, want nil", name, err)
-	}
-	return string(content)
-}
-
-func reviewWebSearchDiscoveryCompactEvidenceForTest(snippet string, docs []ReviewExternalDocEvidence) ReviewWebSearchEvidence {
-	return ReviewWebSearchEvidence{
-		Enabled:  true,
-		Provider: "gemini",
-		Queries: []ReviewWebSearchEvidenceQuery{
-			{
-				Query:  "OpenAI Responses API previous_response_id official docs",
-				Reason: "test",
-				Results: []ReviewWebSearchEvidenceResult{
-					{
-						Title:        "OpenAI Responses API docs",
-						URL:          "https://platform.openai.com/docs/responses",
-						SourceDomain: "platform.openai.com",
-						Snippet:      snippet,
-					},
-				},
-			},
-		},
-		ExternalDocs: docs,
-	}
-}
-
-func reviewExternalDocEvidenceForDiscoveryCompactTest(docID string, credibility ReviewExternalDocSourceCredibility, truncated bool, content string) ReviewExternalDocEvidence {
-	return ReviewExternalDocEvidence{
-		DocID:                   docID,
-		URL:                     "https://platform.openai.com/docs/" + docID,
-		SourceDomain:            "platform.openai.com",
-		SourceCredibility:       credibility,
-		SourceCredibilityReason: "test credibility reason",
-		FetchedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
-		ContentHash:             "sha256:" + strings.Repeat("a", 64-len(docID)) + docID,
-		Truncated:               truncated,
-		Snippets: []ReviewExternalDocSnippetEvidence{
-			{
-				SnippetID:   docID + "-snippet-1",
-				Content:     content,
-				ContentHash: "sha256:" + strings.Repeat("b", 64-len(docID)) + docID,
-				Truncated:   truncated,
-			},
-		},
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/cost"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // TextToolSmokeRequest は provider doctor の text/tool smoke request 単位を表す。
@@ -190,7 +190,7 @@ func NewTextToolSmokeRequestContext(
 	if output == nil {
 		output = io.Discard
 	}
-	requestCtx := ui.WithRuntime(ctx, ui.NewRuntime(strings.NewReader(""), output, output))
+	requestCtx := uiruntime.WithRuntime(ctx, uiruntime.NewRuntime(strings.NewReader(""), output, output))
 	requestCtx = api.WithAssistantUpdateMode(requestCtx, api.AssistantUpdatesOff)
 	if request.ToolPayload {
 		requestCtx = api.WithToolDefinitions(requestCtx, toolDefinitions)

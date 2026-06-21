@@ -7,20 +7,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type planApprovalContextKey struct{}
 
 type planApprovalContextPrompter struct {
 	ctx context.Context
-	req ui.PromptRequest
+	req uiprompt.PromptRequest
 }
 
-func (p *planApprovalContextPrompter) Prompt(ctx context.Context, req ui.PromptRequest) (ui.PromptResponse, error) {
+func (p *planApprovalContextPrompter) Prompt(ctx context.Context, req uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	p.ctx = ctx
 	p.req = req
-	return ui.PromptResponse{Action: ui.PromptActionNo}, nil
+	return uiprompt.PromptResponse{Action: uiprompt.PromptActionNo}, nil
 }
 
 type planApprovalBlockingPrompter struct {
@@ -28,28 +29,28 @@ type planApprovalBlockingPrompter struct {
 }
 
 type planApprovalResponsePrompter struct {
-	resp ui.PromptResponse
+	resp uiprompt.PromptResponse
 }
 
-func (p planApprovalResponsePrompter) Prompt(ctx context.Context, req ui.PromptRequest) (ui.PromptResponse, error) {
+func (p planApprovalResponsePrompter) Prompt(ctx context.Context, req uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	return p.resp, nil
 }
 
-func (p *planApprovalBlockingPrompter) Prompt(ctx context.Context, _ ui.PromptRequest) (ui.PromptResponse, error) {
+func (p *planApprovalBlockingPrompter) Prompt(ctx context.Context, _ uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	close(p.started)
 	select {
 	case <-ctx.Done():
-		return ui.PromptResponse{Action: ui.PromptActionNo, Cancelled: true}, nil
+		return uiprompt.PromptResponse{Action: uiprompt.PromptActionNo, Cancelled: true}, nil
 	case <-time.After(200 * time.Millisecond):
-		return ui.PromptResponse{Action: ui.PromptActionYes}, nil
+		return uiprompt.PromptResponse{Action: uiprompt.PromptActionYes}, nil
 	}
 }
 
 func TestConfirmPlan_UsesPlanFeedbackPromptResponse(t *testing.T) {
 	var out bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 	runtime.SetPrompter(planApprovalResponsePrompter{
-		resp: ui.PromptResponse{Action: ui.PromptActionComment, Text: "  add tests first  "},
+		resp: uiprompt.PromptResponse{Action: uiprompt.PromptActionComment, Text: "  add tests first  "},
 	})
 	agent := &Agent{
 		Runtime: &AgentRuntime{
@@ -71,7 +72,7 @@ func TestConfirmPlan_UsesRuntimePromptIO(t *testing.T) {
 
 	agent := &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader("n\n"), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader("n\n"), &out, &out),
 		},
 	}
 
@@ -90,7 +91,7 @@ func TestConfirmPlan_UsesRuntimePromptIO(t *testing.T) {
 func TestConfirmPlan_UsesRequestContextForPrompt(t *testing.T) {
 	var out bytes.Buffer
 	prompter := &planApprovalContextPrompter{}
-	runtime := ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 	runtime.SetPrompter(prompter)
 	ctx := context.WithValue(context.Background(), planApprovalContextKey{}, "plan-request")
 
@@ -113,17 +114,17 @@ func TestConfirmPlan_UsesRequestContextForPrompt(t *testing.T) {
 	if got := prompter.ctx.Value(planApprovalContextKey{}); got != "plan-request" {
 		t.Fatalf("prompt context marker = %v, want plan-request", got)
 	}
-	if prompter.req.Kind != ui.PromptKindConfirm ||
+	if prompter.req.Kind != uiprompt.PromptKindConfirm ||
 		prompter.req.Title != "Review implementation plan" ||
 		prompter.req.Message != "Approve the plan, request changes, or cancel Plan Mode." ||
 		!prompter.req.AllowComment ||
-		prompter.req.ConfirmSubmitPolicy != ui.PromptConfirmSubmitExplicit {
+		prompter.req.ConfirmSubmitPolicy != uiprompt.PromptConfirmSubmitExplicit {
 		t.Fatalf("prompt request = %#v, want plan approval confirm", prompter.req)
 	}
 	if len(prompter.req.Options) != 3 ||
-		prompter.req.Options[0].Value != string(ui.PromptActionYes) ||
-		prompter.req.Options[1].Value != string(ui.PromptActionComment) ||
-		prompter.req.Options[2].Value != string(ui.PromptActionNo) {
+		prompter.req.Options[0].Value != string(uiprompt.PromptActionYes) ||
+		prompter.req.Options[1].Value != string(uiprompt.PromptActionComment) ||
+		prompter.req.Options[2].Value != string(uiprompt.PromptActionNo) {
 		t.Fatalf("prompt options = %#v, want approve/comment/cancel actions", prompter.req.Options)
 	}
 }
@@ -131,7 +132,7 @@ func TestConfirmPlan_UsesRequestContextForPrompt(t *testing.T) {
 func TestConfirmPlan_RequestContextCancellationCancelsPrompt(t *testing.T) {
 	var out bytes.Buffer
 	prompter := &planApprovalBlockingPrompter{started: make(chan struct{})}
-	runtime := ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 	runtime.SetPrompter(prompter)
 	agent := &Agent{
 		Runtime: &AgentRuntime{

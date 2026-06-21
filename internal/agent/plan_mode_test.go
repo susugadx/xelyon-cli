@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestExtractPlanJSON_Mode(t *testing.T) {
@@ -139,7 +139,7 @@ func TestRunPlanMode_UsesRuntimeOutput(t *testing.T) {
 	var out bytes.Buffer
 
 	agent := NewAgentWithRuntime("test-model", &mockProvider{name: "test"}, false, &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 	})
 	t.Cleanup(agent.Cleanup)
 

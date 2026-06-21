@@ -1,12 +1,6 @@
 package evidence
 
-import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	pathpkg "path"
-	"strings"
-)
+import "strings"
 
 type reviewRelatedSearchTerm struct {
 	term     string
@@ -51,110 +45,17 @@ func buildReviewRelatedSearchTerms(changedFileContext []ReviewContextFileEvidenc
 	}
 
 	for _, file := range changedFileContext {
-		if file.Skipped || pathpkg.Ext(file.Path) != ".go" {
+		if file.Skipped {
 			continue
 		}
-		parsed, _ := parser.ParseFile(token.NewFileSet(), file.Path, file.Content, parser.SkipObjectResolution)
-		if parsed != nil {
-			for _, decl := range parsed.Decls {
-				for _, term := range reviewRelatedSearchTermsFromDecl(decl) {
-					if addTerm(term, "symbol:"+term, reviewRelatedSearchPrioritySymbol) {
-						return terms
-					}
-				}
-			}
+		language, ok := reviewEvidenceLanguageSpecForRelatedPath(file.Path)
+		if !ok || language.extractRelatedSearchTerms == nil {
+			continue
 		}
-		stem := strings.TrimSuffix(pathpkg.Base(file.Path), pathpkg.Ext(file.Path))
-		if addTerm(stem, "file_stem:"+stem, reviewRelatedSearchPriorityFileStem) {
+		if language.extractRelatedSearchTerms(language, file, addTerm) {
 			return terms
 		}
-		if parsed != nil && parsed.Name != nil {
-			if addTerm(parsed.Name.Name, "package:"+parsed.Name.Name, reviewRelatedSearchPriorityPackage) {
-				return terms
-			}
-		}
 	}
 
 	return terms
-}
-
-func reviewRelatedSearchTermsFromDecl(decl ast.Decl) []string {
-	switch typed := decl.(type) {
-	case *ast.FuncDecl:
-		return reviewRelatedSearchTermsFromFuncDecl(typed)
-	case *ast.GenDecl:
-		return reviewRelatedSearchTermsFromGenDecl(typed)
-	default:
-		return nil
-	}
-}
-
-func reviewRelatedSearchTermsFromFuncDecl(decl *ast.FuncDecl) []string {
-	if decl == nil {
-		return nil
-	}
-	if isReviewRelatedSearchPackageInitFunc(decl) {
-		return nil
-	}
-	term, ok := reviewRelatedSearchTermFromIdent(decl.Name)
-	if !ok {
-		return nil
-	}
-	return []string{term}
-}
-
-func isReviewRelatedSearchPackageInitFunc(decl *ast.FuncDecl) bool {
-	return decl != nil && decl.Recv == nil && decl.Name != nil && decl.Name.Name == "init"
-}
-
-func reviewRelatedSearchTermsFromGenDecl(decl *ast.GenDecl) []string {
-	if decl == nil {
-		return nil
-	}
-
-	terms := make([]string, 0, len(decl.Specs))
-	for _, spec := range decl.Specs {
-		switch decl.Tok {
-		case token.TYPE:
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-			if term, ok := reviewRelatedSearchTermFromIdent(typeSpec.Name); ok {
-				terms = append(terms, term)
-			}
-		case token.CONST, token.VAR:
-			valueSpec, ok := spec.(*ast.ValueSpec)
-			if !ok {
-				continue
-			}
-			terms = append(terms, reviewRelatedSearchTermsFromValueSpec(valueSpec)...)
-		}
-	}
-	return terms
-}
-
-func reviewRelatedSearchTermsFromValueSpec(spec *ast.ValueSpec) []string {
-	if spec == nil {
-		return nil
-	}
-
-	terms := make([]string, 0, len(spec.Names))
-	for _, name := range spec.Names {
-		if term, ok := reviewRelatedSearchTermFromIdent(name); ok {
-			terms = append(terms, term)
-		}
-	}
-	return terms
-}
-
-func reviewRelatedSearchTermFromIdent(ident *ast.Ident) (string, bool) {
-	if ident == nil || !isReviewRelatedSearchNamedIdentifier(ident.Name) {
-		return "", false
-	}
-	return ident.Name, true
-}
-
-func isReviewRelatedSearchNamedIdentifier(name string) bool {
-	return name != "" && name != "_"
 }

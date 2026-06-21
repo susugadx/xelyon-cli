@@ -21,11 +21,13 @@ func TestProjectScreen_LongListRenderingKeepsSelectionVisible(t *testing.T) {
 	}
 	m := newProjectTestModel(agent)
 
-	m.projectScreen.sectionIndex = int(projectSectionRules)
-	m.projectScreen.activePane = projectPaneItem
-	m.projectScreen.itemIndex[projectSectionRules] = 10
-	lines := m.renderProjectListLines(40, 5)
-	plain := stripANSI(strings.Join(lines, "\n"))
+	m.width = 80
+	m.height = 10
+	m.projectScreen.NormalizeSize(m.width, m.height)
+	m = moveProjectToSection(t, m, "rules")
+	m = moveProjectToItemPane(t, m)
+	m = moveProjectItemSelection(t, m, 10)
+	plain := stripANSI(m.projectScreen.View(m.width, m.height))
 
 	if !strings.Contains(plain, "rule-K") {
 		t.Fatalf("rendered list should include selected item rule-K:\n%s", plain)
@@ -47,19 +49,12 @@ func TestProjectScreen_ListRenderingSanitizesMultilineItems(t *testing.T) {
 	}
 	m := newProjectTestModel(agent)
 
-	m.projectScreen.sectionIndex = int(projectSectionRules)
-	m.projectScreen.activePane = projectPaneItem
-	lines := m.renderProjectListLines(48, 4)
-	if len(lines) == 0 {
-		t.Fatal("renderProjectListLines returned no lines")
-	}
-	for i, line := range lines {
-		if strings.Contains(line, "\n") {
-			t.Fatalf("rendered list line %d contains embedded newline: %q", i, line)
-		}
-	}
-
-	plain := stripANSI(lines[0])
+	m.width = 80
+	m.height = 10
+	m.projectScreen.NormalizeSize(m.width, m.height)
+	m = moveProjectToSection(t, m, "rules")
+	m = moveProjectToItemPane(t, m)
+	plain := stripANSI(m.projectScreen.View(m.width, m.height))
 	if !strings.Contains(plain, "first line second line third line") {
 		t.Fatalf("rendered list item was not sanitized:\n%s", plain)
 	}

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleSSEResponse_ContextCancelReturnsPartialText(t *testing.T) {
@@ -118,7 +118,7 @@ func TestHandleSSEResponse_DedupesSignatureFunctionCallsAndCarriesThoughtParts(t
 func TestHandleSSEResponse_ScanErrorAfterPartialChunk(t *testing.T) {
 	p := New("test-key")
 	ctx, _, _ := newGeminiResponseContext()
-	spinner := ui.NewSpinnerWithWriter(io.Discard)
+	spinner := uiruntime.NewSpinnerWithWriter(io.Discard)
 	spinner.Start("Waiting for Gemini...")
 
 	readErr := errors.New("boom")

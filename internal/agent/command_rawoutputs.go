@@ -11,7 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/crypto"
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
-	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 )
 
 const rawOutputsCommandRefLimit = 20
@@ -157,7 +157,7 @@ func providerHistoryRawOutputLiveRefsForAgent(agent *Agent, sessionID string) []
 	return dedupeRawOutputLiveRefs(refs, sessionID)
 }
 
-func appendReviewRawOutputLedgerRefs(out []rawoutputs.RawOutputRef, sessionID string, refs []review.ReviewProbeRawOutputLedgerRef) []rawoutputs.RawOutputRef {
+func appendReviewRawOutputLedgerRefs(out []rawoutputs.RawOutputRef, sessionID string, refs []reviewpromptreduction.ReviewProbeRawOutputLedgerRef) []rawoutputs.RawOutputRef {
 	for _, ref := range refs {
 		refID := strings.TrimSpace(ref.RefID)
 		if refID == "" {

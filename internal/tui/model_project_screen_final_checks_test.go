@@ -16,23 +16,24 @@ func TestProjectScreen_FinalChecksEdits(t *testing.T) {
 	}
 	m := newProjectTestModel(agent)
 
-	m.projectScreen.sectionIndex = int(projectSectionFinalCommands)
+	m = moveProjectToSection(t, m, "final_commands")
 	m = sendProjectKey(m, "a")
-	m.projectScreen.editInput.SetValue("go test ./...")
+	m = sendProjectText(m, "go test ./...")
 	m = sendProjectKey(m, "enter")
 
-	m.projectScreen.sectionIndex = int(projectSectionFinalTimeout)
+	m = moveProjectToSection(t, m, "final_timeout")
 	m = sendProjectKey(m, "enter")
-	m.projectScreen.editInput.SetValue("120")
+	m = sendProjectText(m, "120")
 	m = sendProjectKey(m, "enter")
 
-	if m.projectScreen.pc.FinalChecks == nil {
+	snapshot := projectSnapshot(t, m)
+	if snapshot.Config.FinalChecks == nil {
 		t.Fatal("FinalChecks is nil")
 	}
-	if got := m.projectScreen.pc.FinalChecks.Commands; len(got) != 1 || got[0] != "go test ./..." {
+	if got := snapshot.Config.FinalChecks.Commands; len(got) != 1 || got[0] != "go test ./..." {
 		t.Fatalf("FinalChecks.Commands = %#v", got)
 	}
-	if got := m.projectScreen.pc.FinalChecks.Timeout; got != 120 {
+	if got := snapshot.Config.FinalChecks.Timeout; got != 120 {
 		t.Fatalf("FinalChecks.Timeout = %d, want 120", got)
 	}
 }
@@ -46,20 +47,21 @@ func TestProjectScreen_FinalChecksTimeoutRequiresCommands(t *testing.T) {
 	}
 	m := newProjectTestModel(agent)
 
-	m.projectScreen.sectionIndex = int(projectSectionFinalTimeout)
+	m = moveProjectToSection(t, m, "final_timeout")
 	m = sendProjectKey(m, "enter")
 
-	if m.projectScreen.editMode != projectEditNone {
-		t.Fatalf("editMode = %d, want projectEditNone(%d)", m.projectScreen.editMode, projectEditNone)
+	snapshot := projectSnapshot(t, m)
+	if snapshot.EditMode != "none" {
+		t.Fatalf("editMode = %s, want none", snapshot.EditMode)
 	}
-	if m.projectScreen.pc.FinalChecks != nil {
-		t.Fatalf("FinalChecks = %#v, want nil", m.projectScreen.pc.FinalChecks)
+	if snapshot.Config.FinalChecks != nil {
+		t.Fatalf("FinalChecks = %#v, want nil", snapshot.Config.FinalChecks)
 	}
-	if m.projectScreen.dirty {
+	if snapshot.Dirty {
 		t.Fatal("dirty should stay false when timeout edit is refused")
 	}
-	if !strings.Contains(m.projectScreen.message, "add a final check command") {
-		t.Fatalf("message = %q, want add-command guidance", m.projectScreen.message)
+	if !strings.Contains(snapshot.Message, "add a final check command") {
+		t.Fatalf("message = %q, want add-command guidance", snapshot.Message)
 	}
 }
 
@@ -75,15 +77,15 @@ func TestProjectScreen_ExistingTimeoutOnlyFinalChecksOverrideIsPreserved(t *test
 	}
 	m := newProjectTestModel(agent)
 
-	if m.projectScreen.pc.FinalChecks == nil {
+	if projectSnapshot(t, m).Config.FinalChecks == nil {
 		t.Fatal("FinalChecks should be preserved after screen initialization")
 	}
-	if got := m.projectScreen.pc.FinalChecks.Timeout; got != 120 {
+	if got := projectSnapshot(t, m).Config.FinalChecks.Timeout; got != 120 {
 		t.Fatalf("FinalChecks.Timeout = %d, want 120", got)
 	}
 
 	m = editProjectContext(t, m, "updated ctx")
-	m = saveProjectAndWait(t, m)
+	saveProjectAndWait(t, m)
 
 	if agent.lastSavedProject == nil {
 		t.Fatal("lastSavedProject is nil")
@@ -106,12 +108,12 @@ func TestProjectScreen_ExistingEmptyFinalChecksOverrideIsPreserved(t *testing.T)
 	}
 	m := newProjectTestModel(agent)
 
-	if m.projectScreen.pc.FinalChecks == nil {
+	if projectSnapshot(t, m).Config.FinalChecks == nil {
 		t.Fatal("FinalChecks should be preserved after screen initialization")
 	}
 
 	m = editProjectContext(t, m, "updated ctx")
-	m = saveProjectAndWait(t, m)
+	saveProjectAndWait(t, m)
 
 	if agent.lastSavedProject == nil {
 		t.Fatal("lastSavedProject is nil")
@@ -137,20 +139,21 @@ func TestProjectScreen_DeleteLastExistingFinalCheckCommandPreservesOverride(t *t
 	}
 	m := newProjectTestModel(agent)
 
-	m.projectScreen.sectionIndex = int(projectSectionFinalCommands)
-	m.projectScreen.activePane = projectPaneItem
+	m = moveProjectToSection(t, m, "final_commands")
+	m = moveProjectToItemPane(t, m)
 	m = sendProjectKey(m, "d")
 
-	if m.projectScreen.pc.FinalChecks == nil {
+	snapshot := projectSnapshot(t, m)
+	if snapshot.Config.FinalChecks == nil {
 		t.Fatal("FinalChecks should preserve existing override after deleting the last command")
 	}
-	if got := m.projectScreen.pc.FinalChecks.Commands; len(got) != 0 {
+	if got := snapshot.Config.FinalChecks.Commands; len(got) != 0 {
 		t.Fatalf("FinalChecks.Commands = %#v, want empty", got)
 	}
-	if got := m.projectScreen.pc.FinalChecks.Timeout; got != 120 {
+	if got := snapshot.Config.FinalChecks.Timeout; got != 120 {
 		t.Fatalf("FinalChecks.Timeout = %d, want 120", got)
 	}
-	if !m.projectScreen.dirty {
+	if !snapshot.Dirty {
 		t.Fatal("dirty should be true after deleting final check command")
 	}
 }
@@ -164,21 +167,22 @@ func TestProjectScreen_DeleteLastTUICreatedFinalCheckCommandClearsFinalChecks(t 
 	}
 	m := newProjectTestModel(agent)
 
-	m.projectScreen.sectionIndex = int(projectSectionFinalCommands)
+	m = moveProjectToSection(t, m, "final_commands")
 	m = sendProjectKey(m, "a")
-	m.projectScreen.editInput.SetValue("go test ./...")
+	m = sendProjectText(m, "go test ./...")
 	m = sendProjectKey(m, "enter")
-	if m.projectScreen.pc.FinalChecks == nil {
+	if projectSnapshot(t, m).Config.FinalChecks == nil {
 		t.Fatal("FinalChecks should be created after adding a command")
 	}
 
-	m.projectScreen.activePane = projectPaneItem
+	m = moveProjectToItemPane(t, m)
 	m = sendProjectKey(m, "d")
 
-	if m.projectScreen.pc.FinalChecks != nil {
-		t.Fatalf("FinalChecks = %#v, want nil after deleting the last TUI-created command", m.projectScreen.pc.FinalChecks)
+	snapshot := projectSnapshot(t, m)
+	if snapshot.Config.FinalChecks != nil {
+		t.Fatalf("FinalChecks = %#v, want nil after deleting the last TUI-created command", snapshot.Config.FinalChecks)
 	}
-	if !m.projectScreen.dirty {
+	if !snapshot.Dirty {
 		t.Fatal("dirty should be true after deleting final check command")
 	}
 }

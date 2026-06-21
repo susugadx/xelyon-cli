@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
 func (a *Agent) toolExecutionContext(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) tools.ExecutionContext {
@@ -136,7 +136,7 @@ func (a *Agent) executeImmediateToolResult(ctx context.Context, toolCall *tools.
 }
 
 func (a *Agent) executePublishedToolWithSpinner(ctx context.Context, toolCall *tools.ToolCall) tools.ExecutionResult {
-	a.ui().StartSpinner(ui.SpinnerMessageForTool(toolCall.Tool))
+	a.ui().StartSpinner(uitoolview.SpinnerMessageForTool(toolCall.Tool))
 
 	execCtx := a.toolExecutionContext(ctx, nil, nil, nil)
 	a.observeEditReadinessBeforeTool(ctx, toolCall)

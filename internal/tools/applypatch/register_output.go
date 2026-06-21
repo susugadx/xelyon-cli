@@ -6,7 +6,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uifileview"
 )
 
 func showCodexStyleResult(out common.Output, result *ApplyResult) {
@@ -15,13 +15,13 @@ func showCodexStyleResult(out common.Output, result *ApplyResult) {
 	}
 
 	showApplyPatchHeader(out, len(result.details))
-	ui.ShowCodexStyleDiff(out.StdoutWriter(), buildCodexStyleFiles(result.details))
+	uifileview.ShowCodexStyleDiff(out.StdoutWriter(), buildCodexStyleFiles(result.details))
 }
 
-func buildCodexStyleFiles(details []applyResultDetail) []ui.PatchFileDisplay {
-	files := make([]ui.PatchFileDisplay, 0, len(details))
+func buildCodexStyleFiles(details []applyResultDetail) []uifileview.PatchFileDisplay {
+	files := make([]uifileview.PatchFileDisplay, 0, len(details))
 	for _, d := range details {
-		files = append(files, ui.PatchFileDisplay{
+		files = append(files, uifileview.PatchFileDisplay{
 			Path:       d.Path,
 			Action:     d.Action,
 			OldContent: d.OldContent,
@@ -41,17 +41,17 @@ func showApplyPatchPreview(out common.Output, patchText string, hunks []Hunk) {
 }
 
 func showApplyPatchHeader(out common.Output, operations int) {
-	ui.FileOpHeader(out.StdoutWriter(), "apply_patch", fmt.Sprintf("%d files", operations))
+	uifileview.FileOpHeader(out.StdoutWriter(), "apply_patch", fmt.Sprintf("%d files", operations))
 }
 
 func showApplyPatchPreviewBody(out common.Output, patchText string, hunks []Hunk) {
-	ui.ShowPatchToWriter(out.StdoutWriter(), patchText)
+	uifileview.ShowPatchToWriter(out.StdoutWriter(), patchText)
 
 	lineStats := countLinesPerPath(patchText)
 	w := out.StdoutWriter()
 	for _, hunk := range hunks {
 		status, target, lineInfo := formatPreviewHunkSummary(hunk, lineStats[hunk.Path])
-		ui.FileOpPathLine(w, status, target, lineInfo)
+		uifileview.FileOpPathLine(w, status, target, lineInfo)
 	}
 	out.Println()
 }

@@ -11,13 +11,13 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type interactiveREPLEnvironment struct {
 	runtime   *AgentRuntime
-	runtimeUI *ui.Runtime
-	mlReader  *ui.MultilineReader
+	runtimeUI *uiruntime.Runtime
+	mlReader  *uiruntime.MultilineReader
 }
 
 // prepareInteractiveREPLEnvironment は legacy classic REPL 起動に必要な runtime/UI/reader を初期化する。
@@ -26,7 +26,7 @@ func prepareInteractiveREPLEnvironment(cfg *config.Config, autoApprove bool) (*i
 	runtime.AutoApprove = autoApprove
 
 	runtimeUI := runtime.effectiveUI()
-	mlReader := ui.NewMultilineReaderWithRuntime(runtimeUI)
+	mlReader := uiruntime.NewMultilineReaderWithRuntime(runtimeUI)
 	runtimeUI.SetPromptReader(mlReader)
 	runtimeCfg := runtime.effectiveConfig()
 

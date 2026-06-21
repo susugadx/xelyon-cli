@@ -4,11 +4,11 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiplanview"
 )
 
-func buildPlanReviewDisplay(p *plan.Plan) *ui.PlanDisplay {
-	display := ui.NewPlanReviewDisplay()
+func buildPlanReviewDisplay(p *plan.Plan) *uiplanview.PlanDisplay {
+	display := uiplanview.NewPlanReviewDisplay()
 	if p == nil {
 		return display
 	}
@@ -19,7 +19,7 @@ func buildPlanReviewDisplay(p *plan.Plan) *ui.PlanDisplay {
 	display.AddDetailSection("根拠", p.Evidence)
 	display.AddDetailSection("制約", p.Constraints)
 	for _, step := range p.Steps {
-		display.AddPlanStep(ui.PlanStep{
+		display.AddPlanStep(uiplanview.PlanStep{
 			ID:           step.ID,
 			Description:  step.Description,
 			Purpose:      step.Purpose,
@@ -31,12 +31,12 @@ func buildPlanReviewDisplay(p *plan.Plan) *ui.PlanDisplay {
 	return display
 }
 
-func buildPlanNoImplementationDisplay(p *plan.Plan) *ui.PlanDisplay {
+func buildPlanNoImplementationDisplay(p *plan.Plan) *uiplanview.PlanDisplay {
 	if p == nil || !planHasNoImplementationDetails(p) {
 		return nil
 	}
 
-	display := ui.NewPlanDisplay("Investigation Result")
+	display := uiplanview.NewPlanDisplay("Investigation Result")
 	display.SetSummary(p.Summary)
 	display.AddDetailSection("調査結果", p.Findings)
 	display.AddDetailSection("根拠", p.Evidence)

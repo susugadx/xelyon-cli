@@ -9,6 +9,9 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewartifact "github.com/susugadx/xelyon-cli/internal/review/artifact"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 	"github.com/susugadx/xelyon-cli/internal/reviewadapter"
 )
 
@@ -19,24 +22,24 @@ type reviewRunOptions struct {
 }
 
 // RunReview は Agent runtime を使って /review current_changes runner を実行する。
-func (a *Agent) RunReview(ctx context.Context, req review.ReviewRequest) (review.ReviewReport, error) {
+func (a *Agent) RunReview(ctx context.Context, req review.ReviewRequest) (reviewreport.ReviewReport, error) {
 	return a.runReview(ctx, req, reviewRunOptions{})
 }
 
-func (a *Agent) runReview(ctx context.Context, req review.ReviewRequest, opts reviewRunOptions) (review.ReviewReport, error) {
+func (a *Agent) runReview(ctx context.Context, req review.ReviewRequest, opts reviewRunOptions) (reviewreport.ReviewReport, error) {
 	if a == nil {
-		return review.ReviewReport{}, fmt.Errorf("review run: agent is nil")
+		return reviewreport.ReviewReport{}, fmt.Errorf("review run: agent is nil")
 	}
 	ctx, cleanup := a.beginReviewRequestContext(ctx)
 	defer cleanup()
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		return review.ReviewReport{}, fmt.Errorf("review run resolve cwd: %w", err)
+		return reviewreport.ReviewReport{}, fmt.Errorf("review run resolve cwd: %w", err)
 	}
 	repoRoot, err := review.ResolveReviewRepoRoot(ctx, cwd)
 	if err != nil {
-		return review.ReviewReport{}, err
+		return reviewreport.ReviewReport{}, err
 	}
 
 	artifactSink := a.newReviewRunArtifactSink(repoRoot)
@@ -63,7 +66,7 @@ func (a *Agent) runReview(ctx context.Context, req review.ReviewRequest, opts re
 	})
 	runner, err := factory.NewReviewRunner()
 	if err != nil {
-		return review.ReviewReport{}, fmt.Errorf("review run build runner: %w", err)
+		return reviewreport.ReviewReport{}, fmt.Errorf("review run build runner: %w", err)
 	}
 	report, runErr := runner.Run(ctx, req)
 	a.recordLastReviewPromptReductionReport(runner.PromptReductionReport())
@@ -71,58 +74,58 @@ func (a *Agent) runReview(ctx context.Context, req review.ReviewRequest, opts re
 		fmt.Fprintf(a.errorOutput(), "Warning: failed to save review artifact %s: %v\n", artifactSink.runDir, err)
 	}
 	if runErr != nil {
-		return review.ReviewReport{}, runErr
+		return reviewreport.ReviewReport{}, runErr
 	}
 	return report, nil
 }
 
-func (a *Agent) recordLastReviewPromptReductionReport(report review.ReviewPromptReductionReport) {
+func (a *Agent) recordLastReviewPromptReductionReport(report reviewpromptreduction.ReviewPromptReductionReport) {
 	if a == nil || a.Runtime == nil {
 		return
 	}
-	a.Runtime.LastReviewPromptReductionReport = review.CloneReviewPromptReductionReport(report)
+	a.Runtime.LastReviewPromptReductionReport = reviewpromptreduction.CloneReviewPromptReductionReport(report)
 }
 
-func (a *Agent) reviewPromptReductionMode() review.ReviewPromptReductionMode {
+func (a *Agent) reviewPromptReductionMode() reviewpromptreduction.ReviewPromptReductionMode {
 	if a == nil {
-		return review.ReviewPromptReductionModeOff
+		return reviewpromptreduction.ReviewPromptReductionModeOff
 	}
 	switch providerHistoryReductionModeResolutionForRuntime(a.Runtime).effective {
 	case ProviderHistoryReductionApply:
-		return review.ReviewPromptReductionModeApply
+		return reviewpromptreduction.ReviewPromptReductionModeApply
 	case ProviderHistoryReductionDryRun:
-		return review.ReviewPromptReductionModeDryRun
+		return reviewpromptreduction.ReviewPromptReductionModeDryRun
 	default:
-		return review.ReviewPromptReductionModeOff
+		return reviewpromptreduction.ReviewPromptReductionModeOff
 	}
 }
 
-func (a *Agent) reviewRawOutputArtifactsMode() review.ReviewRawOutputArtifactsMode {
+func (a *Agent) reviewRawOutputArtifactsMode() reviewpromptreduction.ReviewRawOutputArtifactsMode {
 	if a == nil {
-		return review.ReviewRawOutputArtifactsModeOff
+		return reviewpromptreduction.ReviewRawOutputArtifactsModeOff
 	}
 	switch reviewRawOutputArtifactsConfigForRuntime(a.Runtime).Mode {
 	case config.ProviderHistoryRawOutputArtifactsModeApply:
-		return review.ReviewRawOutputArtifactsModeApply
+		return reviewpromptreduction.ReviewRawOutputArtifactsModeApply
 	case config.ProviderHistoryRawOutputArtifactsModeDryRun:
-		return review.ReviewRawOutputArtifactsModeDryRun
+		return reviewpromptreduction.ReviewRawOutputArtifactsModeDryRun
 	default:
-		return review.ReviewRawOutputArtifactsModeOff
+		return reviewpromptreduction.ReviewRawOutputArtifactsModeOff
 	}
 }
 
-func (a *Agent) reviewRawOutputArtifactStore() review.ReviewRawOutputArtifactStore {
+func (a *Agent) reviewRawOutputArtifactStore() reviewpromptreduction.ReviewRawOutputArtifactStore {
 	if a == nil {
 		return nil
 	}
-	if a.reviewPromptReductionMode() == review.ReviewPromptReductionModeOff {
+	if a.reviewPromptReductionMode() == reviewpromptreduction.ReviewPromptReductionModeOff {
 		return nil
 	}
-	if a.reviewRawOutputArtifactsMode() == review.ReviewRawOutputArtifactsModeOff {
+	if a.reviewRawOutputArtifactsMode() == reviewpromptreduction.ReviewRawOutputArtifactsModeOff {
 		return nil
 	}
 	store := a.providerHistoryRawOutputArtifactStore()
-	if typed, ok := store.(review.ReviewRawOutputArtifactStore); ok {
+	if typed, ok := store.(reviewpromptreduction.ReviewRawOutputArtifactStore); ok {
 		return typed
 	}
 	return nil
@@ -159,7 +162,7 @@ func reviewRawOutputArtifactsConfigForRuntime(runtime *AgentRuntime) config.Prov
 }
 
 type reviewRunArtifactSink struct {
-	writer review.ReviewRunArtifactWriter
+	writer reviewartifact.ReviewRunArtifactWriter
 	runDir string
 	flush  func() error
 }
@@ -177,7 +180,7 @@ func (a *Agent) newReviewRunArtifactSink(repoRoot string) reviewRunArtifactSink 
 	}
 	runID := time.Now().UTC().Format("20060102T150405.000000000Z")
 	runDir := filepath.Join(repoRoot, ".xelyon", "review-runs", runID)
-	buffer := review.NewBufferedReviewRunArtifactWriter()
+	buffer := reviewartifact.NewBufferedReviewRunArtifactWriter()
 	return reviewRunArtifactSink{
 		writer: buffer,
 		runDir: runDir,
@@ -185,7 +188,7 @@ func (a *Agent) newReviewRunArtifactSink(repoRoot string) reviewRunArtifactSink 
 			if buffer.Len() == 0 {
 				return nil
 			}
-			writer, err := review.NewReviewRunRepoArtifactWriter(repoRoot, runID)
+			writer, err := reviewartifact.NewReviewRunRepoArtifactWriter(repoRoot, runID)
 			if err != nil {
 				return err
 			}

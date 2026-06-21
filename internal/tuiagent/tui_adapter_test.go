@@ -10,7 +10,7 @@ import (
 	agentpkg "github.com/susugadx/xelyon-cli/internal/agent"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tui"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 var _ tui.SkillCatalogAgent = (*TUIAdapter)(nil)
@@ -21,7 +21,7 @@ func newTUIAdapterTestAgent(t *testing.T) (*agentpkg.Agent, *bytes.Buffer) {
 	cfg := newProjectMapDisabledConfig()
 	out := &bytes.Buffer{}
 	runtime := agentpkg.NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), out, out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), out, out)
 
 	agent := &agentpkg.Agent{
 		ProviderName:    "openai",

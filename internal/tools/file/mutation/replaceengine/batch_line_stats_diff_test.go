@@ -3,6 +3,8 @@ package replaceengine
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/uifileview"
 )
 
 func TestResolveBatchDiffLineStats(t *testing.T) {
@@ -75,6 +77,10 @@ func TestResolveBatchDiffLineStats(t *testing.T) {
 				t.Fatalf("expected +%d/-%d, got +%d/-%d", tc.wantAdded, tc.wantRemoved, gotAdded, gotRemoved)
 			}
 
+			uiAdded, uiRemoved := uifileview.CountDiffLines(strings.Split(tc.oldContent, "\n"), strings.Split(tc.newContent, "\n"))
+			if gotAdded != uiAdded || gotRemoved != uiRemoved {
+				t.Fatalf("expected parity with uifileview.CountDiffLines (+%d/-%d), got +%d/-%d", uiAdded, uiRemoved, gotAdded, gotRemoved)
+			}
 		})
 	}
 }

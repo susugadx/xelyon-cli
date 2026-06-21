@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/turnsupport"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type commentSignalTool struct{}
@@ -97,7 +97,7 @@ func (t *finalCheckWriteTool) Run(_ tools.ExecutionContext, args map[string]stri
 
 func newTurnRunnerTestAgent(provider api.Provider, cfg *config.Config, promptInput string, out *bytes.Buffer, extraTools ...tools.Tool) *Agent {
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(promptInput), out, out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(promptInput), out, out)
 	registry := tools.DefaultRegistry.Clone()
 	for _, tool := range extraTools {
 		registry.Register(tool)

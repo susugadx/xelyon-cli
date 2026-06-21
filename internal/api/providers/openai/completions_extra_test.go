@@ -13,7 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func newOpenAITestContext(t *testing.T, thinking bool) context.Context {
@@ -21,8 +21,8 @@ func newOpenAITestContext(t *testing.T, thinking bool) context.Context {
 	cfg := config.DefaultConfig()
 	cfg.Thinking.Enabled = thinking
 	cfg.Thinking.Level = "high"
-	runtime := ui.NewRuntime(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
-	ctx := ui.WithRuntime(context.Background(), runtime)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	ctx := uiruntime.WithRuntime(context.Background(), runtime)
 	ctx = config.WithContext(ctx, cfg)
 	return api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 }
@@ -98,7 +98,7 @@ func TestHandleStreamingResponse_CombinesToolCallsAndUsage(t *testing.T) {
 	)
 	defer resp.Body.Close()
 
-	got, err := p.handleStreamingResponse(newOpenAITestContext(t, false), resp, ui.NewSpinnerWithWriter(io.Discard))
+	got, err := p.handleStreamingResponse(newOpenAITestContext(t, false), resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleStreamingResponse() error = %v", err)
 	}
@@ -124,7 +124,7 @@ func TestHandleStreamingResponse_NullUsageDoesNotEmitZeroUsageOnToolCallsFinish(
 	)
 	defer resp.Body.Close()
 
-	got, err := p.handleStreamingResponse(newOpenAITestContext(t, false), resp, ui.NewSpinnerWithWriter(io.Discard))
+	got, err := p.handleStreamingResponse(newOpenAITestContext(t, false), resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleStreamingResponse() error = %v", err)
 	}

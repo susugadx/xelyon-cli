@@ -1,5 +1,7 @@
 package tui
 
+import tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
+
 type droppedPathDecisionKind int
 
 const (
@@ -16,14 +18,14 @@ type droppedPathDecision struct {
 // decideDroppedPathHandling は pasted content を text として扱うか、添付処理に進めるかを判定する owner。
 func decideDroppedPathHandling(content string) droppedPathDecision {
 	parsed := parseDroppedPaths(content)
-	if parsed.kind == droppedPathParseLimit {
+	if parsed.Kind == tuiattachments.DroppedPathParseLimit {
 		return droppedPathDecision{kind: droppedPathDecisionLimit}
 	}
-	if parsed.kind != droppedPathParseReady {
+	if parsed.Kind != tuiattachments.DroppedPathParseReady {
 		return droppedPathDecision{kind: droppedPathDecisionFallbackText}
 	}
-	if droppedPathsAttachability(parsed.paths) != droppedPathAttachabilityAttachable {
+	if droppedPathsAttachability(parsed.Paths) != droppedPathAttachabilityAttachable {
 		return droppedPathDecision{kind: droppedPathDecisionFallbackText}
 	}
-	return droppedPathDecision{kind: droppedPathDecisionApplyCandidates, paths: parsed.paths}
+	return droppedPathDecision{kind: droppedPathDecisionApplyCandidates, paths: parsed.Paths}
 }

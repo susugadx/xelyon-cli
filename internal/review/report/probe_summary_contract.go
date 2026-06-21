@@ -3,13 +3,15 @@ package report
 import (
 	"fmt"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func canonicalizeReviewProbeSummaryMutationOutcome(summary ReviewProbeSummary) ReviewProbeSummary {
 	if !isReviewProbeSummaryMutationOutcome(summary) {
 		return summary
 	}
-	summary.Status = ReviewProbeMutatedWorktree
+	summary.Status = domain.ReviewProbeMutatedWorktree
 	summary.MutatedWorktree = true
 	return summary
 }
@@ -27,7 +29,7 @@ func CanonicalizeReviewProbeSummaryMutationOutcomes(summaries []ReviewProbeSumma
 }
 
 func isReviewProbeSummaryMutationOutcome(summary ReviewProbeSummary) bool {
-	return summary.Status == ReviewProbeMutatedWorktree || summary.MutatedWorktree
+	return summary.Status == domain.ReviewProbeMutatedWorktree || summary.MutatedWorktree
 }
 
 // IsReviewProbeSummaryMutationOutcome は probe summary が worktree mutation outcome かを返す。
@@ -77,7 +79,7 @@ func hasBlockedReviewProbeSummary(summaries []ReviewProbeSummary) bool {
 			return true
 		}
 		switch summary.Status {
-		case ReviewProbeBlocked, ReviewProbeTimedOut:
+		case domain.ReviewProbeBlocked, domain.ReviewProbeTimedOut:
 			return true
 		}
 	}

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/mcpapproval"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 	"strings"
 	"testing"
 )
@@ -14,7 +14,7 @@ import (
 func TestWrapperRunDefaultConfirmIgnoresGlobalAutoApprove(t *testing.T) {
 	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
 	caller := &recordingCaller{}
-	prompter := &responsePrompter{resp: ui.PromptResponse{Action: ui.PromptActionNo}}
+	prompter := &responsePrompter{resp: uiprompt.PromptResponse{Action: uiprompt.PromptActionNo}}
 	wrapper := NewWrapper(WrapperOptions{
 		Caller:     caller,
 		ServerName: "github",
@@ -44,7 +44,7 @@ func TestWrapperRunDefaultConfirmIgnoresGlobalAutoApprove(t *testing.T) {
 func TestWrapperRunDefaultConfirmIgnoresFullAutoExecutionMode(t *testing.T) {
 	t.Setenv("XELYON_INTERACTIVE_CONFIRM", "1")
 	caller := &recordingCaller{}
-	prompter := &responsePrompter{resp: ui.PromptResponse{Action: ui.PromptActionNo}}
+	prompter := &responsePrompter{resp: uiprompt.PromptResponse{Action: uiprompt.PromptActionNo}}
 	wrapper := NewWrapper(WrapperOptions{
 		Caller:     caller,
 		ServerName: "github",
@@ -188,17 +188,17 @@ func TestWrapperRunHeadlessAutoCallsMCP(t *testing.T) {
 func TestWrapperRunRejectAndCommentDoNotCallCaller(t *testing.T) {
 	tests := []struct {
 		name       string
-		resp       ui.PromptResponse
+		resp       uiprompt.PromptResponse
 		wantResult string
 	}{
 		{
 			name:       "reject",
-			resp:       ui.PromptResponse{Action: ui.PromptActionNo},
+			resp:       uiprompt.PromptResponse{Action: uiprompt.PromptActionNo},
 			wantResult: "User rejected MCP tool execution",
 		},
 		{
 			name:       "comment",
-			resp:       ui.PromptResponse{Action: ui.PromptActionComment, Text: "use a narrower query"},
+			resp:       uiprompt.PromptResponse{Action: uiprompt.PromptActionComment, Text: "use a narrower query"},
 			wantResult: "User provided feedback: use a narrower query",
 		},
 	}

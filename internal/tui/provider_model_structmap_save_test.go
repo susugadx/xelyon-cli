@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/tui/configscreen"
 )
 
 func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
@@ -12,40 +13,16 @@ func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
 	m := newModelWithViewport(agent)
 	cfg := config.DefaultConfig()
 	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
+	m.configScreen = configscreen.New(cfg)
 
-	cs := m.configScreen
-	for i, cat := range cs.categories {
-		if cat.Name == "provider" {
-			cs.catIndex = i
-			break
-		}
-	}
-	cs.activePane = paneField
-	for i, f := range cs.filteredFields() {
-		if f.Path == "provider_models" {
-			cs.fieldIndex = i
-			break
-		}
-	}
+	enterConfigStructMapEdit(t, &m, "provider_models")
+	selectConfigStructMapKey(t, &m, "openai")
 
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
 
-	for i, k := range cs.editStructKeys {
-		if k == "openai" {
-			cs.editStructIndex = i
-			break
-		}
-	}
-
+	selectConfigEntryField(t, &m, "default_model")
 	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-
-	setEntryFieldIndex(t, cs, "default_model")
-	m = sendConfigKey(m, "enter")
-	cs = m.configScreen
-	cs.editInput.SetValue("save-test-model")
+	setConfigInputValue(t, &m, "save-test-model")
 	m = sendConfigKey(m, "enter")
 
 	m = sendConfigKey(m, "esc")
@@ -54,9 +31,9 @@ func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
 	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
 	updated2, saveCmd := m.Update(sMsg)
 	m = updated2.(Model)
-	cs = m.configScreen
-	if cs.saveStatus != statusSaving {
-		t.Fatalf("saveStatus = %d, want statusSaving", cs.saveStatus)
+	cs := configTestScreen(t, m)
+	if got := cs.Snapshot().SaveStatus; got != statusSaving {
+		t.Fatalf("saveStatus = %d, want statusSaving", got)
 	}
 
 	if saveCmd == nil {
@@ -66,13 +43,14 @@ func TestConfigScreen_Save_AfterEntryEdit_UsesUpdatedConfig(t *testing.T) {
 
 	updated3, _ := m.Update(resultMsg)
 	m = updated3.(Model)
-	cs = m.configScreen
+	cs = configTestScreen(t, m)
 
-	if cs.dirty {
+	snapshot := cs.Snapshot()
+	if snapshot.Dirty {
 		t.Fatal("dirty should be false after save")
 	}
-	if cs.saveStatus != statusSaved {
-		t.Fatalf("saveStatus = %d, want statusSaved", cs.saveStatus)
+	if snapshot.SaveStatus != statusSaved {
+		t.Fatalf("saveStatus = %d, want statusSaved", snapshot.SaveStatus)
 	}
 
 	agent.mu.RLock()
@@ -95,17 +73,14 @@ func TestConfigScreen_ProviderOverride_Save_NotOverwritten(t *testing.T) {
 	agent := &stubAgent{}
 	m := newModelWithViewport(agent)
 	cfg := config.DefaultConfig()
-	m.screen = screenConfig
-	m.configScreen = newConfigScreen(cfg)
-	cs := m.configScreen
-
-	cs.cfg.DefaultModel = "global-model"
-
-	if pm, ok := cs.cfg.ProviderModels["openai"]; ok {
+	cfg.DefaultModel = "global-model"
+	if pm, ok := cfg.ProviderModels["openai"]; ok {
 		pm.DefaultModel = "provider-override"
-		cs.cfg.ProviderModels["openai"] = pm
+		cfg.ProviderModels["openai"] = pm
 	}
-	cs.dirty = true
+	m.screen = screenConfig
+	m.configScreen = configscreen.New(cfg)
+	setConfigDirtyForTest(t, &m, true)
 
 	sMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")}
 	updated, saveCmd := m.Update(sMsg)

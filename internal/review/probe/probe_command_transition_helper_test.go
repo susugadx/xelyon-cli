@@ -3,40 +3,42 @@ package probe
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestBuildProbeCommandTransition(t *testing.T) {
 	tests := []struct {
 		name          string
-		status        ReviewProbeStatus
+		status        domain.ReviewProbeStatus
 		wantStop      bool
-		wantStatus    ReviewProbeStatus
+		wantStatus    domain.ReviewProbeStatus
 		wantErrorHead string
 	}{
 		{
 			name:          "blocked",
-			status:        ReviewProbeBlocked,
+			status:        domain.ReviewProbeBlocked,
 			wantStop:      true,
-			wantStatus:    ReviewProbeBlocked,
+			wantStatus:    domain.ReviewProbeBlocked,
 			wantErrorHead: "probe command blocked:",
 		},
 		{
 			name:          "timed out",
-			status:        ReviewProbeTimedOut,
+			status:        domain.ReviewProbeTimedOut,
 			wantStop:      true,
-			wantStatus:    ReviewProbeTimedOut,
+			wantStatus:    domain.ReviewProbeTimedOut,
 			wantErrorHead: "probe command timed out:",
 		},
 		{
 			name:          "failed",
-			status:        ReviewProbeFailed,
+			status:        domain.ReviewProbeFailed,
 			wantStop:      true,
-			wantStatus:    ReviewProbeFailed,
+			wantStatus:    domain.ReviewProbeFailed,
 			wantErrorHead: "probe command failed:",
 		},
 		{
 			name:       "passed",
-			status:     ReviewProbePassed,
+			status:     domain.ReviewProbePassed,
 			wantStop:   false,
 			wantStatus: "",
 		},

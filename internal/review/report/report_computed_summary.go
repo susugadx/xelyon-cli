@@ -1,5 +1,7 @@
 package report
 
+import "github.com/susugadx/xelyon-cli/internal/review/domain"
+
 // ComputeReviewReportComputedSummary は validated report と runner trusted probe summaries から
 // final report 用の派生 count を算出する。
 func ComputeReviewReportComputedSummary(report ReviewReport, probeSummaries []ReviewProbeSummary) ReviewReportComputedSummary {
@@ -65,15 +67,15 @@ func addReviewReportComputedProbeCounts(summary *ReviewReportComputedSummary, pr
 	for _, probe := range probeSummaries {
 		probe = canonicalizeReviewProbeSummaryMutationOutcome(probe)
 		switch probe.Status {
-		case ReviewProbePassed:
+		case domain.ReviewProbePassed:
 			summary.PassedProbeCount++
-		case ReviewProbeFailed:
+		case domain.ReviewProbeFailed:
 			summary.FailedProbeCount++
-		case ReviewProbeTimedOut:
+		case domain.ReviewProbeTimedOut:
 			summary.TimedOutProbeCount++
-		case ReviewProbeBlocked:
+		case domain.ReviewProbeBlocked:
 			summary.BlockedProbeCount++
-		case ReviewProbeMutatedWorktree:
+		case domain.ReviewProbeMutatedWorktree:
 			summary.MutatedWorktreeProbeCount++
 		}
 	}

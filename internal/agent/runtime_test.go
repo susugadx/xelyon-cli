@@ -20,7 +20,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type runtimeProbeTool struct{}
@@ -522,8 +522,8 @@ func TestAgentRuntime_SeparatesUIRuntimeAndAuditLogger(t *testing.T) {
 	runtimeB := newIsolatedRuntime()
 	runtimeA.AutoApprove = true
 	runtimeB.AutoApprove = true
-	runtimeA.UI = ui.NewRuntime(strings.NewReader(""), outA, errA)
-	runtimeB.UI = ui.NewRuntime(strings.NewReader(""), outB, errB)
+	runtimeA.UI = uiruntime.NewRuntime(strings.NewReader(""), outA, errA)
+	runtimeB.UI = uiruntime.NewRuntime(strings.NewReader(""), outB, errB)
 	runtimeA.AuditLogger = audit.NewLoggerWithPath(logA, true)
 	runtimeB.AuditLogger = audit.NewLoggerWithPath(logB, true)
 	runtimeA.Registry.Register(&runtimeProbeTool{})

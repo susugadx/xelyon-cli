@@ -8,7 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleStatusCommandForSurface_ShowsGeminiServiceTierPolicy(t *testing.T) {
@@ -16,7 +16,7 @@ func TestHandleStatusCommandForSurface_ShowsGeminiServiceTierPolicy(t *testing.T
 	cfg := config.DefaultConfig()
 	cfg.Gemini.ServiceTier = config.GeminiServiceTierPriority
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 	agent := NewAgentWithRuntime("gemini-3.5-flash", &mockProvider{name: "gemini"}, false, runtime)
 	t.Cleanup(agent.Cleanup)
 

@@ -9,7 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestSupportsClaudeCompaction_UsesRuntimeAndContextConfig(t *testing.T) {
@@ -63,8 +63,8 @@ func TestHandleNonStreamingResponse_UsageCallback(t *testing.T) {
 		gotUsage = usage
 	})
 
-	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
-	ctx := ui.WithRuntime(context.Background(), runtime)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	ctx := uiruntime.WithRuntime(context.Background(), runtime)
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
 	resp := &http.Response{
@@ -74,7 +74,7 @@ func TestHandleNonStreamingResponse_UsageCallback(t *testing.T) {
 		}`)),
 	}
 
-	result, err := p.handleNonStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	result, err := p.handleNonStreamingResponse(ctx, resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleNonStreamingResponse() error = %v", err)
 	}
@@ -93,8 +93,8 @@ func TestHandleClaudeStreamingResponse_CompactionAndUsage(t *testing.T) {
 		gotUsage = usage
 	})
 
-	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
-	ctx := ui.WithRuntime(context.Background(), runtime)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	ctx := uiruntime.WithRuntime(context.Background(), runtime)
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
 	body := strings.Join([]string{
@@ -111,7 +111,7 @@ func TestHandleClaudeStreamingResponse_CompactionAndUsage(t *testing.T) {
 		Body: io.NopCloser(strings.NewReader(body)),
 	}
 
-	result, err := p.handleClaudeStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+	result, err := p.handleClaudeStreamingResponse(ctx, resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleClaudeStreamingResponse() error = %v", err)
 	}

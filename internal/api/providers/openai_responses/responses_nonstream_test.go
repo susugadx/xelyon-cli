@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleNonStreaming_CapturesReplayItemsInOutputOrder(t *testing.T) {
@@ -192,10 +192,10 @@ func TestRunResponsesRequest_RetriesOnceWithoutPreviousResponseIDForNonStreaming
 			}
 			return newResponsesNonStreamingHTTPResponse(`{"id":"resp_new","status":"completed","output_text":"ok"}`), nil
 		},
-		HandleStreaming: func(context.Context, *http.Response, *ui.Spinner) (string, string, error) {
+		HandleStreaming: func(context.Context, *http.Response, *uiruntime.Spinner) (string, string, error) {
 			return "", "", errors.New("unexpected streaming handler")
 		},
-		HandleNonStreaming: func(_ context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error) {
+		HandleNonStreaming: func(_ context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error) {
 			api.StopSpinner(spinner)
 			return HandleNonStreaming(api.WithAssistantUpdateMode(context.Background(), api.AssistantUpdatesOff), resp, nil, NonStreamingOptions{})
 		},

@@ -1,5 +1,7 @@
 package tui
 
+import tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
+
 type droppedPathAttachKind int
 
 const (
@@ -38,7 +40,7 @@ func (m *Model) applyDroppedPathCandidates(paths []string) droppedPathAttachResu
 	result := droppedPathAttachResult{kind: droppedPathAttachInvalid}
 	invalid := 0
 	for _, path := range paths {
-		added := m.addAttachmentFromPath(path, composerAttachmentSourceDroppedPath)
+		added := m.addAttachmentFromPath(path, tuiattachments.SourceDroppedPath)
 		switch added.status {
 		case addAttachmentFromPathAdded:
 			result.added++

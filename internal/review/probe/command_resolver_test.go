@@ -14,13 +14,13 @@ func TestResolveCommandPath_AllowsExecutableFromSafePath(t *testing.T) {
 	safeBin := filepath.Join(t.TempDir(), "bin")
 	executablePath := createCommandResolverTestExecutable(t, safeBin, "tool")
 
-	resolved, err := resolveCommandPath("tool", commandResolutionContext{
+	resolved, err := ResolveCommandPath("tool", CommandResolutionContext{
 		RepoRoot: repoRoot,
 		WorkDir:  repoRoot,
 		Env:      []string{"PATH=" + safeBin},
 	})
 	if err != nil {
-		t.Fatalf("resolveCommandPath() error = %v", err)
+		t.Fatalf("ResolveCommandPath() error = %v", err)
 	}
 	if filepath.Clean(resolved) != filepath.Clean(executablePath) {
 		t.Fatalf("resolved = %q, want %q", resolved, executablePath)
@@ -35,16 +35,16 @@ func TestResolveCommandPath_BlocksCommandPathInput(t *testing.T) {
 	tests := []string{"./tool", "../tool", "/tmp/tool", `.\tool`, `C:\tool.exe`}
 	for _, command := range tests {
 		t.Run(command, func(t *testing.T) {
-			_, err := resolveCommandPath(command, commandResolutionContext{
+			_, err := ResolveCommandPath(command, CommandResolutionContext{
 				RepoRoot: repoRoot,
 				WorkDir:  repoRoot,
 				Env:      []string{"PATH=" + safeBin},
 			})
 			if err == nil {
-				t.Fatalf("resolveCommandPath(%q) error = nil", command)
+				t.Fatalf("ResolveCommandPath(%q) error = nil", command)
 			}
 			if !errors.Is(err, ErrHostReadOnlyBlocked) {
-				t.Fatalf("resolveCommandPath(%q) error = %v, want ErrHostReadOnlyBlocked", command, err)
+				t.Fatalf("ResolveCommandPath(%q) error = %v, want ErrHostReadOnlyBlocked", command, err)
 			}
 		})
 	}
@@ -63,16 +63,16 @@ func TestResolveCommandPath_BlocksWhenPATHMissingOrNotFound(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := resolveCommandPath("tool", commandResolutionContext{
+			_, err := ResolveCommandPath("tool", CommandResolutionContext{
 				RepoRoot: repoRoot,
 				WorkDir:  repoRoot,
 				Env:      tt.env,
 			})
 			if err == nil {
-				t.Fatalf("resolveCommandPath() error = nil")
+				t.Fatalf("ResolveCommandPath() error = nil")
 			}
 			if !errors.Is(err, ErrHostReadOnlyBlocked) {
-				t.Fatalf("resolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
+				t.Fatalf("ResolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
 			}
 		})
 	}
@@ -83,16 +83,16 @@ func TestResolveCommandPath_BlocksExecutableInsideRepoRoot(t *testing.T) {
 	repoBin := filepath.Join(repoRoot, "bin")
 	createCommandResolverTestExecutable(t, repoBin, "tool")
 
-	_, err := resolveCommandPath("tool", commandResolutionContext{
+	_, err := ResolveCommandPath("tool", CommandResolutionContext{
 		RepoRoot: repoRoot,
 		WorkDir:  repoRoot,
 		Env:      []string{"PATH=" + repoBin},
 	})
 	if err == nil {
-		t.Fatal("resolveCommandPath() error = nil")
+		t.Fatal("ResolveCommandPath() error = nil")
 	}
 	if !errors.Is(err, ErrHostReadOnlyBlocked) {
-		t.Fatalf("resolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
+		t.Fatalf("ResolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
 	}
 }
 
@@ -117,13 +117,13 @@ func TestResolveCommandPath_UsesWorkDirForRelativePathEntries(t *testing.T) {
 		_ = os.Chdir(originalWD)
 	})
 
-	resolved, err := resolveCommandPath("tool", commandResolutionContext{
+	resolved, err := ResolveCommandPath("tool", CommandResolutionContext{
 		RepoRoot: repoRoot,
 		WorkDir:  workDir,
 		Env:      []string{"PATH=bin"},
 	})
 	if err != nil {
-		t.Fatalf("resolveCommandPath() error = %v", err)
+		t.Fatalf("ResolveCommandPath() error = %v", err)
 	}
 	if filepath.Clean(resolved) != filepath.Clean(workTool) {
 		t.Fatalf("resolved = %q, want workdir executable %q (cwd executable=%q)", resolved, workTool, cwdTool)
@@ -138,16 +138,16 @@ func TestResolveCommandPath_BlocksSymlinkedExecutableToRepoRoot(t *testing.T) {
 	safeBin := filepath.Join(t.TempDir(), "safe-bin")
 	createCommandResolverTestExecutableSymlink(t, repoExecutable, filepath.Join(safeBin, "tool"))
 
-	_, err := resolveCommandPath("tool", commandResolutionContext{
+	_, err := ResolveCommandPath("tool", CommandResolutionContext{
 		RepoRoot: repoRoot,
 		WorkDir:  repoRoot,
 		Env:      []string{"PATH=" + safeBin},
 	})
 	if err == nil {
-		t.Fatal("resolveCommandPath() error = nil")
+		t.Fatal("ResolveCommandPath() error = nil")
 	}
 	if !errors.Is(err, ErrHostReadOnlyBlocked) {
-		t.Fatalf("resolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
+		t.Fatalf("ResolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
 	}
 }
 
@@ -160,16 +160,16 @@ func TestResolveCommandPath_BlocksPathDirectorySymlinkToRepoRoot(t *testing.T) {
 	symlinkedBin := filepath.Join(safeRoot, "safe-bin")
 	createCommandResolverTestExecutableSymlink(t, repoBin, symlinkedBin)
 
-	_, err := resolveCommandPath("tool", commandResolutionContext{
+	_, err := ResolveCommandPath("tool", CommandResolutionContext{
 		RepoRoot: repoRoot,
 		WorkDir:  repoRoot,
 		Env:      []string{"PATH=" + symlinkedBin},
 	})
 	if err == nil {
-		t.Fatal("resolveCommandPath() error = nil")
+		t.Fatal("ResolveCommandPath() error = nil")
 	}
 	if !errors.Is(err, ErrHostReadOnlyBlocked) {
-		t.Fatalf("resolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
+		t.Fatalf("ResolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
 	}
 }
 
@@ -179,17 +179,17 @@ func TestResolveCommandPath_BlocksExecutableInsideScratchDir(t *testing.T) {
 	scratchBin := filepath.Join(scratchDir, "bin")
 	createCommandResolverTestExecutable(t, scratchBin, "tool")
 
-	_, err := resolveCommandPath("tool", commandResolutionContext{
+	_, err := ResolveCommandPath("tool", CommandResolutionContext{
 		RepoRoot:   repoRoot,
 		ScratchDir: scratchDir,
 		WorkDir:    repoRoot,
 		Env:        []string{"PATH=" + scratchBin},
 	})
 	if err == nil {
-		t.Fatal("resolveCommandPath() error = nil")
+		t.Fatal("ResolveCommandPath() error = nil")
 	}
 	if !errors.Is(err, ErrHostReadOnlyBlocked) {
-		t.Fatalf("resolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
+		t.Fatalf("ResolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
 	}
 }
 
@@ -202,17 +202,17 @@ func TestResolveCommandPath_BlocksSymlinkedExecutableToScratchDir(t *testing.T) 
 	safeBin := filepath.Join(t.TempDir(), "safe-bin")
 	createCommandResolverTestExecutableSymlink(t, scratchExecutable, filepath.Join(safeBin, "tool"))
 
-	_, err := resolveCommandPath("tool", commandResolutionContext{
+	_, err := ResolveCommandPath("tool", CommandResolutionContext{
 		RepoRoot:   repoRoot,
 		ScratchDir: scratchDir,
 		WorkDir:    repoRoot,
 		Env:        []string{"PATH=" + safeBin},
 	})
 	if err == nil {
-		t.Fatal("resolveCommandPath() error = nil")
+		t.Fatal("ResolveCommandPath() error = nil")
 	}
 	if !errors.Is(err, ErrHostReadOnlyBlocked) {
-		t.Fatalf("resolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
+		t.Fatalf("ResolveCommandPath() error = %v, want ErrHostReadOnlyBlocked", err)
 	}
 }
 
@@ -264,7 +264,7 @@ func TestResolveCommandPath_PathLookupIsOrdered(t *testing.T) {
 	first := createCommandResolverTestExecutable(t, firstBin, "tool")
 	second := createCommandResolverTestExecutable(t, secondBin, "tool")
 
-	resolved, err := resolveCommandPath("tool", commandResolutionContext{
+	resolved, err := ResolveCommandPath("tool", CommandResolutionContext{
 		RepoRoot: repoRoot,
 		WorkDir:  repoRoot,
 		Env: []string{
@@ -272,7 +272,7 @@ func TestResolveCommandPath_PathLookupIsOrdered(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("resolveCommandPath() error = %v", err)
+		t.Fatalf("ResolveCommandPath() error = %v", err)
 	}
 	if filepath.Clean(resolved) != filepath.Clean(first) {
 		t.Fatalf("resolved = %q, want first PATH executable %q (second=%q)", resolved, first, second)

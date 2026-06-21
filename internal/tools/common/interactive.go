@@ -6,7 +6,8 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // ConfirmResult は確認結果
@@ -38,31 +39,31 @@ func IsInteractiveModeEnabled() bool {
 // 外部パッケージからも使用可能なようにエクスポート
 // NOTE: テスト時は環境変数 XELYON_INTERACTIVE_CONFIRM=0 で無効化される
 var ConfirmInteractive = func(message string) ConfirmResult {
-	return ConfirmInteractiveWithIO(ui.DefaultPromptIO(), message)
+	return ConfirmInteractiveWithIO(uiruntime.DefaultPromptIO(), message)
 }
 
 // ConfirmInteractiveWithIO は入出力先を指定した拡張確認プロンプトを実行する。
-func ConfirmInteractiveWithIO(promptIO ui.PromptIO, message string) ConfirmResult {
-	return ConfirmInteractiveRequestWithIO(promptIO, ui.PromptRequest{
-		Kind:         ui.PromptKindConfirm,
+func ConfirmInteractiveWithIO(promptIO uiruntime.PromptIO, message string) ConfirmResult {
+	return ConfirmInteractiveRequestWithIO(promptIO, uiprompt.PromptRequest{
+		Kind:         uiprompt.PromptKindConfirm,
 		Message:      message,
 		AllowComment: true,
 	})
 }
 
 // ConfirmInteractiveRequestWithIO は PromptRequest を指定して拡張確認プロンプトを実行する。
-func ConfirmInteractiveRequestWithIO(promptIO ui.PromptIO, req ui.PromptRequest) ConfirmResult {
-	promptIO = ui.NormalizePromptIO(promptIO)
-	req.Kind = ui.PromptKindConfirm
+func ConfirmInteractiveRequestWithIO(promptIO uiruntime.PromptIO, req uiprompt.PromptRequest) ConfirmResult {
+	promptIO = uiruntime.NormalizePromptIO(promptIO)
+	req.Kind = uiprompt.PromptKindConfirm
 	if prompter := promptIO.Prompter(); prompter != nil {
 		resp, err := prompter.Prompt(promptIO.PromptContext(), req)
 		if err != nil || resp.Cancelled {
 			return ConfirmResult{Action: "no"}
 		}
 		switch resp.Action {
-		case ui.PromptActionYes:
+		case uiprompt.PromptActionYes:
 			return ConfirmResult{Action: "yes"}
-		case ui.PromptActionComment:
+		case uiprompt.PromptActionComment:
 			comment, image := parseMultiLineCommentText(promptIO, resp.Text)
 			return ConfirmResult{Action: "comment", Comment: comment, Image: image}
 		default:
@@ -71,7 +72,7 @@ func ConfirmInteractiveRequestWithIO(promptIO ui.PromptIO, req ui.PromptRequest)
 	}
 
 	// 矢印キー選択UIを使用
-	result, err := ui.ConfirmSelectorRequestWithIO(promptIO, req)
+	result, err := uiruntime.ConfirmSelectorRequestWithIO(promptIO, req)
 	if err != nil {
 		// キャンセルまたはエラー時はnoを返す
 		return ConfirmResult{Action: "no"}
@@ -89,16 +90,16 @@ func ConfirmInteractiveRequestWithIO(promptIO ui.PromptIO, req ui.PromptRequest)
 // 空行2回で入力終了
 // image:プレフィックスで画像を指定可能
 func ReadMultiLineComment(reader *bufio.Reader) (string, *ImageData) {
-	return readMultiLineComment(ui.DefaultPromptIO(), reader)
+	return readMultiLineComment(uiruntime.DefaultPromptIO(), reader)
 }
 
 // ReadMultiLineCommentWithIO は入出力先を指定して複数行コメントを読み取る。
-func ReadMultiLineCommentWithIO(promptIO ui.PromptIO) (string, *ImageData) {
-	promptIO = ui.NormalizePromptIO(promptIO)
+func ReadMultiLineCommentWithIO(promptIO uiruntime.PromptIO) (string, *ImageData) {
+	promptIO = uiruntime.NormalizePromptIO(promptIO)
 	return readMultiLineComment(promptIO, nil)
 }
 
-func readMultiLineComment(promptIO ui.PromptIO, reader *bufio.Reader) (string, *ImageData) {
+func readMultiLineComment(promptIO uiruntime.PromptIO, reader *bufio.Reader) (string, *ImageData) {
 	out := NewOutput(promptIO.Out, promptIO.Err)
 	out.Cyan.Println("--------------------------------------------")
 	out.Cyan.Println("Enter your comment (press Enter twice to finish):")
@@ -128,7 +129,7 @@ func readMultiLineComment(promptIO ui.PromptIO, reader *bufio.Reader) (string, *
 			line, err = reader.ReadString('\n')
 			if err == nil {
 				line = strings.TrimRight(line, "\r\n")
-				line = ui.StripBracketedPaste(line)
+				line = uiruntime.StripBracketedPaste(line)
 			}
 		}
 		if err != nil {
@@ -189,8 +190,8 @@ done:
 	return comment, imageData
 }
 
-func parseMultiLineCommentText(promptIO ui.PromptIO, text string) (string, *ImageData) {
-	promptIO = ui.NormalizePromptIO(promptIO)
+func parseMultiLineCommentText(promptIO uiruntime.PromptIO, text string) (string, *ImageData) {
+	promptIO = uiruntime.NormalizePromptIO(promptIO)
 	out := NewOutput(promptIO.Out, promptIO.Err)
 	cfg := config.DefaultConfig()
 	maxLines := cfg.Paste.MaxLines

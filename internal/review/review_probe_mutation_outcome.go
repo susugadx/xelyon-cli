@@ -7,14 +7,14 @@ import (
 
 // canonicalizeReviewProbeResultMutationOutcome は mutation outcome の内部表現を揃える。
 // status と flag のどちらかが mutation を示す場合、両方を mutation として扱う。
-func canonicalizeReviewProbeResultMutationOutcome(result ReviewProbeResult) ReviewProbeResult {
+func canonicalizeReviewProbeResultMutationOutcome(result reviewprobe.ReviewProbeResult) reviewprobe.ReviewProbeResult {
 	return reviewprobe.CanonicalizeReviewProbeResultMutationOutcome(result)
 }
 
-func canonicalizeReviewProbeSummaryMutationOutcome(summary ReviewProbeSummary) ReviewProbeSummary {
+func canonicalizeReviewProbeSummaryMutationOutcome(summary reviewreport.ReviewProbeSummary) reviewreport.ReviewProbeSummary {
 	return reviewreport.CanonicalizeReviewProbeSummaryMutationOutcome(summary)
 }
 
-func isReviewProbeResultMutationOutcome(result ReviewProbeResult) bool {
+func isReviewProbeResultMutationOutcome(result reviewprobe.ReviewProbeResult) bool {
 	return reviewprobe.IsReviewProbeResultMutationOutcome(result)
 }

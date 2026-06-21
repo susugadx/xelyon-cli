@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 	"io"
 	"strings"
 	"testing"
@@ -121,7 +121,7 @@ func TestWrapperRunValidationErrorBeforePromptAndCaller(t *testing.T) {
 		}`),
 	})
 	var stdout bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
+	runtime := uiruntime.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
 	runtime.SetPrompter(prompter)
 
 	result, fileChange, err := wrapper.Run(tools.ExecutionContext{
@@ -164,7 +164,7 @@ func TestWrapperRunInvalidStructuredArgBeforePromptAndCaller(t *testing.T) {
 		}`),
 	})
 	var stdout bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
+	runtime := uiruntime.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
 	runtime.SetPrompter(prompter)
 
 	result, _, err := wrapper.Run(tools.ExecutionContext{
@@ -204,7 +204,7 @@ func TestWrapperRunInvalidObjectArgBeforePromptAndCaller(t *testing.T) {
 		}`),
 	})
 	var stdout bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
+	runtime := uiruntime.NewRuntime(strings.NewReader("y\n"), &stdout, &stdout)
 	runtime.SetPrompter(prompter)
 
 	result, _, err := wrapper.Run(tools.ExecutionContext{

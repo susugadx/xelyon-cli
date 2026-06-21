@@ -2,34 +2,33 @@ package tui
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
+
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 var readAttachedPDFPreviewForContext = readAttachedPDFPreview
 
-func buildAttachmentContextBlocks(attachments []composerAttachment, primaryImagePath string) []string {
-	contextBlocks := make([]string, 0, len(attachments))
-	for _, att := range attachments {
-		switch att.Kind {
-		case composerAttachmentImage:
-			if att.Path == primaryImagePath {
-				continue
-			}
-			contextBlocks = append(contextBlocks, buildAttachedImagePathContext(att.Path))
-		case composerAttachmentFile:
-			contextBlocks = append(contextBlocks, buildAttachedFileContext(att.Path))
+func buildAttachmentContextBlocks(attachments []tuiattachments.Attachment, primaryImagePath string) []string {
+	specs := tuiattachments.ContextBlockSpecs(attachments, primaryImagePath)
+	contextBlocks := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		switch spec.Kind {
+		case tuiattachments.ContextBlockImagePath:
+			contextBlocks = append(contextBlocks, buildAttachedImagePathContext(spec.Path))
+		case tuiattachments.ContextBlockFile:
+			contextBlocks = append(contextBlocks, buildAttachedFileContext(spec.Path))
 		}
 	}
 	return contextBlocks
 }
 
 func buildAttachedImagePathContext(path string) string {
-	return fmt.Sprintf("[Attached image path]\n%s", attachmentDisplayPath(path))
+	return tuiattachments.BuildAttachedImagePathContext(attachmentDisplayPath(path))
 }
 
 func buildAttachedFileContext(path string) string {
@@ -39,35 +38,13 @@ func buildAttachedFileContext(path string) string {
 
 	displayPath := attachmentDisplayPath(path)
 	preview, truncated, binary, err := readAttachedFilePreview(path)
-	if err != nil {
-		return fmt.Sprintf("[Attached file: %s]\n<failed to read: %v>", displayPath, err)
-	}
-	if binary {
-		return fmt.Sprintf("[Attached file: %s]\n<binary file omitted>", displayPath)
-	}
-
-	block := fmt.Sprintf("[Attached file: %s]\n%s", displayPath, preview)
-	if truncated {
-		block += fmt.Sprintf("\n\n<content truncated: first %d bytes shown>", maxAttachedFilePreviewBytes)
-	}
-	return block
+	return tuiattachments.BuildAttachedFileContextBlock(displayPath, preview, truncated, binary, err, maxAttachedFilePreviewBytes)
 }
 
 func buildAttachedPDFContext(path string) string {
 	displayPath := attachmentDisplayPath(path)
 	preview, err := readAttachedPDFPreviewForContext(path)
-	if err != nil {
-		return fmt.Sprintf("[Attached file: %s]\n<failed to read PDF: %v>", displayPath, err)
-	}
-	if strings.TrimSpace(preview.text) == "" {
-		return fmt.Sprintf("[Attached file: %s]\n<no extractable text in PDF>", displayPath)
-	}
-
-	block := fmt.Sprintf("[Attached file: %s]\n%s", displayPath, preview.text)
-	if preview.truncated {
-		block += fmt.Sprintf("\n\n<PDF content truncated: first %d pages / %d chars shown>", maxAttachedPDFPreviewPages, maxAttachedPDFPreviewChars)
-	}
-	return block
+	return tuiattachments.BuildAttachedPDFContextBlock(displayPath, preview.text, preview.truncated, err, maxAttachedPDFPreviewPages, maxAttachedPDFPreviewChars)
 }
 
 func readAttachedFilePreview(path string) (text string, truncated bool, binary bool, err error) {

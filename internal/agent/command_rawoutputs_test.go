@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/providerhistory"
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestRawOutputsCommandSummaryIsReadOnlyForMissingRoot(t *testing.T) {
@@ -211,7 +211,7 @@ func newRawOutputsCommandTestAgent(root string) (*Agent, *bytes.Buffer) {
 			Options: RuntimeOptions{
 				ProviderHistoryRawOutputArtifacts: cfg,
 			},
-			UI: ui.NewRuntime(strings.NewReader(""), out, out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), out, out),
 		},
 		agentConversationState: agentConversationState{
 			session: session,

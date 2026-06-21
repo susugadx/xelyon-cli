@@ -6,7 +6,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type batchEditsExecutionDetails struct {
@@ -19,12 +19,12 @@ type batchEditsExecutionDetails struct {
 // executeBatchEdits は batch edits モードを実行する。
 // edits を順番に in-memory 適用し、全成功時のみファイルに書き込む。
 // 1つでも失敗したら即 return（ファイル未書き込み = 自動ロールバック）。
-func executeBatchEditsWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path, editsJSON string) (string, error) {
+func executeBatchEditsWithPromptIOAndOptions(promptIO uiruntime.PromptIO, options common.ConfirmOptions, path, editsJSON string) (string, error) {
 	details, err := executeBatchEditsWithPromptIOAndOptionsDetails(promptIO, options, path, editsJSON)
 	return details.result.message, err
 }
 
-func executeBatchEditsWithPromptIOAndOptionsDetails(promptIO ui.PromptIO, options common.ConfirmOptions, path, editsJSON string) (batchEditsExecutionDetails, error) {
+func executeBatchEditsWithPromptIOAndOptionsDetails(promptIO uiruntime.PromptIO, options common.ConfirmOptions, path, editsJSON string) (batchEditsExecutionDetails, error) {
 	edits, result := parseBatchEditEntriesResult(editsJSON)
 	if result.IsTerminal() {
 		return batchEditsExecutionDetails{result: result}, nil
@@ -32,7 +32,7 @@ func executeBatchEditsWithPromptIOAndOptionsDetails(promptIO ui.PromptIO, option
 	return executeBatchEditsWithEntriesAndOptionsDetails(promptIO, options, path, edits)
 }
 
-func executeBatchEditsWithEntriesAndOptionsDetails(promptIO ui.PromptIO, options common.ConfirmOptions, path string, edits []replaceengine.Edit) (batchEditsExecutionDetails, error) {
+func executeBatchEditsWithEntriesAndOptionsDetails(promptIO uiruntime.PromptIO, options common.ConfirmOptions, path string, edits []replaceengine.Edit) (batchEditsExecutionDetails, error) {
 	ctx, result, err := prepareFileMutation(promptIO, options, path, "path is required")
 	if result.message != "" || err != nil {
 		return batchEditsExecutionDetails{result: result}, err

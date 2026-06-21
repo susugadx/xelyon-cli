@@ -10,7 +10,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func mockAPIServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
@@ -25,8 +25,8 @@ func newOpenAITestContext(t *testing.T, thinking bool) context.Context {
 	cfg := config.DefaultConfig()
 	cfg.Thinking.Enabled = thinking
 	cfg.Thinking.Level = "high"
-	runtime := ui.NewRuntime(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
-	ctx := ui.WithRuntime(context.Background(), runtime)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	ctx := uiruntime.WithRuntime(context.Background(), runtime)
 	ctx = config.WithContext(ctx, cfg)
 	return api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 }

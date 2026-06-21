@@ -10,7 +10,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 const planJSONRetryPromptFragment = "Plan JSON を**必ず**"
@@ -52,7 +52,7 @@ func TestRunInvestigationPhase_DebugOutputUsesRuntimeErrorOutput(t *testing.T) {
 		CurrentModel:    "test-model",
 		CurrentProvider: &mockProvider{name: "test"},
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &errOut),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &errOut),
 		},
 	}
 
@@ -102,7 +102,7 @@ func TestRunInvestigationPhase_PlanModeShowsFinalProse(t *testing.T) {
 				PlanModeEnabled: true,
 				Runtime: &AgentRuntime{
 					Config: cfg,
-					UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+					UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 				},
 			}
 

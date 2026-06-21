@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // mockPlanProvider for testing
@@ -146,7 +146,7 @@ func TestHandlePlanCommand_StatusUsesRuntimeOutput(t *testing.T) {
 	var out bytes.Buffer
 	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 	agent.Runtime = &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 	}
 
 	result := handlePlanCommand(agent, []string{"status"})
@@ -168,7 +168,7 @@ func TestHandlePlanCommand_StatusOnUsesHandoffDescription(t *testing.T) {
 	agent := NewAgent("test-model", &mockPlanProvider{}, false)
 	agent.PlanModeEnabled = true
 	agent.Runtime = &AgentRuntime{
-		UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+		UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 	}
 
 	result := handlePlanCommand(agent, []string{"status"})

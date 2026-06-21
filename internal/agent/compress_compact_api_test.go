@@ -13,7 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaisubscription "github.com/susugadx/xelyon-cli/internal/api/providers/openai_subscription"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestCompressWithCompactAPI_UsesCompressionModel(t *testing.T) {
@@ -96,7 +96,7 @@ func TestCompressWithCompactAPI_UsesOpenAISubscriptionCompactRuntime(t *testing.
 	cfg.Compression.Model = ""
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 	agent := NewAgentWithRuntime("gpt-5.5", provider, false, runtime)
 	t.Cleanup(agent.Cleanup)
 	agent.History = []api.Message{{Role: "user", Content: "please compact this"}}

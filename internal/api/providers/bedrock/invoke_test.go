@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/providers/claude"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type mockInvokeModelWithResponseStreamClient struct {
@@ -515,8 +515,8 @@ func TestProvider_ChatWithImage_IgnoresCrossProviderCatalogForClaudeMaxTokens(t 
 
 func newBedrockTestContext(cfg *config.Config) context.Context {
 	var out bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader(""), &out, &out)
-	ctx := ui.WithRuntime(context.Background(), runtime)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
+	ctx := uiruntime.WithRuntime(context.Background(), runtime)
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 	return config.WithContext(ctx, cfg)
 }

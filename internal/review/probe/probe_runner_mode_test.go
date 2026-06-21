@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestProbeRunner_ScratchOnlyIsExecuted(t *testing.T) {
@@ -13,7 +15,7 @@ func TestProbeRunner_ScratchOnlyIsExecuted(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-scratch-mode",
-		Mode:           ReviewProbeScratchOnly,
+		Mode:           domain.ReviewProbeScratchOnly,
 		Timeout:        2 * time.Second,
 		MaxOutputBytes: 1024,
 		Files: []ReviewProbeFile{
@@ -26,8 +28,8 @@ func TestProbeRunner_ScratchOnlyIsExecuted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if len(result.CommandResults) != 1 {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
@@ -40,7 +42,7 @@ func TestProbeRunner_RepoSandboxIsExecuted(t *testing.T) {
 
 	result, err := runner.Run(context.Background(), ReviewProbeRequest{
 		ID:             "probe-repo-sandbox-mode",
-		Mode:           ReviewProbeRepoSandbox,
+		Mode:           domain.ReviewProbeRepoSandbox,
 		Timeout:        10 * time.Second,
 		MaxOutputBytes: 1024,
 		Commands: []ReviewProbeCommand{
@@ -50,8 +52,8 @@ func TestProbeRunner_RepoSandboxIsExecuted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if len(result.CommandResults) != 1 {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))

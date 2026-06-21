@@ -79,6 +79,23 @@ func requireAgentDoneCmd(t *testing.T, cmd tea.Cmd) {
 	}
 }
 
+func rawEnterKey(input string) tea.KeyMsg {
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(input)}
+}
+
+type enterFallbackKeyCase struct {
+	name string
+	key  tea.KeyMsg
+}
+
+func enterFallbackKeyCases() []enterFallbackKeyCase {
+	return []enterFallbackKeyCase{
+		{name: "raw carriage return", key: rawEnterKey("\r")},
+		{name: "raw line feed", key: rawEnterKey("\n")},
+		{name: "bubbletea line feed", key: tea.KeyMsg{Type: tea.KeyCtrlJ}},
+	}
+}
+
 func (s *stubAgent) Chat(input string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

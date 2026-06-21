@@ -3,397 +3,44 @@ package review
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	reviewanalysis "github.com/susugadx/xelyon-cli/internal/review/analysis"
-	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
-	reviewmodeloutput "github.com/susugadx/xelyon-cli/internal/review/modeloutput"
+	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
+	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
-type reviewCoverageAuditContext struct {
-	postPass1ExternalEvidence reviewreport.CoverageExternalEvidenceDelta
-	externalSupport           reviewreport.CoverageExternalSupport
-}
-
-func (r *ReviewRunner) completeReviewReportSaturation(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, report ReviewReport, bundle ReviewEvidenceBundle, coverageAuditContext reviewCoverageAuditContext) (ReviewReport, error) {
+func (r *ReviewRunner) completeReviewReportSaturation(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan reviewprobeplan.ReviewProbePlan, probeSummaries []reviewreport.ReviewProbeSummary, probeResults []reviewprobe.ReviewProbeResult, redactor reviewRunnerPromptRedactor, report reviewreport.ReviewReport, bundle reviewevidence.ReviewEvidenceBundle, coverageAuditContext reviewCoverageAuditContext) (reviewreport.ReviewReport, error) {
 	check, err := r.completeReviewSaturationCheck(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, bundle, coverageAuditContext)
 	if err != nil {
-		return ReviewReport{}, err
+		return reviewreport.ReviewReport{}, err
 	}
 
 	switch check.Status {
-	case ReviewSaturationStatusSaturated:
+	case reviewreport.ReviewSaturationStatusSaturated:
 		return report, nil
-	case ReviewSaturationStatusBlocked:
-		return ReviewReport{}, fmt.Errorf("review runner saturation check blocked: %s", check.CheckedSummary)
-	case ReviewSaturationStatusNeedsRevision:
+	case reviewreport.ReviewSaturationStatusBlocked:
+		return reviewreport.ReviewReport{}, fmt.Errorf("review runner saturation check blocked: %s", check.CheckedSummary)
+	case reviewreport.ReviewSaturationStatusNeedsRevision:
 		revisedReport, err := r.completeReviewReportRevision(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, report, check, bundle)
 		if err != nil {
-			return ReviewReport{}, err
+			return reviewreport.ReviewReport{}, err
 		}
 		confirmation, err := r.completeReviewSaturationCheck(ctx, req, evidenceMarkdown, plan, probeSummaries, probeResults, redactor, revisedReport, bundle, coverageAuditContext)
 		if err != nil {
-			return ReviewReport{}, err
+			return reviewreport.ReviewReport{}, err
 		}
 		switch confirmation.Status {
-		case ReviewSaturationStatusSaturated:
+		case reviewreport.ReviewSaturationStatusSaturated:
 			return revisedReport, nil
-		case ReviewSaturationStatusBlocked:
-			return ReviewReport{}, fmt.Errorf("review runner saturation check blocked after revision: %s", confirmation.CheckedSummary)
-		case ReviewSaturationStatusNeedsRevision:
-			return ReviewReport{}, fmt.Errorf("review runner saturation check still needs revision after one revision: %s", confirmation.RevisionInstructions)
+		case reviewreport.ReviewSaturationStatusBlocked:
+			return reviewreport.ReviewReport{}, fmt.Errorf("review runner saturation check blocked after revision: %s", confirmation.CheckedSummary)
+		case reviewreport.ReviewSaturationStatusNeedsRevision:
+			return reviewreport.ReviewReport{}, fmt.Errorf("review runner saturation check still needs revision after one revision: %s", confirmation.RevisionInstructions)
 		default:
-			return ReviewReport{}, fmt.Errorf("review runner saturation check returned unknown status after revision: %q", confirmation.Status)
+			return reviewreport.ReviewReport{}, fmt.Errorf("review runner saturation check returned unknown status after revision: %q", confirmation.Status)
 		}
 	default:
-		return ReviewReport{}, fmt.Errorf("review runner saturation check returned unknown status: %q", check.Status)
+		return reviewreport.ReviewReport{}, fmt.Errorf("review runner saturation check returned unknown status: %q", check.Status)
 	}
-}
-
-func (r *ReviewRunner) completeReviewSaturationCheck(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, bundle ReviewEvidenceBundle, coverageAuditContext reviewCoverageAuditContext) (ReviewSaturationCheck, error) {
-	r.emitProgressRunning(reviewProgressSaturationCheckItem)
-	externalDocs := bundle.WebSearchEvidence.ExternalDocs
-	stateSummary := r.reviewStateSummaryPrompt(reviewStateSummaryInput{
-		bundle:          bundle,
-		plan:            plan,
-		probeSummaries:  probeSummaries,
-		finalizedReport: finalizedReport,
-		phase:           ReviewModelPhaseSaturationCheck,
-	})
-	probePrompt := r.probeResultPromptContextBuildForAbsorbedReport(ctx, ReviewModelPhaseSaturationCheck, "saturation_check", finalizedReport, probeResults, redactor)
-	phaseEvidenceMarkdown := r.reviewPromptEvidenceMarkdownForAbsorbedReport(ReviewModelPhaseSaturationCheck, bundle, evidenceMarkdown, finalizedReport)
-	checkPrompt := reviewmodelinput.BuildSaturationCheckPrompt(reviewmodelinput.SaturationCheckPromptInput{
-		CustomInstructions:          req.CustomInstructions,
-		ReviewStateSummary:          stateSummary,
-		EvidenceMarkdown:            phaseEvidenceMarkdown,
-		Plan:                        plan,
-		ProbeSummaries:              probeSummaries,
-		ProbeResults:                probeResults,
-		Redactor:                    redactor,
-		ProbeResultOptions:          probePrompt.options,
-		ReviewProbeRawOutputContext: probePrompt.rawOutputContext,
-		ReviewProbeRawOutputLedger:  probePrompt.rawOutputLedger,
-		FinalizedReport:             finalizedReport,
-	})
-	r.saveReviewRunTextArtifact("saturation_prompt.md", checkPrompt, redactor)
-	checkResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseSaturationCheck,
-		Prompt: checkPrompt,
-	})
-	if err != nil {
-		r.emitProgressError(reviewProgressSaturationCheckItem, err)
-		return ReviewSaturationCheck{}, fmt.Errorf("review runner saturation check model: %w", err)
-	}
-	r.saveReviewRunTextArtifact("saturation_raw.json", checkResp.Content, redactor)
-
-	check, checkErr := reviewmodeloutput.FinalizeSaturationCheckModelOutput(reviewmodeloutput.SaturationCheckModelOutputInput{
-		Content:         checkResp.Content,
-		Plan:            plan,
-		FinalizedReport: finalizedReport,
-		ExternalDocs:    externalDocs,
-	})
-	if checkErr == nil {
-		check, err = mergeReviewCoverageAuditIntoSaturationCheck(check, plan, finalizedReport, probeSummaries, coverageAuditContext)
-		if err != nil {
-			r.emitProgressError(reviewProgressSaturationCheckItem, err)
-			return ReviewSaturationCheck{}, err
-		}
-		check = r.failClosedReviewSaturationByRawOutputLedger(check, probePrompt.rawOutputLedger)
-		r.emitProgressOK(reviewProgressSaturationCheckItem, string(check.Status))
-		return check, nil
-	}
-
-	r.emitProgressRunning(reviewProgressSaturationRepairItem)
-	repairPrompt := reviewmodelinput.BuildSaturationCheckRepairPrompt(reviewmodelinput.SaturationCheckRepairPromptInput{
-		CustomInstructions:          req.CustomInstructions,
-		ReviewStateSummary:          stateSummary,
-		EvidenceMarkdown:            phaseEvidenceMarkdown,
-		Plan:                        plan,
-		ProbeSummaries:              probeSummaries,
-		ProbeResults:                probeResults,
-		Redactor:                    redactor,
-		ProbeResultOptions:          probePrompt.options,
-		ReviewProbeRawOutputContext: probePrompt.rawOutputContext,
-		ReviewProbeRawOutputLedger:  probePrompt.rawOutputLedger,
-		FinalizedReport:             finalizedReport,
-		InvalidOutput:               checkResp.Content,
-		DecodeOrValidationErr:       checkErr,
-	})
-	r.saveReviewRunTextArtifact("saturation_prompt.md", repairPrompt, redactor)
-	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseSaturationCheck,
-		Prompt: repairPrompt,
-	})
-	if err != nil {
-		r.emitProgressError(reviewProgressSaturationRepairItem, err)
-		return ReviewSaturationCheck{}, fmt.Errorf("review runner saturation check model: %w", err)
-	}
-	r.saveReviewRunTextArtifact("saturation_raw.json", repairResp.Content, redactor)
-
-	check, err = reviewmodeloutput.FinalizeSaturationCheckModelOutput(reviewmodeloutput.SaturationCheckModelOutputInput{
-		Content:         repairResp.Content,
-		Plan:            plan,
-		FinalizedReport: finalizedReport,
-		ExternalDocs:    externalDocs,
-	})
-	if err != nil {
-		r.emitProgressError(reviewProgressSaturationRepairItem, err)
-		return ReviewSaturationCheck{}, err
-	}
-	check, err = mergeReviewCoverageAuditIntoSaturationCheck(check, plan, finalizedReport, probeSummaries, coverageAuditContext)
-	if err != nil {
-		r.emitProgressError(reviewProgressSaturationRepairItem, err)
-		return ReviewSaturationCheck{}, err
-	}
-	check = r.failClosedReviewSaturationByRawOutputLedger(check, probePrompt.rawOutputLedger)
-	r.emitProgressOK(reviewProgressSaturationRepairItem, string(check.Status))
-	return check, nil
-}
-
-func buildReviewCoverageAuditContext(before ReviewWebSearchEvidence, bundle ReviewEvidenceBundle) reviewCoverageAuditContext {
-	support := BuildReviewEvidenceModelInput(bundle).ExternalSupport
-	externalSupport := reviewreport.CoverageExternalSupport{
-		Level:                                string(support.Level),
-		DocCount:                             support.DocCount,
-		CitationCapableDocCount:              support.CitationCapableDocCount,
-		CitationCapableSnippetCount:          support.CitationCapableSnippetCount,
-		OfficialCandidateDocCount:            support.OfficialCandidateDocCount,
-		OfficialCandidateCitationCapableDocs: support.OfficialCandidateCitationCapableDocCount,
-		OfficialConfirmation:                 support.OfficialConfirmation,
-		Warnings:                             append([]string(nil), support.Warnings...),
-		Reasons:                              append([]string(nil), support.Reasons...),
-	}
-	return reviewCoverageAuditContext{
-		postPass1ExternalEvidence: buildReviewCoverageExternalEvidenceDelta(before, bundle.WebSearchEvidence, externalSupport),
-		externalSupport:           externalSupport,
-	}
-}
-
-func buildReviewCoverageExternalEvidenceDelta(before, after ReviewWebSearchEvidence, support reviewreport.CoverageExternalSupport) reviewreport.CoverageExternalEvidenceDelta {
-	delta := reviewreport.CoverageExternalEvidenceDelta{}
-
-	addedQueries := addedReviewWebSearchEvidenceQueries(before, after)
-	delta.AddedQueryCount = len(addedQueries)
-	for _, query := range addedQueries {
-		queryText := strings.TrimSpace(query.Query)
-		if queryText != "" {
-			delta.AddedQueries = append(delta.AddedQueries, queryText)
-		}
-		if strings.TrimSpace(query.Error) != "" {
-			delta.AddedFailedQueryCount++
-			if queryText != "" {
-				delta.AddedFailedQueries = append(delta.AddedFailedQueries, queryText)
-			}
-		}
-		if len(query.Results) == 0 {
-			delta.AddedNoResultCount++
-			if queryText != "" {
-				delta.AddedNoResultQueries = append(delta.AddedNoResultQueries, queryText)
-			}
-		}
-	}
-
-	for _, doc := range addedReviewExternalDocs(before, after) {
-		if docID := strings.TrimSpace(doc.DocID); docID != "" {
-			delta.AddedDocIDs = append(delta.AddedDocIDs, docID)
-		}
-		if docURL := strings.TrimSpace(doc.URL); docURL != "" {
-			delta.AddedDocURLs = append(delta.AddedDocURLs, docURL)
-		}
-		if strings.TrimSpace(doc.Error) != "" {
-			delta.EvidenceError = true
-		}
-		if doc.Truncated {
-			delta.Truncated = true
-		}
-	}
-	if after.Truncated && !before.Truncated {
-		delta.Truncated = true
-	}
-	if after.Inconclusive && (!before.Inconclusive || delta.AddedQueryCount > 0 || len(delta.AddedDocIDs) > 0 || len(delta.AddedDocURLs) > 0) {
-		delta.Inconclusive = true
-	}
-	if strings.TrimSpace(after.Error) != "" && strings.TrimSpace(after.Error) != strings.TrimSpace(before.Error) {
-		delta.EvidenceError = true
-	}
-	if delta.AddedQueryCount == 0 &&
-		len(delta.AddedDocIDs) == 0 &&
-		len(delta.AddedDocURLs) == 0 &&
-		!delta.EvidenceError &&
-		!delta.Inconclusive &&
-		!delta.Truncated {
-		return reviewreport.CoverageExternalEvidenceDelta{}
-	}
-	delta.Warnings = append([]string(nil), support.Warnings...)
-	delta.Reasons = append([]string(nil), support.Reasons...)
-	return delta
-}
-
-func addedReviewWebSearchEvidenceQueries(before, after ReviewWebSearchEvidence) []ReviewWebSearchEvidenceQuery {
-	if len(after.Queries) <= len(before.Queries) {
-		return nil
-	}
-	return append([]ReviewWebSearchEvidenceQuery(nil), after.Queries[len(before.Queries):]...)
-}
-
-func addedReviewExternalDocs(before, after ReviewWebSearchEvidence) []ReviewExternalDocEvidence {
-	if len(after.ExternalDocs) <= len(before.ExternalDocs) {
-		return nil
-	}
-	return append([]ReviewExternalDocEvidence(nil), after.ExternalDocs[len(before.ExternalDocs):]...)
-}
-
-func mergeReviewCoverageAuditIntoSaturationCheck(check ReviewSaturationCheck, plan ReviewProbePlan, finalizedReport ReviewReport, probeSummaries []ReviewProbeSummary, auditContext reviewCoverageAuditContext) (ReviewSaturationCheck, error) {
-	planScope := reviewanalysis.PlanScopeFromProbePlan(plan)
-	issues := reviewreport.AuditReviewReportCoverage(reviewreport.CoverageAuditInput{
-		Plan:                      planScope,
-		Report:                    finalizedReport,
-		TrustedProbeSummaries:     probeSummaries,
-		PostPass1ExternalEvidence: auditContext.postPass1ExternalEvidence,
-		ExternalSupport:           auditContext.externalSupport,
-	})
-	merged := reviewreport.MergeCoverageIssuesIntoSaturationCheck(check, issues)
-	if err := reviewreport.ValidateReviewSaturationCheck(merged, planScope, finalizedReport); err != nil {
-		return ReviewSaturationCheck{}, fmt.Errorf("review runner merge coverage audit: %w", err)
-	}
-	return merged, nil
-}
-
-func (r *ReviewRunner) failClosedReviewSaturationByRawOutputLedger(check ReviewSaturationCheck, ledger *ReviewProbeRawOutputLedger) ReviewSaturationCheck {
-	if ledger == nil || check.Status != ReviewSaturationStatusSaturated || ledger.CanAcceptSaturated {
-		return check
-	}
-	reason := strings.TrimSpace(ledger.FailClosedReason)
-	if reason == "" {
-		reason = reviewProbeRawOutputReasonSaturatedRejected
-	}
-	if r != nil && r.promptReductionStats != nil {
-		r.promptReductionStats.recordKeepReason(reviewProbeRawOutputReasonSaturatedRejected)
-		r.promptReductionStats.recordKeepReason(reason)
-	}
-	check.Status = ReviewSaturationStatusBlocked
-	check.CheckedSummary = "saturation rejected because required review probe raw output was not rehydrated: " + reason
-	check.MissingSurfaceIDs = nil
-	check.MissingRiskIDs = nil
-	check.AdditionalFindingCandidates = nil
-	check.RevisionInstructions = ""
-	return check
-}
-
-func (r *ReviewRunner) failClosedReviewRevisionPromptByRawOutputLedger(check ReviewSaturationCheck, ledger *ReviewProbeRawOutputLedger) error {
-	if ledger == nil || ledger.CanAcceptSaturated {
-		return nil
-	}
-	if check.Status != ReviewSaturationStatusNeedsRevision {
-		return nil
-	}
-	reason := strings.TrimSpace(ledger.FailClosedReason)
-	if reason == "" {
-		reason = reviewProbeRawOutputReasonRehydrateUnavailable
-	}
-	if r != nil && r.promptReductionStats != nil {
-		r.promptReductionStats.recordKeepReason(reason)
-	}
-	return fmt.Errorf("review runner revision prompt raw output rehydrate failed closed: %s", reason)
-}
-
-func (r *ReviewRunner) completeReviewReportRevision(ctx context.Context, req ReviewRequest, evidenceMarkdown string, plan ReviewProbePlan, probeSummaries []ReviewProbeSummary, probeResults []ReviewProbeResult, redactor reviewRunnerPromptRedactor, finalizedReport ReviewReport, saturationCheck ReviewSaturationCheck, bundle ReviewEvidenceBundle) (ReviewReport, error) {
-	r.emitProgressRunning(reviewProgressReportRevisionItem)
-	externalDocs := bundle.WebSearchEvidence.ExternalDocs
-	stateSummary := r.reviewStateSummaryPrompt(reviewStateSummaryInput{
-		bundle:          bundle,
-		plan:            plan,
-		probeSummaries:  probeSummaries,
-		finalizedReport: finalizedReport,
-		saturationCheck: saturationCheck,
-		phase:           ReviewModelPhaseReportRevision,
-	})
-	probePrompt := r.probeResultPromptContextBuildForAbsorbedReport(ctx, ReviewModelPhaseReportRevision, "report_revision", finalizedReport, probeResults, redactor)
-	if err := r.failClosedReviewRevisionPromptByRawOutputLedger(saturationCheck, probePrompt.rawOutputLedger); err != nil {
-		r.emitProgressError(reviewProgressReportRevisionItem, err)
-		return ReviewReport{}, err
-	}
-	phaseEvidenceMarkdown := r.reviewPromptEvidenceMarkdownForAbsorbedReport(ReviewModelPhaseReportRevision, bundle, evidenceMarkdown, finalizedReport)
-	revisionPrompt := reviewmodelinput.BuildReportRevisionPrompt(reviewmodelinput.ReportRevisionPromptInput{
-		CustomInstructions:          req.CustomInstructions,
-		ReviewStateSummary:          stateSummary,
-		EvidenceMarkdown:            phaseEvidenceMarkdown,
-		Plan:                        plan,
-		ProbeSummaries:              probeSummaries,
-		ProbeResults:                probeResults,
-		Redactor:                    redactor,
-		ProbeResultOptions:          probePrompt.options,
-		ReviewProbeRawOutputContext: probePrompt.rawOutputContext,
-		ReviewProbeRawOutputLedger:  probePrompt.rawOutputLedger,
-		FinalizedReport:             finalizedReport,
-		SaturationCheck:             saturationCheck,
-	})
-	r.saveReviewRunTextArtifact("revision_prompt.md", revisionPrompt, redactor)
-	revisionResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseReportRevision,
-		Prompt: revisionPrompt,
-	})
-	if err != nil {
-		r.emitProgressError(reviewProgressReportRevisionItem, err)
-		return ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
-	}
-	r.saveReviewRunTextArtifact("revision_raw.json", revisionResp.Content, redactor)
-
-	report, revisionErr := reviewmodeloutput.FinalizeReportModelOutput(reviewmodeloutput.ReportModelOutputInput{
-		Content:               revisionResp.Content,
-		Plan:                  plan,
-		TrustedProbeSummaries: probeSummaries,
-		Redactor:              redactor,
-		ExternalDocs:          externalDocs,
-	})
-	if revisionErr == nil {
-		r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
-		r.emitProgressOK(reviewProgressReportRevisionItem, "")
-		return report, nil
-	}
-
-	r.emitProgressRunning(reviewProgressReportRevisionRepairItem)
-	repairPrompt := reviewmodelinput.BuildReportRevisionRepairPrompt(reviewmodelinput.ReportRevisionRepairPromptInput{
-		CustomInstructions:          req.CustomInstructions,
-		ReviewStateSummary:          stateSummary,
-		EvidenceMarkdown:            phaseEvidenceMarkdown,
-		Plan:                        plan,
-		ProbeSummaries:              probeSummaries,
-		ProbeResults:                probeResults,
-		Redactor:                    redactor,
-		ProbeResultOptions:          probePrompt.options,
-		ReviewProbeRawOutputContext: probePrompt.rawOutputContext,
-		ReviewProbeRawOutputLedger:  probePrompt.rawOutputLedger,
-		FinalizedReport:             finalizedReport,
-		SaturationCheck:             saturationCheck,
-		InvalidRevisionOutput:       revisionResp.Content,
-		DecodeOrValidationErr:       revisionErr,
-	})
-	r.saveReviewRunTextArtifact("revision_prompt.md", repairPrompt, redactor)
-	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseReportRevision,
-		Prompt: repairPrompt,
-	})
-	if err != nil {
-		r.emitProgressError(reviewProgressReportRevisionRepairItem, err)
-		return ReviewReport{}, fmt.Errorf("review runner report revision model: %w", err)
-	}
-	r.saveReviewRunTextArtifact("revision_raw.json", repairResp.Content, redactor)
-
-	report, err = reviewmodeloutput.FinalizeReportModelOutput(reviewmodeloutput.ReportModelOutputInput{
-		Content:               repairResp.Content,
-		Plan:                  plan,
-		TrustedProbeSummaries: probeSummaries,
-		Redactor:              redactor,
-		ExternalDocs:          externalDocs,
-	})
-	if err != nil {
-		r.emitProgressError(reviewProgressReportRevisionRepairItem, err)
-		return ReviewReport{}, fmt.Errorf("review runner report revision repair: %w", err)
-	}
-
-	r.saveReviewRunJSONArtifact("report_final.json", report, redactor)
-	r.emitProgressOK(reviewProgressReportRevisionRepairItem, "")
-	return report, nil
 }

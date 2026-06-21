@@ -5,13 +5,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	"github.com/susugadx/xelyon-cli/internal/tui/reviewscreen"
 )
+
+const reviewRunnerNotImplementedMessage = "review runner is not implemented yet"
+const reviewRunnerCancelledMessage = "review canceled"
 
 // openReviewScreen は review preset screen を開く。
 func (m Model) openReviewScreen() (tea.Model, tea.Cmd) {
 	m.activateModalScreen(screenReview)
-	m.reviewScreen = newReviewScreen()
-	m.reviewScreen.customInput.Width = max(0, m.width-4)
+	m.reviewScreen = reviewscreen.New(m.width)
 	return m, nil
 }
 
@@ -38,7 +41,7 @@ func (m Model) updateReviewScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.applyChatWindowSize(msg.Width, msg.Height)
-		rs.customInput.Width = max(0, msg.Width-4)
+		rs.Resize(msg.Width)
 		return m, nil
 
 	case tea.MouseMsg:
@@ -49,13 +52,13 @@ func (m Model) updateReviewScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
-		action, req, cmd := rs.handleKey(msg)
+		action, req, cmd := rs.HandleKey(msg)
 		switch action {
-		case reviewCommandDelegateCtrlC:
+		case reviewscreen.CommandDelegateCtrlC:
 			return m.handleCtrlC()
-		case reviewCommandClose:
+		case reviewscreen.CommandClose:
 			return m.closeReviewScreen()
-		case reviewCommandSubmit:
+		case reviewscreen.CommandSubmit:
 			if req == nil {
 				return m, cmd
 			}
@@ -103,10 +106,7 @@ func (m *Model) showReviewBusyNotice() {
 	if m.screen != screenReview || m.reviewScreen == nil {
 		return
 	}
-	m.reviewScreen.setNotice(agentTurnBusyStatus)
-	if m.reviewScreen.mode == reviewScreenCustom {
-		m.reviewScreen.customInput.Focus()
-	}
+	m.reviewScreen.SetNotice(agentTurnBusyStatus)
 	m.chromeDirty = true
 }
 
@@ -118,4 +118,8 @@ func (m *Model) prepareReviewTimelineHandoff() {
 	if m.screen != screenChat {
 		m.deactivateModalScreen(false)
 	}
+}
+
+func (m Model) reviewView() string {
+	return m.reviewScreen.View(m.width, m.height)
 }

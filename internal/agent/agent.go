@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // 色定義
@@ -108,7 +108,7 @@ type Agent struct {
 	searchCodeMissedMultiCountedFamilies  map[string]struct{}
 }
 
-func (a *Agent) setPromptReader(reader *ui.MultilineReader) {
+func (a *Agent) setPromptReader(reader *uiruntime.MultilineReader) {
 	if a == nil {
 		return
 	}
@@ -117,14 +117,14 @@ func (a *Agent) setPromptReader(reader *ui.MultilineReader) {
 
 func (a *Agent) output() io.Writer {
 	if a == nil {
-		return ui.DefaultRuntime().Output()
+		return uiruntime.DefaultRuntime().Output()
 	}
 	return a.ui().Output()
 }
 
 func (a *Agent) errorOutput() io.Writer {
 	if a == nil {
-		return ui.DefaultRuntime().ErrorOutput()
+		return uiruntime.DefaultRuntime().ErrorOutput()
 	}
 	return a.ui().ErrorOutput()
 }

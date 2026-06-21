@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // Chunk は OpenAI 互換 SSE の最小共通レスポンス構造。
@@ -246,7 +246,7 @@ type ParseSSEResult struct {
 }
 
 // ParseSSEStream は OpenAI 互換 SSE を共通処理する。
-func ParseSSEStream(ctx context.Context, resp *http.Response, spinner *ui.Spinner, options ParseSSEOptions) (*ParseSSEResult, error) {
+func ParseSSEStream(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner, options ParseSSEOptions) (*ParseSSEResult, error) {
 	collector := NewToolCallCollector()
 	var lastUsage *api.Usage
 	var reasoningContent strings.Builder

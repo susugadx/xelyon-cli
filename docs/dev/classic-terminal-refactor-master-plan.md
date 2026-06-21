@@ -6,7 +6,7 @@
 
 この branch の完了条件:
 
-- `ui.Runtime.StartSpinner` を spinner 起動の source of truth にする。
+- `uiruntime.Runtime.StartSpinner` を spinner 起動の source of truth にする。
 - legacy classic REPL の startup / image startup / resume startup / loop を `agent_classic_repl_*` file に隔離する。
 - command handler からも使う context-size 表示は shared interactive owner に置く。
 - TUI からも使う interactive startup / signal cleanup は shared owner として classic-only file へ閉じない。
@@ -18,7 +18,7 @@
 - `--no-tui` / classic REPL の起動経路
 - classic REPL の loop / startup 表示
 - interactive surface 共通の signal cleanup
-- `internal/ui.Runtime` の spinner ownership
+- `internal/uiruntime.Runtime` の spinner ownership
 - provider streaming と tool execution から見た spinner lifecycle
 - command catalog の classic surface 表示
 
@@ -56,32 +56,32 @@ Owner: agent runtime、normal mode、tool execution、classic REPL compatibility
 - context-size 表示は command handler からも使うため `agent_interactive_context_size.go` が owner する。
 - shared interactive startup と signal cleanup は `agent_interactive_startup.go` に残し、TUI と classic の共通 owner として扱う。
 - command surface は `CommandSurfaceClassic` として agent command dispatcher に残っている。
-- tool execution は `ui.Runtime.StartSpinner` へ委譲して current spinner を登録する。
+- tool execution は `uiruntime.Runtime.StartSpinner` へ委譲して current spinner を登録する。
 
 整理方針:
 
 - classic REPL は同一 package 内で `agent_classic_repl_*` へ分け、TUI/normal/tool execution と混ざらない名前にする。
 - package split は初期段階では行わない。private method 依存が多く、export を増やす危険が大きい。
-- tool execution の spinner 起動は `ui.Runtime.StartSpinner` を source of truth にする。
+- tool execution の spinner 起動は `uiruntime.Runtime.StartSpinner` を source of truth にする。
 - `initInteractiveAgentWithRuntime` と signal cleanup は TUI からも使うため、classic-only には閉じない。
 
-### `internal/ui`
+### UI owner packages
 
-Owner: process / injected runtime の入出力、PromptIO、console renderer、spinner lifecycle。
+Owner: process / injected runtime、prompt contract、console renderer、file/tool/config/plan display を package owner ごとに分ける。
 
 現状:
 
-- `Runtime` が current spinner を持つ。
-- spinner 起動は `Runtime.StartSpinner` が current spinner 登録まで owner する。
+- `internal/uiruntime.Runtime` が current spinner を持つ。
+- spinner 起動は `uiruntime.Runtime.StartSpinner` が current spinner 登録まで owner する。
 - `Runtime.NewSpinner` / `Runtime.SetSpinner` / `Spinner.Start` は低レベル primitive と test / stream-local restart 用に残る。
-- PromptIO、config editor、selector、tool display、provider streaming が同じ package を共有しているため、`internal/ui` 全体を classic 専用とは扱えない。
+- prompt contract は `internal/uiprompt`、tool display は `internal/uitoolview`、file/patch display は `internal/uifileview`、classic config editor は `internal/uiconfig`、pure config edit helper は `internal/configedit` が owner する。
 
 整理方針:
 
 - `Runtime.StartSpinner(message)` を spinner start owner にする。
 - `Runtime.StopSpinner()` を current spinner の stop owner にする。
 - `Spinner.Start/Stop` は low-level primitive として残し、provider stream parser の局所再開には当面使う。
-- `internal/ui` の package split は、classic REPL の退役判断後に改めて検討する。
+- UI owner package を classic 専用として扱わない。TUI adapter、provider diagnostics、tool confirmation、config editor から使う共有 contract は owner package で維持する。
 
 ### `internal/api`
 
@@ -90,12 +90,12 @@ Owner: provider request の context-bound UI adapter。
 現状:
 
 - `api.StartSpinnerWithMessage(ctx, message)` が context runtime の `StartSpinner` へ委譲する。
-- provider 側は受け取った `*ui.Spinner` を直接 stop / restart する。
+- provider 側は受け取った `*uiruntime.Spinner` を直接 stop / restart する。
 - stream parser は assistant text と tool JSON の表示切替に spinner を使う。
 
 整理方針:
 
-- context-bound 起動は `ui.Runtime.StartSpinner` へ委譲する。
+- context-bound 起動は `uiruntime.Runtime.StartSpinner` へ委譲する。
 - provider stream 内の direct `spinner.Stop/Start` は behavior-preserving のため初期 tranche では残す。
 - provider-facing output ordering が変わる整理は別 task として扱う。
 
@@ -105,14 +105,14 @@ Owner: provider request の context-bound UI adapter。
 
 目的:
 
-- current spinner の start owner を `ui.Runtime` に寄せる。
+- current spinner の start owner を `uiruntime.Runtime` に寄せる。
 - tool execution と provider request の起動 path を同じ source of truth にする。
 - classic REPL の behavior は変えない。
 
 検証:
 
-- `go test ./internal/ui -run 'TestRuntime_.*Spinner|TestSpinner' -count=1`
-- `go test -race ./internal/ui -run 'TestRuntime_.*Spinner|TestSpinner' -count=1`
+- `go test ./internal/uiruntime -run 'TestRuntime_.*Spinner|TestSpinner' -count=1`
+- `go test -race ./internal/uiruntime -run 'TestRuntime_.*Spinner|TestSpinner' -count=1`
 - `go test ./internal/agent -run 'TestExecuteToolCallsWithParallel_.*Spinner|TestExecuteToolWithSpinner|TestRunInteractiveWithConfig' -count=1`
 - `go test ./internal/api ./internal/api/providers/... -run 'Test.*Spinner|Test.*Streaming|Test.*Stream|Test.*NonStreaming' -count=1`
 
@@ -174,7 +174,7 @@ Owner: provider request の context-bound UI adapter。
 
 ## Safety notes
 
-- `internal/ui` は classic 専用ではない。TUI adapter、provider diagnostics、tool confirmation、config editor も使う。
+- UI owner package 群は classic 専用ではない。TUI adapter、provider diagnostics、tool confirmation、config editor も使う。
 - spinner は provider stream の output ordering に影響するため、起動 owner の整理と stream parser の挙動変更を混ぜない。
 - classic REPL 退役は docs / help / command catalog / status 表示まで同期しないと drift する。
 - この branch で classic surface の削除や help 表示の contract change は行わない。

@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
+	"github.com/susugadx/xelyon-cli/internal/tui/slashsuggestions"
 )
 
 func TestSlashSuggestions_EnterOnSkillsCommandOpensSubcommandSuggestions(t *testing.T) {
@@ -21,13 +22,13 @@ func TestSlashSuggestions_EnterOnSkillsCommandOpensSubcommandSuggestions(t *test
 	if got := m.textInput.Value(); got != "/skills " {
 		t.Fatalf("textInput after Enter = %q, want '/skills '", got)
 	}
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("skills subcommand suggestions should be visible after Enter on selected /skills")
 	}
-	if !m.slashSuggestions.selectionActive {
+	if !m.slashSuggestions.Snapshot().SelectionActive {
 		t.Fatal("Enter-expanded skills suggestions should keep selection active")
 	}
-	if got := len(m.slashSuggestions.suggestions); got != 5 {
+	if got := len(m.slashSuggestions.Snapshot().Suggestions); got != 5 {
 		t.Fatalf("skills subcommand suggestions len = %d, want 5", got)
 	}
 	if got := len(agent.handledInputs); got != 0 {
@@ -54,11 +55,11 @@ func TestSlashSuggestions_EnterOnSkillsCommandOpensSkillPromptPicker(t *testing.
 	if cmd != nil {
 		t.Fatalf("Enter on /skills should open skill prompt picker, got cmd %v", cmd)
 	}
-	suggestion, ok := m.slashSuggestions.selectedSuggestion()
+	suggestion, ok := m.slashSuggestions.SelectedSuggestion()
 	if !ok || suggestion.Label != "bug-investigation" || !suggestion.CompleteOnEnter {
 		t.Fatalf("selected suggestion = %#v, %v, want skill prompt candidate", suggestion, ok)
 	}
-	if !m.slashSuggestions.selectionActive {
+	if !m.slashSuggestions.Snapshot().SelectionActive {
 		t.Fatal("expanded skill picker should allow Enter to choose the highlighted skill")
 	}
 
@@ -92,7 +93,7 @@ func TestSlashSuggestions_EnterOnSkillsCommandExpandsEvenWhenSuggestionRowsAreSt
 	}
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/skills")
-	m.slashSuggestions = slashSuggestionState{}
+	m.slashSuggestions = slashsuggestions.State{}
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
@@ -106,7 +107,7 @@ func TestSlashSuggestions_EnterOnSkillsCommandExpandsEvenWhenSuggestionRowsAreSt
 	if got := m.textInput.Value(); got != "/skills " {
 		t.Fatalf("textInput after Enter = %q, want '/skills '", got)
 	}
-	suggestion, ok := m.slashSuggestions.selectedSuggestion()
+	suggestion, ok := m.slashSuggestions.SelectedSuggestion()
 	if !ok || suggestion.Label != "bug-investigation" {
 		t.Fatalf("selected suggestion = %#v, %v, want skill prompt candidate", suggestion, ok)
 	}
@@ -119,7 +120,7 @@ func TestSlashSuggestions_EnterOnSkillsShowCompletesRequiredNameArgument(t *test
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = updated.(Model)
-	if suggestion, ok := m.slashSuggestions.selectedSuggestion(); !ok || suggestion.InsertText != "/skills show" {
+	if suggestion, ok := m.slashSuggestions.SelectedSuggestion(); !ok || suggestion.InsertText != "/skills show" {
 		t.Fatalf("selected suggestion = %#v, %v, want /skills show", suggestion, ok)
 	}
 
@@ -132,7 +133,7 @@ func TestSlashSuggestions_EnterOnSkillsShowCompletesRequiredNameArgument(t *test
 	if got := m.textInput.Value(); got != "/skills show " {
 		t.Fatalf("textInput after Enter = %q, want '/skills show '", got)
 	}
-	if m.slashSuggestions.visible() {
+	if m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should close when no skill name candidates exist")
 	}
 	if got := len(agent.handledInputs); got != 0 {
@@ -164,7 +165,7 @@ func TestSlashSuggestions_EnterOnTypedSkillsShowCompletesRequiredNameArgument(t 
 			if got := m.textInput.Value(); got != "/skills show " {
 				t.Fatalf("textInput after Enter = %q, want '/skills show '", got)
 			}
-			if m.slashSuggestions.visible() {
+			if m.slashSuggestions.Visible() {
 				t.Fatal("slash suggestions should close when no skill name candidates exist")
 			}
 			if got := len(agent.handledInputs); got != 0 {
@@ -199,7 +200,7 @@ func TestSlashSuggestions_ExactSkillsSubcommandWinsOverSkillPromptCandidate(t *t
 			m := newModelWithViewport(agent)
 			m = sendComposerRunes(m, command)
 
-			suggestion, ok := m.slashSuggestions.selectedSuggestion()
+			suggestion, ok := m.slashSuggestions.SelectedSuggestion()
 			if !ok || suggestion.InsertText != command || suggestion.CompleteOnEnter {
 				t.Fatalf("selected suggestion = %#v, %v, want %s subcommand first", suggestion, ok, command)
 			}
@@ -234,7 +235,7 @@ func TestSlashSuggestions_ExactSkillsShowSubcommandWinsOverSkillPromptCandidate(
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/skills show")
 
-	suggestion, ok := m.slashSuggestions.selectedSuggestion()
+	suggestion, ok := m.slashSuggestions.SelectedSuggestion()
 	if !ok || suggestion.InsertText != "/skills show" || !suggestion.ExpandOnEnter {
 		t.Fatalf("selected suggestion = %#v, %v, want /skills show subcommand first", suggestion, ok)
 	}
@@ -267,8 +268,8 @@ func TestSlashSuggestions_SkillsListAliasWinsOverSkillPromptCandidate(t *testing
 	m := newModelWithViewport(agent)
 	m = sendComposerRunes(m, "/skills list")
 
-	if m.slashSuggestions.visible() {
-		t.Fatalf("exact /skills list alias should not be shadowed by skill suggestions: %#v", m.slashSuggestions.suggestions)
+	if m.slashSuggestions.Visible() {
+		t.Fatalf("exact /skills list alias should not be shadowed by skill suggestions: %#v", m.slashSuggestions.Snapshot().Suggestions)
 	}
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -323,7 +324,7 @@ func TestSlashSuggestions_TabCompletesSkillsSubcommandWithRequiredArg(t *testing
 	if got := m.textInput.Value(); got != "/skills show " {
 		t.Fatalf("textInput after Tab = %q, want '/skills show '", got)
 	}
-	if m.slashSuggestions.visible() {
+	if m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should close after subcommand completion")
 	}
 }

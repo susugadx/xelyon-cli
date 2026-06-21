@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // RunOptions は Responses API request 実行時の provider 差分を表す。
@@ -19,9 +19,9 @@ type RunOptions struct {
 	BuildRequest             func() Request
 	PrepareRequest           func(ctx context.Context, url string, payload []byte) (*http.Request, error)
 	ExecuteRequest           func(req *http.Request, stream bool) (*http.Response, error)
-	HandleStreaming          func(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error)
-	HandleNonStreaming       func(ctx context.Context, resp *http.Response, spinner *ui.Spinner) (string, string, error)
-	HandleHTTPError          func(resp *http.Response, spinner *ui.Spinner, providerName string) error
+	HandleStreaming          func(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error)
+	HandleNonStreaming       func(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, string, error)
+	HandleHTTPError          func(resp *http.Response, spinner *uiruntime.Spinner, providerName string) error
 	RequestObserver          func(Request)
 	SetLocalAutoCompressSkip func(bool)
 	HasPreviousResponseID    func() bool
@@ -162,7 +162,7 @@ func shouldRetryResponsesWithoutPreviousResponseID(resp *http.Response, options 
 }
 
 // HandleNonStreaming は Responses API の非ストリーミング response を処理する。
-func HandleNonStreaming(ctx context.Context, resp *http.Response, spinner *ui.Spinner, options NonStreamingOptions) (string, string, error) {
+func HandleNonStreaming(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner, options NonStreamingOptions) (string, string, error) {
 	var result responsesNonStreamingResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		api.StopSpinner(spinner)

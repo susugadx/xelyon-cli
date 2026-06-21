@@ -11,6 +11,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 	"github.com/susugadx/xelyon-cli/internal/tui"
 )
 
@@ -167,7 +168,7 @@ func TestTUIAdapterRunReviewEmitsProgressToolResults(t *testing.T) {
 	assertReviewProgressToolMessage(t, toolMessages, "review:report", tui.ToolStatusRunning, "writing report", "")
 	assertReviewProgressToolMessage(t, toolMessages, "review:report", tui.ToolStatusOK, "report drafted", "")
 	assertReviewProgressToolMessage(t, toolMessages, "review:saturation_check", tui.ToolStatusRunning, "checking review coverage", "")
-	assertReviewProgressToolMessage(t, toolMessages, "review:saturation_check", tui.ToolStatusOK, "coverage checked", string(review.ReviewSaturationStatusSaturated))
+	assertReviewProgressToolMessage(t, toolMessages, "review:saturation_check", tui.ToolStatusOK, "coverage checked", string(reviewreport.ReviewSaturationStatusSaturated))
 }
 
 func TestTUIAdapterRunReviewEmitsRunScopedProgress(t *testing.T) {
@@ -212,7 +213,7 @@ func TestTUIAdapterRunReviewEmitsRunScopedProgress(t *testing.T) {
 		t.Fatalf("fallback tool messages = %#v, want none when review run id is present", fallbackToolMessages)
 	}
 	assertReviewProgressMessage(t, progressMessages, 42, "review:evidence", tui.ToolStatusRunning, "collecting current changes", "")
-	assertReviewProgressMessage(t, progressMessages, 42, "review:saturation_check", tui.ToolStatusOK, "coverage checked", string(review.ReviewSaturationStatusSaturated))
+	assertReviewProgressMessage(t, progressMessages, 42, "review:saturation_check", tui.ToolStatusOK, "coverage checked", string(reviewreport.ReviewSaturationStatusSaturated))
 }
 
 func writeReviewWebSearchEvidenceTriggerForTest(t *testing.T, repo string) {

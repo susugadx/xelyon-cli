@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openaicompat "github.com/susugadx/xelyon-cli/internal/api/providers/openai_compat"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -837,11 +837,11 @@ func TestStreamingResponses_DoNotEmitBlankLineWhenAssistantUpdatesSuppressed(t *
 			defer resp.Body.Close()
 
 			var out bytes.Buffer
-			ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(nil, &out, &out))
+			ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(nil, &out, &out))
 			ctx = api.WithAssistantUpdateMode(ctx, tt.mode)
 
 			p := New("test-key")
-			result, err := p.handleStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+			result, err := p.handleStreamingResponse(ctx, resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 			if err != nil {
 				t.Fatalf("handleStreamingResponse() error = %v", err)
 			}
@@ -882,11 +882,11 @@ func TestStreamingResponses_DoNotEmitBlankLineWhenAssistantUpdatesSuppressed(t *
 			defer resp.Body.Close()
 
 			var out bytes.Buffer
-			ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(nil, &out, &out))
+			ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(nil, &out, &out))
 			ctx = api.WithAssistantUpdateMode(ctx, tt.mode)
 
 			p := New("test-key")
-			result, err := p.handleClaudeStreamingResponse(ctx, resp, ui.NewSpinnerWithWriter(io.Discard))
+			result, err := p.handleClaudeStreamingResponse(ctx, resp, uiruntime.NewSpinnerWithWriter(io.Discard))
 			if err != nil {
 				t.Fatalf("handleClaudeStreamingResponse() error = %v", err)
 			}

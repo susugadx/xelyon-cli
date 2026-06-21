@@ -13,7 +13,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/stdio"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func withTempWorkdir(t *testing.T) string {
@@ -360,7 +360,7 @@ func TestSetupSignalHandler_HelperProcess(t *testing.T) {
 
 	agent := &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), os.Stdout, os.Stdout),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), os.Stdout, os.Stdout),
 		},
 	}
 	setupSignalHandler(agent)

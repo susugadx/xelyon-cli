@@ -1,12 +1,16 @@
 package probe
 
-import "time"
+import (
+	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/probeplan"
+)
 
 // BuildReviewProbeRequestsFromPlan は検証済み plan DTO を ProbeRunner 用 runtime request へ変換する。
-func BuildReviewProbeRequestsFromPlan(plan ReviewProbePlan) ([]ReviewProbeRequest, error) {
+func BuildReviewProbeRequestsFromPlan(plan probeplan.ReviewProbePlan) ([]ReviewProbeRequest, error) {
 	// DecodeReviewProbePlanJSON と同じ schema validation を direct caller 向けにも通す。
 	// 以降は semantic validation を増やさず、runtime request への機械的な変換だけを行う。
-	if err := ValidateReviewProbePlan(plan); err != nil {
+	if err := probeplan.ValidateReviewProbePlan(plan); err != nil {
 		return nil, err
 	}
 
@@ -32,7 +36,7 @@ func buildReviewProbeRequestTimeout(seconds int) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-func buildReviewProbeRequestCommands(commands []ReviewPlannedProbeCommand) []ReviewProbeCommand {
+func buildReviewProbeRequestCommands(commands []probeplan.ReviewPlannedProbeCommand) []ReviewProbeCommand {
 	requestCommands := make([]ReviewProbeCommand, 0, len(commands))
 	for _, command := range commands {
 		requestCommands = append(requestCommands, ReviewProbeCommand{
@@ -44,10 +48,13 @@ func buildReviewProbeRequestCommands(commands []ReviewPlannedProbeCommand) []Rev
 	return requestCommands
 }
 
-func buildReviewProbeRequestFiles(files []ReviewPlannedProbeFile) []ReviewProbeFile {
+func buildReviewProbeRequestFiles(files []probeplan.ReviewPlannedProbeFile) []ReviewProbeFile {
 	requestFiles := make([]ReviewProbeFile, 0, len(files))
 	for _, file := range files {
-		requestFiles = append(requestFiles, ReviewProbeFile(file))
+		requestFiles = append(requestFiles, ReviewProbeFile{
+			Path:    file.Path,
+			Content: file.Content,
+		})
 	}
 	return requestFiles
 }

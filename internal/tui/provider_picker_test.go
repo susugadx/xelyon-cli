@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/providerpicker"
+	"github.com/susugadx/xelyon-cli/internal/tui/providerpickerscreen"
 	"github.com/susugadx/xelyon-cli/internal/tui/termtext"
 )
 
@@ -28,12 +29,12 @@ func TestProviderPicker_CommandOpensProviderThenModelAndSwitches(t *testing.T) {
 	m := newSizedPromptTestModel(agent, 80, 24)
 
 	m = submitProviderPickerCommand(t, m, "/provider")
-	if m.providerPicker == nil || m.providerPicker.mode != providerPickerProviders {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Mode != providerpickerscreen.ModeProviders {
 		t.Fatalf("/provider should open provider picker, got %#v", m.providerPicker)
 	}
 
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.providerPicker == nil || m.providerPicker.mode != providerPickerModels {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Mode != providerpickerscreen.ModeModels {
 		t.Fatalf("Enter on provider should open model picker, got %#v", m.providerPicker)
 	}
 
@@ -63,7 +64,7 @@ func TestProviderPicker_ModelCommandSwitchesCurrentProviderModel(t *testing.T) {
 	m := newSizedPromptTestModel(agent, 80, 24)
 
 	m = submitProviderPickerCommand(t, m, "/model")
-	if m.providerPicker == nil || m.providerPicker.mode != providerPickerModels {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Mode != providerpickerscreen.ModeModels {
 		t.Fatalf("/model should open model picker, got %#v", m.providerPicker)
 	}
 
@@ -97,7 +98,7 @@ func TestProviderPicker_AzureProviderConfiguresCatalogModelThenSwitches(t *testi
 	m = submitProviderPickerCommand(t, m, "/provider")
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.providerPicker == nil || m.providerPicker.mode != providerPickerModels || m.providerPicker.provider != "azure" {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Mode != providerpickerscreen.ModeModels || m.providerPicker.Snapshot().Provider != "azure" {
 		t.Fatalf("azure provider should open deployment picker, got %#v", m.providerPicker)
 	}
 
@@ -113,7 +114,7 @@ func TestProviderPicker_AzureProviderConfiguresCatalogModelThenSwitches(t *testi
 
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelSelect {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepAzureCatalogModelSelect {
 		t.Fatalf("deployment selection should open catalog_model picker, got %#v", m.providerPicker)
 	}
 	if got := agent.azureCatalogModelRequests; len(got) != 1 || got[0] != "default-deployment" {
@@ -157,13 +158,13 @@ func TestProviderPicker_AzureProviderCustomDeploymentConfiguresCatalogModel(t *t
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureDeploymentInput {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepAzureDeploymentInput {
 		t.Fatalf("custom deployment row should open deployment input, got %#v", m.providerPicker)
 	}
 
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("corp-deployment")})
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelSelect {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepAzureCatalogModelSelect {
 		t.Fatalf("custom deployment should open catalog_model picker, got %#v", m.providerPicker)
 	}
 	if got := agent.azureCatalogModelRequests; len(got) != 1 || got[0] != "corp-deployment" {
@@ -201,14 +202,14 @@ func TestProviderPicker_AzureProviderCustomCatalogModel(t *testing.T) {
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelSelect {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepAzureCatalogModelSelect {
 		t.Fatalf("deployment selection should open catalog_model picker, got %#v", m.providerPicker)
 	}
 
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelCustom {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepAzureCatalogModelCustom {
 		t.Fatalf("custom catalog row should open catalog input, got %#v", m.providerPicker)
 	}
 
@@ -275,7 +276,7 @@ func TestProviderPicker_ModelCommandSwitchesCurrentAzureDeployment(t *testing.T)
 	m := newSizedPromptTestModel(agent, 80, 24)
 
 	m = submitProviderPickerCommand(t, m, "/model")
-	if m.providerPicker == nil || m.providerPicker.mode != providerPickerModels || !m.providerPicker.currentOnly {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Mode != providerpickerscreen.ModeModels || !m.providerPicker.Snapshot().CurrentOnly {
 		t.Fatalf("/model should open current provider deployment picker, got %#v", m.providerPicker)
 	}
 
@@ -308,7 +309,7 @@ func TestProviderPicker_ModelCommandCustomAzureDeploymentSwitchesCurrentProvider
 	m := submitProviderPickerCommand(t, newSizedPromptTestModel(agent, 80, 24), "/model")
 
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.providerPicker == nil || m.providerPicker.step != providerPickerStepModelCustom {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepModelCustom {
 		t.Fatalf("/model custom Azure deployment should use current-provider custom step, got %#v", m.providerPicker)
 	}
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("custom-deployment")})
@@ -344,12 +345,12 @@ func TestProviderPicker_AzureSetupBackspaceAndEsc(t *testing.T) {
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelSelect {
+		if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepAzureCatalogModelSelect {
 			t.Fatalf("deployment selection should open catalog_model picker, got %#v", m.providerPicker)
 		}
 
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyBackspace})
-		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepModelSelect {
+		if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepModelSelect {
 			t.Fatalf("Backspace should return to deployment picker, got %#v", m.providerPicker)
 		}
 		view := strings.ToLower(termtext.StripANSI(m.View()))
@@ -366,12 +367,12 @@ func TestProviderPicker_AzureSetupBackspaceAndEsc(t *testing.T) {
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelCustom {
+		if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepAzureCatalogModelCustom {
 			t.Fatalf("custom catalog row should open input, got %#v", m.providerPicker)
 		}
 
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
-		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureCatalogModelSelect {
+		if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepAzureCatalogModelSelect {
 			t.Fatalf("Esc should return to catalog_model picker, got %#v", m.providerPicker)
 		}
 	})
@@ -382,12 +383,12 @@ func TestProviderPicker_AzureSetupBackspaceAndEsc(t *testing.T) {
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepAzureDeploymentInput {
+		if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepAzureDeploymentInput {
 			t.Fatalf("custom deployment row should open input, got %#v", m.providerPicker)
 		}
 
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEsc})
-		if m.providerPicker == nil || m.providerPicker.step != providerPickerStepModelSelect {
+		if m.providerPicker == nil || m.providerPicker.Snapshot().Step != providerpickerscreen.StepModelSelect {
 			t.Fatalf("Esc should return to deployment picker, got %#v", m.providerPicker)
 		}
 	})
@@ -417,12 +418,12 @@ func TestProviderPicker_EscBackspaceAndFilter(t *testing.T) {
 		m := submitProviderPickerCommand(t, newSizedPromptTestModel(agent, 80, 24), "/provider")
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("gem")})
-		rows := m.providerPicker.providerRows()
+		rows := m.providerPicker.Snapshot().ProviderRows
 		if len(rows) != 1 || rows[0].Key != "gemini" {
 			t.Fatalf("filtered provider rows = %#v, want gemini", rows)
 		}
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-		if m.providerPicker == nil || m.providerPicker.provider != "gemini" {
+		if m.providerPicker == nil || m.providerPicker.Snapshot().Provider != "gemini" {
 			t.Fatalf("filtered Enter should choose gemini, got %#v", m.providerPicker)
 		}
 	})
@@ -431,11 +432,11 @@ func TestProviderPicker_EscBackspaceAndFilter(t *testing.T) {
 		m := submitProviderPickerCommand(t, newSizedPromptTestModel(agent, 80, 24), "/provider")
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyDown})
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-		if m.providerPicker.mode != providerPickerModels {
-			t.Fatalf("mode = %v, want models", m.providerPicker.mode)
+		if m.providerPicker.Snapshot().Mode != providerpickerscreen.ModeModels {
+			t.Fatalf("mode = %v, want models", m.providerPicker.Snapshot().Mode)
 		}
 		m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyBackspace})
-		if m.providerPicker == nil || m.providerPicker.mode != providerPickerProviders {
+		if m.providerPicker == nil || m.providerPicker.Snapshot().Mode != providerpickerscreen.ModeProviders {
 			t.Fatalf("Backspace should return to providers, got %#v", m.providerPicker)
 		}
 	})
@@ -453,7 +454,7 @@ func TestProviderPicker_CustomInput(t *testing.T) {
 	m := submitProviderPickerCommand(t, newSizedPromptTestModel(agent, 80, 24), "/model")
 
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.providerPicker == nil || m.providerPicker.mode != providerPickerCustom {
+	if m.providerPicker == nil || m.providerPicker.Snapshot().Mode != providerpickerscreen.ModeCustom {
 		t.Fatalf("custom row should open custom input, got %#v", m.providerPicker)
 	}
 	m = updateProviderPickerKey(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("corp-gpt")})

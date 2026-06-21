@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/susugadx/xelyon-cli/internal/commandcatalog"
 	"github.com/susugadx/xelyon-cli/internal/tui/slash"
+	"github.com/susugadx/xelyon-cli/internal/tui/slashsuggestions"
 )
 
 func TestSlashSuggestions_ShowOnSlashAndRenderDescription(t *testing.T) {
@@ -16,7 +17,7 @@ func TestSlashSuggestions_ShowOnSlashAndRenderDescription(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	m = updated.(Model)
 
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should be visible after typing /")
 	}
 	if got := len(m.visibleSlashSuggestionRows()); got == 0 {
@@ -60,13 +61,11 @@ func TestSlashSuggestions_RootLLMCommandsUseSpecificDisplayCategories(t *testing
 
 func TestSlashSuggestions_RenderRowsCarryDisplayModel(t *testing.T) {
 	m := newModelWithViewport(&stubAgent{statusLine: "ready"})
-	m.slashSuggestions = slashSuggestionState{
-		suggestions: []slash.Suggestion{
-			{Label: "/model", Description: "Select model", Category: commandcatalog.CommandCategoryModel},
-			{Label: "/provider openai", Description: "OpenAI", Category: commandcatalog.CommandCategoryModel, CategoryLabel: "provider"},
-		},
-		selected: 1,
-	}
+	m.slashSuggestions = slashsuggestions.State{}.Refresh("/", []slash.Suggestion{
+		{Label: "/model", Description: "Select model", Category: commandcatalog.CommandCategoryModel},
+		{Label: "/provider openai", Description: "OpenAI", Category: commandcatalog.CommandCategoryModel, CategoryLabel: "provider"},
+	})
+	m.slashSuggestions.HandleKey(tea.KeyMsg{Type: tea.KeyDown}, m.remainingFooterRowsAfterComposerAndAttachments())
 
 	rows := m.visibleSlashSuggestionRenderRows()
 	if len(rows) != 2 {
@@ -80,15 +79,35 @@ func TestSlashSuggestions_RenderRowsCarryDisplayModel(t *testing.T) {
 	}
 }
 
-func TestSlashSuggestionRowLayoutForWidthPreservesCurrentWidths(t *testing.T) {
-	narrow := slashSuggestionRowLayoutForWidth(24)
-	if narrow.commandWidth != 20 || narrow.descriptionWidth != 0 {
-		t.Fatalf("narrow layout = %#v, want command=20 description=0", narrow)
+func TestSlashSuggestions_RenderRowDisplaysCategoryBeforeCommandLabel(t *testing.T) {
+	m := Model{width: 80}
+	suggestion := slash.Suggestion{
+		Label:       "/model [name]",
+		Description: "Switch model",
+		Category:    commandcatalog.CommandCategoryModel,
 	}
 
-	wide := slashSuggestionRowLayoutForWidth(80)
-	if wide.categoryWidth != 9 || wide.commandWidth != 26 || wide.descriptionWidth != 39 {
-		t.Fatalf("wide layout = %#v, want category=9 command=26 description=39", wide)
+	rendered := stripANSI(slashsuggestions.RenderRowString(slashsuggestions.NewRenderRow(suggestion, true), m.width))
+
+	if !strings.HasPrefix(rendered, "› llm  /model [name]") {
+		t.Fatalf("slash suggestion should render category before command label, got %q", rendered)
+	}
+	for _, fragment := range []string{"/model [name]", "Switch model"} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("slash suggestion missing %q, got %q", fragment, rendered)
+		}
+	}
+}
+
+func TestSlashSuggestionRenderWidthPreservesCurrentBehavior(t *testing.T) {
+	row := slashsuggestions.NewRenderRow(slash.Suggestion{Label: "/model [name]", Description: "Switch model"}, true)
+	narrow := stripANSI(slashsuggestions.RenderRowString(row, 24))
+	if strings.Contains(narrow, "Switch model") {
+		t.Fatalf("narrow render should omit description, got %q", narrow)
+	}
+	wide := stripANSI(slashsuggestions.RenderRowString(row, 80))
+	if !strings.Contains(wide, "Switch model") {
+		t.Fatalf("wide render should include description, got %q", wide)
 	}
 }
 
@@ -98,19 +117,19 @@ func TestSlashSuggestions_FilterOnPrefix(t *testing.T) {
 
 	m = sendComposerRunes(m, "/r")
 
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should be visible after typing /r")
 	}
-	if got := len(m.slashSuggestions.suggestions); got != 3 {
+	if got := len(m.slashSuggestions.Snapshot().Suggestions); got != 3 {
 		t.Fatalf("suggestions len = %d, want 3", got)
 	}
-	if got := m.slashSuggestions.suggestions[0].InsertText; got != "/review" {
+	if got := m.slashSuggestions.Snapshot().Suggestions[0].InsertText; got != "/review" {
 		t.Fatalf("suggestion = %q, want /review", got)
 	}
-	if got := m.slashSuggestions.suggestions[1].InsertText; got != "/rawoutputs" {
+	if got := m.slashSuggestions.Snapshot().Suggestions[1].InsertText; got != "/rawoutputs" {
 		t.Fatalf("second suggestion = %q, want /rawoutputs", got)
 	}
-	if got := m.slashSuggestions.suggestions[2].InsertText; got != "/resume" {
+	if got := m.slashSuggestions.Snapshot().Suggestions[2].InsertText; got != "/resume" {
 		t.Fatalf("third suggestion = %q, want /resume", got)
 	}
 }
@@ -135,7 +154,7 @@ func TestSlashSuggestions_EnterExecutesSelectedCommand(t *testing.T) {
 	if m.textInput.Value() != "" {
 		t.Fatalf("textInput after command = %q, want empty", m.textInput.Value())
 	}
-	if m.slashSuggestions.visible() {
+	if m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should close after command execution")
 	}
 	if len(m.messages) == 0 || m.messages[len(m.messages)-1].Content != "/review" {
@@ -157,7 +176,7 @@ func TestSlashSuggestions_TabCompletesSelectedCommand(t *testing.T) {
 	if got := m.textInput.Value(); got != "/review " {
 		t.Fatalf("textInput after Tab = %q, want /review with argument space", got)
 	}
-	if m.slashSuggestions.visible() {
+	if m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should close after Tab completion")
 	}
 	if m.screen != screenChat {
@@ -254,7 +273,7 @@ func TestSlashSuggestions_NoHiddenCompletionWhenNoRowsFit(t *testing.T) {
 	m = updated.(Model)
 	m = sendComposerRunes(m, "/r")
 
-	if !m.slashSuggestions.visible() {
+	if !m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestion state should keep matches for later resize")
 	}
 	if got := len(m.visibleSlashSuggestionRows()); got != 0 {
@@ -283,7 +302,7 @@ func TestSlashSuggestions_EscClosesWithoutEnteringNavigation(t *testing.T) {
 	if cmd != nil {
 		t.Fatalf("Esc should only close suggestions, got cmd %v", cmd)
 	}
-	if m.slashSuggestions.visible() {
+	if m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should close on Esc")
 	}
 	if m.navigationMode {
@@ -301,7 +320,7 @@ func TestSlashSuggestions_RefreshAfterInlinePaste(t *testing.T) {
 
 	m.handleComposerPaste("zz")
 
-	if m.slashSuggestions.visible() {
+	if m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should refresh after paste and close for unmatched prefix")
 	}
 	if got := m.textInput.Value(); got != "/zz" {
@@ -319,7 +338,7 @@ func TestSlashSuggestions_CloseAfterFoldedPaste(t *testing.T) {
 
 	m.handleComposerPaste("line 1\nline 2\nline 3")
 
-	if m.slashSuggestions.visible() {
+	if m.slashSuggestions.Visible() {
 		t.Fatal("slash suggestions should close after folded paste changes composer mode")
 	}
 	if !m.hasFoldedPasteBlocks() {

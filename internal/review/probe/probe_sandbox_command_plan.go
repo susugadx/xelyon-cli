@@ -43,7 +43,7 @@ func buildProbeCommandPlan(spec probeCommandPlanSpec, cmd ReviewProbeCommand) (p
 		return probePlannedCommand{}, err
 	}
 
-	commandPath, err := resolveCommandPath(commandName, commandResolutionContext{
+	commandPath, err := ResolveCommandPath(commandName, CommandResolutionContext{
 		RepoRoot:   spec.repoRoot,
 		ScratchDir: spec.resolverScratchDir,
 		WorkDir:    workDir,

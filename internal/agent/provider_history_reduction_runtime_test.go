@@ -7,7 +7,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/providerhistory"
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
-	"github.com/susugadx/xelyon-cli/internal/review"
+	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 )
 
 func TestSyncProviderHistoryRuntimeConfigFromProjectConfig(t *testing.T) {
@@ -297,11 +297,11 @@ func TestReviewPromptReductionModeUsesEffectiveProviderHistoryMode(t *testing.T)
 	tests := []struct {
 		name string
 		opts RuntimeOptions
-		want review.ReviewPromptReductionMode
+		want reviewpromptreduction.ReviewPromptReductionMode
 	}{
 		{
 			name: "off",
-			want: review.ReviewPromptReductionModeOff,
+			want: reviewpromptreduction.ReviewPromptReductionModeOff,
 		},
 		{
 			name: "apply",
@@ -309,7 +309,7 @@ func TestReviewPromptReductionModeUsesEffectiveProviderHistoryMode(t *testing.T)
 				ProviderHistoryReductionMode:    ProviderHistoryReductionApply,
 				ProviderHistoryReductionModeSet: true,
 			},
-			want: review.ReviewPromptReductionModeApply,
+			want: reviewpromptreduction.ReviewPromptReductionModeApply,
 		},
 		{
 			name: "dry run does not alter review prompt",
@@ -317,7 +317,7 @@ func TestReviewPromptReductionModeUsesEffectiveProviderHistoryMode(t *testing.T)
 				ProviderHistoryReductionMode:    ProviderHistoryReductionDryRun,
 				ProviderHistoryReductionModeSet: true,
 			},
-			want: review.ReviewPromptReductionModeDryRun,
+			want: reviewpromptreduction.ReviewPromptReductionModeDryRun,
 		},
 		{
 			name: "auto remains dry run for review prompt",
@@ -325,7 +325,7 @@ func TestReviewPromptReductionModeUsesEffectiveProviderHistoryMode(t *testing.T)
 				ProviderHistoryReductionMode:    ProviderHistoryReductionAuto,
 				ProviderHistoryReductionModeSet: true,
 			},
-			want: review.ReviewPromptReductionModeDryRun,
+			want: reviewpromptreduction.ReviewPromptReductionModeDryRun,
 		},
 	}
 
@@ -341,7 +341,7 @@ func TestReviewPromptReductionModeUsesEffectiveProviderHistoryMode(t *testing.T)
 
 func TestReviewRawOutputArtifactsModeUsesStableDefault(t *testing.T) {
 	agent := &Agent{Runtime: &AgentRuntime{}}
-	if got := agent.reviewRawOutputArtifactsMode(); got != review.ReviewRawOutputArtifactsModeDryRun {
+	if got := agent.reviewRawOutputArtifactsMode(); got != reviewpromptreduction.ReviewRawOutputArtifactsModeDryRun {
 		t.Fatalf("reviewRawOutputArtifactsMode() = %q, want default dry_run", got)
 	}
 
@@ -356,7 +356,7 @@ func TestReviewRawOutputArtifactsModeUsesStableDefault(t *testing.T) {
 
 func TestReviewRawOutputArtifactStoreSkipsWhenPromptReductionOff(t *testing.T) {
 	agent := &Agent{Runtime: &AgentRuntime{}}
-	if got := agent.reviewPromptReductionMode(); got != review.ReviewPromptReductionModeOff {
+	if got := agent.reviewPromptReductionMode(); got != reviewpromptreduction.ReviewPromptReductionModeOff {
 		t.Fatalf("reviewPromptReductionMode() = %q, want off", got)
 	}
 	if store := agent.reviewRawOutputArtifactStore(); store != nil {

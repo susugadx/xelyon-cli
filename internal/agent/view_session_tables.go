@@ -6,13 +6,13 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/agent/viewfmt"
 	"github.com/susugadx/xelyon-cli/internal/cost"
+	"github.com/susugadx/xelyon-cli/internal/termtext"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-func renderSessionOverviewTable(agent *Agent, stats *SessionStats) *ui.Table {
+func renderSessionOverviewTable(agent *Agent, stats *SessionStats) *termtext.Table {
 	sessionPath, sessionSize := getSessionFileInfo(agent)
-	table := ui.NewTable().
+	table := termtext.NewTable().
 		AddRow("Elapsed", stats.FormatElapsedTime()).
 		AddRow("User Messages", strconv.Itoa(stats.UserMessages)).
 		AddRow("Assistant Messages", strconv.Itoa(stats.AssistantMessages)).
@@ -28,13 +28,13 @@ func renderSessionOverviewTable(agent *Agent, stats *SessionStats) *ui.Table {
 	return table
 }
 
-func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subagent.SubAgentSummary) *ui.Table {
+func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *subagent.SubAgentSummary) *termtext.Table {
 	hasSubAgents := subSummary != nil && subSummary.TotalSpawned > 0
 	if stats.TotalTokens() <= 0 && stats.WebSearchCalls <= 0 && !stats.HasReviewUsage() && !hasSubAgents {
 		return nil
 	}
 
-	tokenTable := ui.NewTable()
+	tokenTable := termtext.NewTable()
 	currentTokens := agent.EstimateTokens()
 	limit := agent.currentModelTokenLimit(agent.cfg())
 	if limit > 0 {
@@ -104,7 +104,7 @@ func renderSessionTokenTable(agent *Agent, stats *SessionStats, subSummary *suba
 	return tokenTable
 }
 
-func addReviewUsageRows(table *ui.Table, stats *SessionStats) {
+func addReviewUsageRows(table *termtext.Table, stats *SessionStats) {
 	if table == nil || stats == nil || !stats.HasReviewUsage() {
 		return
 	}
@@ -123,7 +123,7 @@ func addReviewUsageRows(table *ui.Table, stats *SessionStats) {
 	}, reviewUsage.WebSearchCalls, reviewUsage.WebSearchResultTokens, reviewUsage.StorageCost)
 }
 
-func addReviewCostRow(table *ui.Table, stats *SessionStats) {
+func addReviewCostRow(table *termtext.Table, stats *SessionStats) {
 	if table == nil || stats == nil || !stats.HasReviewUsage() {
 		return
 	}

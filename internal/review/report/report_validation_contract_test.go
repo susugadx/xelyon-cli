@@ -3,6 +3,8 @@ package report
 import (
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 func TestValidateReviewReportRejectsNonCanonicalProbeID(t *testing.T) {
@@ -35,8 +37,8 @@ func TestValidateReviewReportRejectsNonCanonicalProbeID(t *testing.T) {
 				report := newValidReviewReportForValidationTest()
 				report.ProbeSummaries = append(report.ProbeSummaries, ReviewProbeSummary{
 					ProbeID: "probe-1 ",
-					Mode:    ReviewProbeHostReadOnly,
-					Status:  ReviewProbePassed,
+					Mode:    domain.ReviewProbeHostReadOnly,
+					Status:  domain.ReviewProbePassed,
 				})
 				return report
 			},

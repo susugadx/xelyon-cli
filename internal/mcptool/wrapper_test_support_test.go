@@ -5,7 +5,8 @@ import (
 	"context"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 	"io"
 	"strings"
 )
@@ -29,17 +30,17 @@ type recordingPrompter struct {
 	calls int
 }
 
-func (p *recordingPrompter) Prompt(context.Context, ui.PromptRequest) (ui.PromptResponse, error) {
+func (p *recordingPrompter) Prompt(context.Context, uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	p.calls++
-	return ui.PromptResponse{Action: ui.PromptActionYes}, nil
+	return uiprompt.PromptResponse{Action: uiprompt.PromptActionYes}, nil
 }
 
 type responsePrompter struct {
 	calls int
-	resp  ui.PromptResponse
+	resp  uiprompt.PromptResponse
 }
 
-func (p *responsePrompter) Prompt(context.Context, ui.PromptRequest) (ui.PromptResponse, error) {
+func (p *responsePrompter) Prompt(context.Context, uiprompt.PromptRequest) (uiprompt.PromptResponse, error) {
 	p.calls++
 	return p.resp, nil
 }
@@ -66,7 +67,7 @@ func (c *contextWaitingCaller) CallTool(ctx context.Context, _, _ string, _ map[
 }
 
 func newAutoApprovedExecutionContext(ctx context.Context) tools.ExecutionContext {
-	runtime := ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	return tools.ExecutionContext{
 		Context:     ctx,
 		Stdin:       runtime.Input(),
@@ -78,9 +79,9 @@ func newAutoApprovedExecutionContext(ctx context.Context) tools.ExecutionContext
 	}
 }
 
-func newPromptedExecutionContext(ctx context.Context, prompter ui.Prompter) tools.ExecutionContext {
+func newPromptedExecutionContext(ctx context.Context, prompter uiprompt.Prompter) tools.ExecutionContext {
 	var stdout bytes.Buffer
-	runtime := ui.NewRuntime(strings.NewReader(""), &stdout, &stdout)
+	runtime := uiruntime.NewRuntime(strings.NewReader(""), &stdout, &stdout)
 	runtime.SetPrompter(prompter)
 	return tools.ExecutionContext{
 		Context: ctx,

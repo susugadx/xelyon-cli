@@ -3,7 +3,6 @@ package evidence
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -65,12 +64,7 @@ func Add(a, b int) int { return a + b }
 		t.Fatalf("RelatedContextFiles = %#v, want partial candidate dropped", bundle.RelatedContextFiles)
 	}
 
-	input := BuildReviewEvidenceModelInput(bundle)
-	if !input.TruncationFlags.RelatedCandidates {
-		t.Fatalf("TruncationFlags.RelatedCandidates = false, want true")
-	}
-	markdown := RenderReviewEvidenceMarkdown(bundle)
-	if !strings.Contains(markdown, `"related_candidates": true`) {
-		t.Fatalf("markdown = %q, want related candidate truncation flag", markdown)
+	if !bundle.RelatedCandidateListTruncated {
+		t.Fatal("RelatedCandidateListTruncated = false, want true")
 	}
 }

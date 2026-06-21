@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	tuiattachments "github.com/susugadx/xelyon-cli/internal/tui/attachments"
 )
 
 func TestNormalizePastedPathToken_FileURIWindowsDriveConvertsInWSL(t *testing.T) {
@@ -63,22 +65,22 @@ func TestDecodeFileURIPath_FileHostDriveKeepsDrivePrefix(t *testing.T) {
 
 func TestParseDroppedPaths_NotPath(t *testing.T) {
 	result := parseDroppedPaths("this is plain text")
-	if result.kind != droppedPathParseNotPath {
-		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	if result.Kind != tuiattachments.DroppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want tuiattachments.DroppedPathParseNotPath", result.Kind)
 	}
 }
 
 func TestParseDroppedPaths_URLFallsBackToText(t *testing.T) {
 	result := parseDroppedPaths("https://example.com/docs")
-	if result.kind != droppedPathParseNotPath {
-		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	if result.Kind != tuiattachments.DroppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want tuiattachments.DroppedPathParseNotPath", result.Kind)
 	}
 }
 
 func TestParseDroppedPaths_SlashContainingTextFallsBackToText(t *testing.T) {
 	result := parseDroppedPaths("a/b testing")
-	if result.kind != droppedPathParseNotPath {
-		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	if result.Kind != tuiattachments.DroppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want tuiattachments.DroppedPathParseNotPath", result.Kind)
 	}
 }
 
@@ -90,29 +92,29 @@ func TestParseDroppedPaths_Limit(t *testing.T) {
 	}
 
 	result := parseDroppedPaths(strings.Join(paths, "\n"))
-	if result.kind != droppedPathParseLimit {
-		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseLimit", result.kind)
+	if result.Kind != tuiattachments.DroppedPathParseLimit {
+		t.Fatalf("parseDroppedPaths() kind = %v, want tuiattachments.DroppedPathParseLimit", result.Kind)
 	}
 }
 
 func TestParseDroppedPaths_InvalidMalformedFileURI(t *testing.T) {
 	result := parseDroppedPaths("file://%zz")
-	if result.kind != droppedPathParseNotPath {
-		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	if result.Kind != tuiattachments.DroppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want tuiattachments.DroppedPathParseNotPath", result.Kind)
 	}
 }
 
 func TestParseDroppedPaths_UnterminatedQuoteFallsBackToText(t *testing.T) {
 	result := parseDroppedPaths(`"/tmp/file.txt`)
-	if result.kind != droppedPathParseNotPath {
-		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	if result.Kind != tuiattachments.DroppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want tuiattachments.DroppedPathParseNotPath", result.Kind)
 	}
 }
 
 func TestParseDroppedPaths_ApostropheTextFallsBackToText(t *testing.T) {
 	result := parseDroppedPaths("don't panic")
-	if result.kind != droppedPathParseNotPath {
-		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	if result.Kind != tuiattachments.DroppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want tuiattachments.DroppedPathParseNotPath", result.Kind)
 	}
 }
 
@@ -141,14 +143,14 @@ func TestParseDroppedPaths_BareRelativeFilenameRecognized(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			path := writeTempFile(t, dir, tc.fileName, []byte("hello"))
 			result := parseDroppedPaths(tc.pasteText)
-			if result.kind != droppedPathParseReady {
-				t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseReady", result.kind)
+			if result.Kind != tuiattachments.DroppedPathParseReady {
+				t.Fatalf("parseDroppedPaths() kind = %v, want tuiattachments.DroppedPathParseReady", result.Kind)
 			}
-			if got, want := len(result.paths), 1; got != want {
+			if got, want := len(result.Paths), 1; got != want {
 				t.Fatalf("len(parseDroppedPaths().paths) = %d, want %d", got, want)
 			}
-			if result.paths[0] != path {
-				t.Fatalf("parseDroppedPaths().paths[0] = %q, want %q", result.paths[0], path)
+			if result.Paths[0] != path {
+				t.Fatalf("parseDroppedPaths().paths[0] = %q, want %q", result.Paths[0], path)
 			}
 		})
 	}
@@ -158,8 +160,8 @@ func TestParseDroppedPaths_BareRelativeWordWithoutExistingFileFallsBackToText(t 
 	_ = withTempWorkingDir(t)
 
 	result := parseDroppedPaths("README")
-	if result.kind != droppedPathParseNotPath {
-		t.Fatalf("parseDroppedPaths() kind = %v, want droppedPathParseNotPath", result.kind)
+	if result.Kind != tuiattachments.DroppedPathParseNotPath {
+		t.Fatalf("parseDroppedPaths() kind = %v, want tuiattachments.DroppedPathParseNotPath", result.Kind)
 	}
 }
 

@@ -4,26 +4,26 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/review/domain"
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
-func newValidReviewProbePlanForTest() reviewprobe.ReviewProbePlan {
-	return reviewprobe.ReviewProbePlan{
-		SchemaVersion: reviewprobe.ReviewProbePlanSchemaVersionV2,
+func newValidReviewProbePlanForTest() reviewprobeplan.ReviewProbePlan {
+	return reviewprobeplan.ReviewProbePlan{
+		SchemaVersion: reviewprobeplan.ReviewProbePlanSchemaVersionV2,
 		TargetKind:    domain.TargetCurrentChanges,
 		Summary:       "Probe current changes.",
-		ImpactSurfaces: []reviewprobe.ReviewProbeImpactSurface{
+		ImpactSurfaces: []reviewprobeplan.ReviewProbeImpactSurface{
 			{
 				ID:              "surface-1",
 				Summary:         "Probe plan validation changed.",
-				Category:        reviewprobe.ReviewProbeImpactSurfaceValidator,
+				Category:        reviewprobeplan.ReviewProbeImpactSurfaceValidator,
 				EvidenceSummary: "Diff touches internal/review/probe_plan_validate.go.",
-				Status:          reviewprobe.ReviewProbeImpactSurfaceNeedsProbe,
+				Status:          reviewprobeplan.ReviewProbeImpactSurfaceNeedsProbe,
 				Reason:          "Focused tests should verify the contract.",
 			},
 		},
-		CandidateRisks: []reviewprobe.ReviewProbeCandidateRisk{
+		CandidateRisks: []reviewprobeplan.ReviewProbeCandidateRisk{
 			{
 				ID:                   "risk-1",
 				Summary:              "Validation could accept an invalid probe plan.",
@@ -31,10 +31,10 @@ func newValidReviewProbePlanForTest() reviewprobe.ReviewProbePlan {
 				SurfaceIDs:           []string{"surface-1"},
 				EvidenceSummary:      "Validation code owns the probe plan contract.",
 				VerificationStrategy: "Run focused review tests.",
-				Status:               reviewprobe.ReviewProbeCandidateRiskNeedsProbe,
+				Status:               reviewprobeplan.ReviewProbeCandidateRiskNeedsProbe,
 			},
 		},
-		Probes: []reviewprobe.ReviewPlannedProbe{
+		Probes: []reviewprobeplan.ReviewPlannedProbe{
 			{
 				ID:             "probe-1",
 				SurfaceIDs:     []string{"surface-1"},
@@ -43,7 +43,7 @@ func newValidReviewProbePlanForTest() reviewprobe.ReviewProbePlan {
 				Mode:           domain.ReviewProbeRepoSandbox,
 				TimeoutSeconds: 30,
 				MaxOutputBytes: 4096,
-				Commands: []reviewprobe.ReviewPlannedProbeCommand{
+				Commands: []reviewprobeplan.ReviewPlannedProbeCommand{
 					{
 						Command: "go",
 						Args:    []string{"test", "./internal/review"},
@@ -55,13 +55,13 @@ func newValidReviewProbePlanForTest() reviewprobe.ReviewProbePlan {
 	}
 }
 
-func newNoProbeReviewProbePlanForTest() reviewprobe.ReviewProbePlan {
+func newNoProbeReviewProbePlanForTest() reviewprobeplan.ReviewProbePlan {
 	plan := newValidReviewProbePlanForTest()
-	plan.ImpactSurfaces[0].Status = reviewprobe.ReviewProbeImpactSurfaceChecked
+	plan.ImpactSurfaces[0].Status = reviewprobeplan.ReviewProbeImpactSurfaceChecked
 	plan.ImpactSurfaces[0].Reason = "Existing evidence covers surface-1."
-	plan.CandidateRisks[0].Status = reviewprobe.ReviewProbeCandidateRiskCheckedByEvidence
+	plan.CandidateRisks[0].Status = reviewprobeplan.ReviewProbeCandidateRiskCheckedByEvidence
 	plan.CandidateRisks[0].VerificationStrategy = "No probe is needed."
-	plan.Probes = []reviewprobe.ReviewPlannedProbe{}
+	plan.Probes = []reviewprobeplan.ReviewPlannedProbe{}
 	plan.NoProbeReason = "surface-1 and risk-1 are checked by existing evidence."
 	return plan
 }

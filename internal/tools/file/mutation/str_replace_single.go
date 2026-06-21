@@ -7,7 +7,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
 	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation/replaceengine"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type strReplaceExecutionDetails struct {
@@ -18,12 +18,12 @@ type strReplaceExecutionDetails struct {
 }
 
 // ExecuteStrReplaceWithPromptIOAndOptions は確認設定を指定してファイル内の文字列を置換する。
-func ExecuteStrReplaceWithPromptIOAndOptions(promptIO ui.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
+func ExecuteStrReplaceWithPromptIOAndOptions(promptIO uiruntime.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (string, error) {
 	details, err := executeStrReplaceWithPromptIOAndOptionsDetails(promptIO, options, path, oldStr, newStr, startLineStr, endLineStr)
 	return details.result.message, err
 }
 
-func executeStrReplaceWithPromptIOAndOptionsDetails(promptIO ui.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (strReplaceExecutionDetails, error) {
+func executeStrReplaceWithPromptIOAndOptionsDetails(promptIO uiruntime.PromptIO, options common.ConfirmOptions, path, oldStr, newStr, startLineStr, endLineStr string) (strReplaceExecutionDetails, error) {
 	linesAdded, linesRemoved := resolveSingleStrReplaceLineStats(oldStr, newStr, startLineStr, endLineStr)
 	details := strReplaceExecutionDetails{
 		linesAdded:   linesAdded,

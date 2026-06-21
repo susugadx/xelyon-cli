@@ -8,7 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/history"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
@@ -49,7 +49,7 @@ func TestHandleUseCommand_WithExplicitModel_UpdatesSessionModel(t *testing.T) {
 		},
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("gpt-old"),
@@ -98,7 +98,7 @@ func TestHandleUseCommand_SwitchesAliasOwnerWithinSameRuntimeIdentity(t *testing
 		CurrentProvider:   &mockCacheClearableProviderForModel{name: "claude"},
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("claude-custom"),
@@ -159,7 +159,7 @@ func TestHandleUseCommand_AzureDisplayNameUsesCanonicalConfigOwner(t *testing.T)
 		CurrentProvider:   &mockCacheClearableProviderForModel{name: "openai"},
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("gpt-5.4"),
@@ -199,7 +199,7 @@ func TestHandleUseCommand_AzureWithoutDeploymentShowsActionableError(t *testing.
 		CurrentProvider:   &mockCacheClearableProviderForModel{name: "openai"},
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("gpt-5.4"),
@@ -230,7 +230,7 @@ func TestHandleUseCommand_AzureWithExplicitDeploymentAllowsPlaceholderName(t *te
 		CurrentProvider:   &mockCacheClearableProviderForModel{name: "openai"},
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI:     uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("gpt-5.4"),
@@ -339,7 +339,7 @@ func TestHandleProviderAndUseCommands_ShareSwitchOutcome(t *testing.T) {
 			Stats:             NewSessionStats("openai", "gpt-old"),
 			Runtime: &AgentRuntime{
 				Config: cfg,
-				UI:     ui.NewRuntime(strings.NewReader(""), out, out),
+				UI:     uiruntime.NewRuntime(strings.NewReader(""), out, out),
 			},
 			agentConversationState: agentConversationState{
 				session: history.NewSession("gpt-old"),
@@ -392,7 +392,7 @@ func TestHandleUseThenModelCommand_PersistsAnthropicAliasOwnerModel(t *testing.T
 		CurrentProvider:   &MockProvider{name: "claude"},
 		Runtime: &AgentRuntime{
 			Config: cfg,
-			UI:     ui.NewRuntime(nil, &out, &out),
+			UI:     uiruntime.NewRuntime(nil, &out, &out),
 		},
 		agentConversationState: agentConversationState{
 			session: history.NewSession("claude-old"),

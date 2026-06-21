@@ -7,7 +7,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // 警告表示用の色
@@ -33,7 +33,7 @@ type StreamParser func(line string) (content string, done bool, err error)
 // コンテキストキャンセル、スピナー制御、エラーハンドリングを統一的に処理
 // アイドルタイムアウト方式: データ受信がない状態がN秒続くとタイムアウト
 // ツールJSON部分は内部で記録するが表示しない
-func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *ui.Spinner, parser StreamParser) (string, error) {
+func ParseStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner, parser StreamParser) (string, error) {
 	cfg := config.FromContext(ctx)
 	idleTimeout := time.Duration(cfg.Streaming.IdleTimeoutSeconds) * time.Second
 	errOut := errorWriterFromContext(ctx)

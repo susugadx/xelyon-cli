@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // AskUserQuestionTool はLLMがユーザーに質問するためのツール
@@ -75,7 +75,7 @@ func (t *AskUserQuestionTool) Run(execCtx tools.ExecutionContext, args map[strin
 	}
 
 	// Questionnaire で質問を表示
-	q := &ui.Questionnaire{
+	q := &uiruntime.Questionnaire{
 		Question:     question,
 		QuestionType: questionType,
 		Options:      options,

@@ -3,7 +3,9 @@ package evidence
 import (
 	"context"
 
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
+	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
+	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 )
 
 // ReviewEvidenceBuilderOption は ReviewEvidenceBuilder の差し替え設定を表す。
@@ -11,12 +13,12 @@ type ReviewEvidenceBuilderOption func(*ReviewEvidenceBuilder)
 
 // ReviewWebSearchEvidenceProvider は ReviewEvidenceBuilder が使う外部 Web 検索 evidence 境界。
 type ReviewWebSearchEvidenceProvider interface {
-	CollectWebSearchEvidence(context.Context, ReviewEvidenceBundle) ReviewWebSearchEvidence
+	CollectWebSearchEvidence(context.Context, ReviewEvidenceBundle) externaldoc.WebSearchEvidence
 }
 
 // ReviewPostPass1WebSearchEvidenceProvider は Pass1 probe plan 後の追加 Web 検索 evidence 収集境界。
 type ReviewPostPass1WebSearchEvidenceProvider interface {
-	CollectPostPass1WebSearchEvidence(context.Context, ReviewEvidenceBundle, reviewprobe.ReviewProbePlan) ReviewWebSearchEvidence
+	CollectPostPass1WebSearchEvidence(context.Context, ReviewEvidenceBundle, reviewprobeplan.ReviewProbePlan) externaldoc.WebSearchEvidence
 }
 
 // ReviewEvidenceBuilder は current_changes の一次情報を git と filesystem から収集する。
@@ -111,7 +113,7 @@ func (b *ReviewEvidenceBuilder) BuildCurrentChanges(ctx context.Context) (Review
 }
 
 // CollectPostPass1WebSearchEvidence は Pass1 probe plan から追加 Web 検索 evidence を収集する。
-func (b *ReviewEvidenceBuilder) CollectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan reviewprobe.ReviewProbePlan) ReviewWebSearchEvidence {
+func (b *ReviewEvidenceBuilder) CollectPostPass1WebSearchEvidence(ctx context.Context, bundle ReviewEvidenceBundle, plan reviewprobeplan.ReviewProbePlan) externaldoc.WebSearchEvidence {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -127,7 +129,7 @@ func (b *ReviewEvidenceBuilder) CollectPostPass1WebSearchEvidence(ctx context.Co
 
 func buildReviewCurrentChangesBundle(repoRoot, cwd string, git reviewCurrentChangesGitEvidence, files reviewCurrentChangesFileEvidence, limits ReviewEvidenceLimits) ReviewEvidenceBundle {
 	return ReviewEvidenceBundle{
-		TargetKind:                           TargetCurrentChanges,
+		TargetKind:                           domain.TargetCurrentChanges,
 		RepoRoot:                             repoRoot,
 		CWD:                                  cwd,
 		StatusShort:                          git.statusShort,

@@ -6,14 +6,14 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestShowTaskSummary_NoChangesWritesNothing(t *testing.T) {
 	var out bytes.Buffer
 	agent := &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 
@@ -27,7 +27,7 @@ func TestShowTaskSummary_UsesTaskOffsetAndDetails(t *testing.T) {
 	var out bytes.Buffer
 	agent := &Agent{
 		Runtime: &AgentRuntime{
-			UI: ui.NewRuntime(strings.NewReader(""), &out, &out),
+			UI: uiruntime.NewRuntime(strings.NewReader(""), &out, &out),
 		},
 	}
 	agent.changeStack = []tools.FileChange{
@@ -41,7 +41,7 @@ func TestShowTaskSummary_UsesTaskOffsetAndDetails(t *testing.T) {
 			Tool: "str_replace",
 			Details: []tools.FileChangeDetail{
 				{FilePath: "internal/agent/agent.go", Action: "modified", LinesAdded: 3, LinesRemoved: 1},
-				{FilePath: "internal/ui/view.go", LinesAdded: 5, LinesRemoved: 0},
+				{FilePath: "internal/uisummary/view.go", LinesAdded: 5, LinesRemoved: 0},
 			},
 		},
 	}

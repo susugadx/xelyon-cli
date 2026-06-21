@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type headlessRunner struct {
@@ -41,7 +41,7 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.Config) *headlessRunner {
 	runtime := NewAgentRuntimeWithConfig(cfg)
 	runtime.AutoApprove = true
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
 	configureRuntimeAuditLoggerFromEnv(runtime, io.Discard, false)
 
 	agent := NewAgentWithRuntime(model, provider, true, runtime)

@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 func TestConfirmWithAutoApprove_AutoApproveFlag(t *testing.T) {
-	promptIO := ui.NewPromptIO(strings.NewReader(""), io.Discard, io.Discard, nil)
+	promptIO := uiruntime.NewPromptIO(strings.NewReader(""), io.Discard, io.Discard, nil)
 	opts := ConfirmOptions{
 		AutoApprove: true,
 		Config:      config.DefaultConfig(),
@@ -25,7 +25,7 @@ func TestConfirmWithAutoApprove_AutoApproveFlag(t *testing.T) {
 }
 
 func TestConfirmWithAutoApprove_SafeToolConfig(t *testing.T) {
-	promptIO := ui.NewPromptIO(strings.NewReader("n\n"), io.Discard, io.Discard, nil)
+	promptIO := uiruntime.NewPromptIO(strings.NewReader("n\n"), io.Discard, io.Discard, nil)
 	cfg := config.DefaultConfig()
 	cfg.ToolConfirm.AutoApproveSafe = true
 	opts := ConfirmOptions{
@@ -41,7 +41,7 @@ func TestConfirmWithAutoApprove_SafeToolConfig(t *testing.T) {
 }
 
 func TestConfirmWithAutoApprove_MediumToolConfig(t *testing.T) {
-	promptIO := ui.NewPromptIO(strings.NewReader("n\n"), io.Discard, io.Discard, nil)
+	promptIO := uiruntime.NewPromptIO(strings.NewReader("n\n"), io.Discard, io.Discard, nil)
 	cfg := config.DefaultConfig()
 	cfg.ToolConfirm.AutoApproveMedium = true
 	opts := ConfirmOptions{
@@ -59,7 +59,7 @@ func TestConfirmWithAutoApprove_MediumToolConfig(t *testing.T) {
 func TestConfirmWithAutoApprove_LowToolAutoApprovedWithFlag(t *testing.T) {
 	// bash は SafetyLow → --auto-approve 有効時は全ツール自動承認
 	var out bytes.Buffer
-	promptIO := ui.NewPromptIO(strings.NewReader(""), &out, io.Discard, nil)
+	promptIO := uiruntime.NewPromptIO(strings.NewReader(""), &out, io.Discard, nil)
 	opts := ConfirmOptions{
 		AutoApprove: true,
 		Config:      config.DefaultConfig(),
@@ -76,7 +76,7 @@ func TestConfirmWithAutoApprove_LowToolAutoApprovedWithFlag(t *testing.T) {
 
 func TestConfirmWithAutoApprove_LowToolNotApprovedByConfig(t *testing.T) {
 	// bash は SafetyLow → config.AutoApproveSafe/Medium では承認されない
-	promptIO := ui.NewPromptIO(strings.NewReader("n\n"), io.Discard, io.Discard, nil)
+	promptIO := uiruntime.NewPromptIO(strings.NewReader("n\n"), io.Discard, io.Discard, nil)
 	cfg := config.DefaultConfig()
 	cfg.ToolConfirm.AutoApproveSafe = true
 	cfg.ToolConfirm.AutoApproveMedium = true
@@ -93,7 +93,7 @@ func TestConfirmWithAutoApprove_LowToolNotApprovedByConfig(t *testing.T) {
 
 func TestConfirmWithAutoApprove_PrintsAutoApprovedMessage(t *testing.T) {
 	var out bytes.Buffer
-	promptIO := ui.NewPromptIO(strings.NewReader(""), &out, io.Discard, nil)
+	promptIO := uiruntime.NewPromptIO(strings.NewReader(""), &out, io.Discard, nil)
 	opts := ConfirmOptions{
 		AutoApprove: true,
 		Config:      config.DefaultConfig(),

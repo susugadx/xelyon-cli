@@ -3,7 +3,7 @@ package tui
 import (
 	"time"
 
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiprompt"
 )
 
 const ChatRoleAssistantChunk = "assistant_chunk"
@@ -88,8 +88,8 @@ type AgentDoneMsg struct {
 // OpenPromptMsg は TUI prompt modal を開くMsg。
 type OpenPromptMsg struct {
 	ID      uint64
-	Request ui.PromptRequest
-	Respond chan<- ui.PromptResponse
+	Request uiprompt.PromptRequest
+	Respond chan<- uiprompt.PromptResponse
 }
 
 // CancelPromptMsg は待機中の prompt modal をキャンセルするMsg。

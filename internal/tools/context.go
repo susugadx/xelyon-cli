@@ -12,7 +12,7 @@ import (
 	lsplib "github.com/susugadx/xelyon-cli/internal/lsp"
 	"github.com/susugadx/xelyon-cli/internal/repomap"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // ToolResultInfo はツール実行結果の構造化データ。
@@ -54,8 +54,8 @@ type ExecutionContext struct {
 	Stdin              io.Reader
 	Stdout             io.Writer
 	Stderr             io.Writer
-	PromptReader       *ui.MultilineReader
-	Runtime            *ui.Runtime // スピナー停止に使用する UI Runtime
+	PromptReader       *uiruntime.MultilineReader
+	Runtime            *uiruntime.Runtime // スピナー停止に使用する UI Runtime
 	Registry           *Registry
 	ToolCache          ToolCacheInterface
 	LSPClient          *lsplib.Client
@@ -94,9 +94,9 @@ func (ctx ExecutionContext) EffectivePromptContext() context.Context {
 }
 
 // PromptIO は対話 UI 用の入出力コンテキストへ変換する。
-func (ctx ExecutionContext) PromptIO() ui.PromptIO {
+func (ctx ExecutionContext) PromptIO() uiruntime.PromptIO {
 	normalized := normalizeExecutionContext(ctx)
-	promptIO := ui.NewPromptIOWithRuntime(normalized.Stdin, normalized.Stdout, normalized.Stderr, normalized.PromptReader, ctx.Runtime)
+	promptIO := uiruntime.NewPromptIOWithRuntime(normalized.Stdin, normalized.Stdout, normalized.Stderr, normalized.PromptReader, ctx.Runtime)
 	promptIO.Context = normalized.PromptContext
 	return promptIO
 }
@@ -159,7 +159,7 @@ func (ctx ExecutionContext) EffectiveLocatorRegistry() *locator.Registry {
 }
 
 func normalizeExecutionContext(ctx ExecutionContext) ExecutionContext {
-	runtime := ui.DefaultRuntime()
+	runtime := uiruntime.DefaultRuntime()
 	if ctx.Context == nil {
 		ctx.Context = context.Background()
 	}

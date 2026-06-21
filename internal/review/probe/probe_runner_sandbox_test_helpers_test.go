@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/review/domain"
 )
 
 const probeNestedGoTestTimeout = 45 * time.Second
@@ -17,7 +19,7 @@ type probeModeBlockedCase struct {
 	errorContains string
 }
 
-func runProbeModeBlockedCases(t *testing.T, mode ReviewProbeMode, cases []probeModeBlockedCase) {
+func runProbeModeBlockedCases(t *testing.T, mode domain.ReviewProbeMode, cases []probeModeBlockedCase) {
 	t.Helper()
 
 	for _, tt := range cases {
@@ -39,8 +41,8 @@ func runProbeModeBlockedCases(t *testing.T, mode ReviewProbeMode, cases []probeM
 func assertProbeBlockedWithoutExecution(t *testing.T, result ReviewProbeResult, errorContains string) {
 	t.Helper()
 
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbeBlocked, result.Error)
 	}
 	if len(result.CommandResults) != 0 {
 		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))
@@ -110,8 +112,8 @@ func assertIsolatedProbeEnv(t *testing.T, envMap map[string]string, expected iso
 func assertCommandResolutionPassed(t *testing.T, result ReviewProbeResult, outputContains string) {
 	t.Helper()
 
-	if result.Status != ReviewProbePassed {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbePassed, result.Error)
+	if result.Status != domain.ReviewProbePassed {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbePassed, result.Error)
 	}
 	if len(result.CommandResults) != 1 {
 		t.Fatalf("len(CommandResults) = %d, want 1", len(result.CommandResults))
@@ -124,8 +126,8 @@ func assertCommandResolutionPassed(t *testing.T, result ReviewProbeResult, outpu
 func assertCommandResolutionBlocked(t *testing.T, result ReviewProbeResult) {
 	t.Helper()
 
-	if result.Status != ReviewProbeBlocked {
-		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, ReviewProbeBlocked, result.Error)
+	if result.Status != domain.ReviewProbeBlocked {
+		t.Fatalf("Status = %q, want %q (error=%q)", result.Status, domain.ReviewProbeBlocked, result.Error)
 	}
 	if len(result.CommandResults) != 0 {
 		t.Fatalf("len(CommandResults) = %d, want 0", len(result.CommandResults))

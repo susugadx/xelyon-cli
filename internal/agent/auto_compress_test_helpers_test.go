@@ -8,7 +8,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type compressionTestProvider struct {
@@ -123,7 +123,7 @@ func newCompressionTestAgent(t *testing.T, provider *compressionTestProvider, mo
 
 	var out bytes.Buffer
 	runtime := NewAgentRuntimeWithConfig(cfg)
-	runtime.UI = ui.NewRuntime(strings.NewReader(""), &out, &out)
+	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), &out, &out)
 
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	t.Cleanup(agent.Cleanup)

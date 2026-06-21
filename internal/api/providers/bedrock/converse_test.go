@@ -15,7 +15,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/taskstate"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 type mockConverseStreamClient struct {
@@ -705,10 +705,10 @@ func TestProvider_HandleConverseStream_CombinesTextToolCallsAndUsage(t *testing.
 		},
 	}
 
-	ctx := ui.WithRuntime(context.Background(), ui.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
+	ctx := uiruntime.WithRuntime(context.Background(), uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard))
 	ctx = api.WithAssistantUpdateMode(ctx, api.AssistantUpdatesOff)
 
-	content, err := p.handleConverseStream(ctx, output, ui.NewSpinnerWithWriter(io.Discard))
+	content, err := p.handleConverseStream(ctx, output, uiruntime.NewSpinnerWithWriter(io.Discard))
 	if err != nil {
 		t.Fatalf("handleConverseStream() error = %v", err)
 	}

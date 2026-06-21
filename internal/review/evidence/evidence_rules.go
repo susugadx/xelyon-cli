@@ -12,6 +12,11 @@ var reviewEvidenceRuleFilePaths = []string{
 	".codex/config.toml",
 }
 
+// KnownReviewRuleFilePaths は review evidence が収集対象にする rule file path 一覧を返す。
+func KnownReviewRuleFilePaths() []string {
+	return append([]string(nil), reviewEvidenceRuleFilePaths...)
+}
+
 func buildReviewRuleFileEvidence(repoRoot string, limits ReviewEvidenceLimits) ([]ReviewRuleFileEvidence, error) {
 	files := make([]ReviewRuleFileEvidence, 0, len(reviewEvidenceRuleFilePaths))
 	for _, path := range reviewEvidenceRuleFilePaths {

@@ -5,11 +5,11 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/termtext"
 	"os"
 )
 
-func buildMCPStatusSummaryTable(agent *Agent, snapshot mcp.StatusSnapshot, surface mcpToolSurfaceSelection, analysis mcpsurface.Report) *ui.Table {
+func buildMCPStatusSummaryTable(agent *Agent, snapshot mcp.StatusSnapshot, surface mcpToolSurfaceSelection, analysis mcpsurface.Report) *termtext.Table {
 	budget := surface.budget
 	if budget == (mcpsurface.Budget{}) {
 		var cfg *config.Config
@@ -18,7 +18,7 @@ func buildMCPStatusSummaryTable(agent *Agent, snapshot mcp.StatusSnapshot, surfa
 		}
 		budget = config.EffectiveMCPSurfaceBudget(cfg)
 	}
-	return ui.NewTable().
+	return termtext.NewTable().
 		AddRow("Runtime", mcpRuntimeStatusText(agent)).
 		AddRow("Config", mcpStatusConfigText(snapshot)).
 		AddRow("Servers", fmt.Sprintf(

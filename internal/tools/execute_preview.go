@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // printToolArgs はツールの引数を簡潔に表示する（Execute/PreviewToolCallで共通使用）
@@ -51,7 +51,7 @@ func previewReadFilePaths(args map[string]string) []string {
 // PreviewToolCallWithWriter は指定 writer にツール情報を表示する（実行はしない）。
 func PreviewToolCallWithWriter(w io.Writer, tc *ToolCall) {
 	if w == nil {
-		w = ui.DefaultRuntime().Output()
+		w = uiruntime.DefaultRuntime().Output()
 	}
 	color.New(color.FgCyan).Fprintf(w, "🔧 Tool: %s (Dry Run)\n", tc.Tool)
 	printToolArgs(w, tc)
@@ -59,5 +59,5 @@ func PreviewToolCallWithWriter(w io.Writer, tc *ToolCall) {
 
 // PreviewToolCall displays tool information without executing it
 func PreviewToolCall(tc *ToolCall) {
-	PreviewToolCallWithWriter(ui.DefaultRuntime().Output(), tc)
+	PreviewToolCallWithWriter(uiruntime.DefaultRuntime().Output(), tc)
 }

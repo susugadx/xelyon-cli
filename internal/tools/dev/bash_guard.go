@@ -6,14 +6,14 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/tools/common"
-	"github.com/susugadx/xelyon-cli/internal/ui"
+	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
 // checkAndConfirmBash は共通のセキュリティチェック + 確認 UI を実行する。
 // execution policy に基づき discovery bash の抑止・verification bash の自動承認を行う。
 // 返り値: (reason, "", true) = 自動承認（reason は理由）, ("", errorMsg, false) = ブロック/キャンセル
-func checkAndConfirmBash(promptIO ui.PromptIO, cfg *config.Config, command string) (AutoApproveReason, string, bool) {
-	promptIO = ui.NormalizePromptIO(promptIO)
+func checkAndConfirmBash(promptIO uiruntime.PromptIO, cfg *config.Config, command string) (AutoApproveReason, string, bool) {
+	promptIO = uiruntime.NormalizePromptIO(promptIO)
 	out := common.NewOutput(promptIO.Out, promptIO.Err)
 	if cfg == nil {
 		cfg = config.DefaultConfig()
@@ -118,7 +118,7 @@ func printGenericShellPrompt(out common.Output, command string) {
 
 // confirmBashPromptWithReason は bash の確認プロンプトを表示する。
 // ユーザーが承認した場合は approveNone（ユーザー確認済み）を返す。
-func confirmBashPromptWithReason(promptIO ui.PromptIO, command string) (AutoApproveReason, string, bool) {
+func confirmBashPromptWithReason(promptIO uiruntime.PromptIO, command string) (AutoApproveReason, string, bool) {
 	dec := common.ConfirmWithIO(promptIO, "Run this command? / 実行しますか？")
 	switch dec.Action {
 	case common.ConfirmYes:
