@@ -14,7 +14,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/ui"
 )
 
-func TestSaveAndSyncProjectConfigRefreshesProjectPromptWhenProjectMapDisabled(t *testing.T) {
+func TestSaveAndSyncProjectConfigStripsLegacyPromptBlockWhenProjectMapDisabled(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 	cfg := newProjectMapDisabledConfig()
@@ -50,11 +50,11 @@ func TestSaveAndSyncProjectConfigRefreshesProjectPromptWhenProjectMapDisabled(t 
 		t.Fatalf("SaveAndSyncProjectConfig() error = %v", err)
 	}
 
-	if !strings.Contains(agent.SystemPrompt, "new context") || !strings.Contains(agent.SystemPrompt, "new rule") {
-		t.Fatalf("SystemPrompt did not refresh project config:\n%s", agent.SystemPrompt)
-	}
 	if strings.Contains(agent.SystemPrompt, "old context") || strings.Contains(agent.SystemPrompt, "old rule") {
 		t.Fatalf("SystemPrompt kept stale project config:\n%s", agent.SystemPrompt)
+	}
+	if strings.Contains(agent.SystemPrompt, "new context") || strings.Contains(agent.SystemPrompt, "new rule") {
+		t.Fatalf("SystemPrompt injected legacy project config after save:\n%s", agent.SystemPrompt)
 	}
 }
 
@@ -124,8 +124,8 @@ func TestSaveAndSyncProjectConfigRefreshesProjectMapIgnorePatterns(t *testing.T)
 	if testProjectMapHasFile(agent, "ignored/skip.go") {
 		t.Fatal("project map should refresh with saved project ignore patterns")
 	}
-	if !strings.Contains(agent.SystemPrompt, "ctx") {
-		t.Fatalf("SystemPrompt did not refresh project context:\n%s", agent.SystemPrompt)
+	if strings.Contains(agent.SystemPrompt, "ctx") {
+		t.Fatalf("SystemPrompt injected legacy project context:\n%s", agent.SystemPrompt)
 	}
 }
 

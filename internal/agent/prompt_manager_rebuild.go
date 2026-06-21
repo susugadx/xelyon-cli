@@ -72,7 +72,7 @@ func (m *PromptManager) applyDynamicPromptSections(req systemPromptRebuildReques
 		return
 	}
 	if bundle != nil {
-		m.InjectProjectInstructions(bundle, req.input)
+		m.InjectProjectInstructions(bundle)
 	}
 	if req.injectProjectMap {
 		injectProjectMap(a, req.input)
@@ -136,12 +136,12 @@ func (m *PromptManager) rebuildProjectPromptWithResolvedBundle(input string, bun
 }
 
 // InjectProjectInstructions は現在の SystemPrompt に project instructions を注入する。
-func (m *PromptManager) InjectProjectInstructions(bundle *config.ProjectInstructionBundle, input string) {
+func (m *PromptManager) InjectProjectInstructions(bundle *config.ProjectInstructionBundle) {
 	a := m.agent
 	if a == nil {
 		return
 	}
-	a.SystemPrompt = injectProjectInstructionBundle(a.SystemPrompt, bundle, input)
+	a.SystemPrompt = injectProjectInstructionBundle(a.SystemPrompt, bundle)
 }
 
 // StripProjectMapSection は SystemPrompt から project map セクションを除去する。

@@ -134,7 +134,7 @@ func TestAddComments(t *testing.T) {
 		"    ui_language: auto",
 		"# Agent Instructions 設定",
 		"    project:",
-		"        # project-local guidance の読み込みモード（通常は always / off。fallback は legacy 互換）",
+		"        # project-local guidance の読み込みモード（always は AGENTS.md などを読み込み、fallback は deprecated alias として同じ挙動、off は無効）",
 		"        mode: always",
 	} {
 		if !strings.Contains(output, expected) {

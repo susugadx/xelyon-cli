@@ -69,6 +69,27 @@ func TestSystemPrompt_WorkflowRules(t *testing.T) {
 	}
 }
 
+func TestSystemPrompt_ProjectContextDefinesAgentsFirstConfigRole(t *testing.T) {
+	for _, want := range []string{
+		"AGENTS.md is the primary project guidance file.",
+		"xelyon.yaml is structured repo-local XELYON config",
+	} {
+		if !strings.Contains(SystemPrompt, want) {
+			t.Fatalf("SystemPrompt missing project context wording %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"Legacy xelyon.yaml rules are mandatory project policy",
+		"mandatory project policy",
+		"PROJECT-SPECIFIC RULES (MANDATORY)",
+		"Violating ANY of these rules is a critical failure.",
+	} {
+		if strings.Contains(SystemPrompt, forbidden) {
+			t.Fatalf("SystemPrompt should not contain legacy mandatory wording %q", forbidden)
+		}
+	}
+}
+
 func TestSystemPrompt_AskPolicyIsConsequentialChoiceOnly(t *testing.T) {
 	for _, want := range []string{
 		"Ask via ask_user_question only when a requirement, public contract, destructive action, security boundary, or user-visible tradeoff needs user choice",

@@ -72,19 +72,12 @@ func (a *Agent) projectInstructionBundleIfLoaded() *config.ProjectInstructionBun
 	return a.projectInstructionBundle
 }
 
-func buildProjectInstructionBlock(bundle *config.ProjectInstructionBundle, input string) string {
+func buildProjectInstructionBlock(bundle *config.ProjectInstructionBundle) string {
 	if bundle == nil {
 		return ""
 	}
 
-	selection := config.ProjectPromptSelection{}
-	if bundle.ProjectConfig != nil {
-		selection = config.SelectProjectPromptSelection(bundle.ProjectConfig, input)
-	}
-
 	return prompt.BuildProjectInstructionBlock(prompt.ProjectInstructionBlockInput{
-		MandatoryRules:  selection.Rules,
-		ProjectContexts: selection.Contexts,
 		ProjectGuidance: toPromptInstructionEntries(bundle.ProjectGuidance),
 		GlobalGuidance:  toPromptInstructionEntries(bundle.GlobalGuidance),
 		Warnings:        bundle.WarningMessages(),
@@ -109,13 +102,13 @@ func toPromptInstructionEntries(files []config.InstructionFile) []prompt.Project
 }
 
 // injectProjectInstructionBundle は bundle を SystemPrompt に注入する。
-func injectProjectInstructionBundle(systemPrompt string, bundle *config.ProjectInstructionBundle, input string) string {
+func injectProjectInstructionBundle(systemPrompt string, bundle *config.ProjectInstructionBundle) string {
 	systemPrompt = prompt.StripProjectConfigSections(systemPrompt)
 	if bundle == nil {
 		return systemPrompt
 	}
 
-	projectBlock := buildProjectInstructionBlock(bundle, input)
+	projectBlock := buildProjectInstructionBlock(bundle)
 	if projectBlock == "" {
 		return systemPrompt
 	}
@@ -232,7 +225,7 @@ func estimateProjectInstructionTokens(bundle *config.ProjectInstructionBundle) i
 	if bundle == nil {
 		return 0
 	}
-	return token.EstimateTokenCount(buildProjectInstructionBlock(bundle, ""))
+	return token.EstimateTokenCount(buildProjectInstructionBlock(bundle))
 }
 
 func (a *Agent) refreshProjectPrompt(input string) {

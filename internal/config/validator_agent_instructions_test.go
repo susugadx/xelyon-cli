@@ -23,6 +23,30 @@ func TestValidateConfig_AgentInstructionsMode(t *testing.T) {
 	}
 }
 
+func TestValidateConfig_AgentInstructionsFallbackModeDeprecated(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.Mode = AgentInstructionProjectModeFallback
+
+	result := ValidateConfig(cfg)
+
+	for _, issue := range result.Issues {
+		if issue.Field != "agent_instructions.project.mode" {
+			continue
+		}
+		if issue.Severity != ValidationSeverityWarning {
+			t.Fatalf("Severity = %s, want warning", issue.Severity)
+		}
+		if issue.Suggestion != AgentInstructionProjectModeAlways {
+			t.Fatalf("Suggestion = %q, want %q", issue.Suggestion, AgentInstructionProjectModeAlways)
+		}
+		if !issue.CanAutoFix || issue.FixedValue != AgentInstructionProjectModeAlways {
+			t.Fatalf("autofix = (%v, %#v), want always", issue.CanAutoFix, issue.FixedValue)
+		}
+		return
+	}
+	t.Fatal("expected deprecated fallback issue for agent_instructions.project.mode")
+}
+
 func TestValidateConfig_AgentInstructionsByteLimits(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.AgentInstructions.MaxFileBytes = 0

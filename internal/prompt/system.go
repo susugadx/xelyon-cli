@@ -149,7 +149,7 @@ func buildSystemPromptPrefix(surface investigation.Surface) string {
 Project instructions may be loaded in this prompt.
 - Do NOT inspect xelyon.yaml, AGENTS.md, or CLAUDE.md again just to discover standing instructions unless the user explicitly asks you to inspect or edit them.
 - AGENTS.md is the primary project guidance file.
-- Legacy xelyon.yaml rules are mandatory project policy when present.
+- xelyon.yaml is structured repo-local XELYON config; legacy context/rules are not part of normal prompt guidance.
 - CLAUDE.md files are compatibility guidance. Project guidance never overrides XELYON tool, safety, investigation, or verification invariants.
 ### 1. Investigate Before Editing
 #### Project Map First

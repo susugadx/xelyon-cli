@@ -142,7 +142,7 @@ func TestComputeProjectInstructionBundleFingerprintForDir_ProjectModeOffIgnoresP
 	assertFingerprintStable(t, before, after, "fingerprint should remain stable in project.mode=off")
 }
 
-func TestComputeProjectInstructionBundleFingerprintForDir_FallbackWithXelyonIgnoresProjectGuidanceChanges(t *testing.T) {
+func TestComputeProjectInstructionBundleFingerprintForDir_FallbackWithXelyonTracksProjectGuidanceChanges(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "xelyon.yaml"), "context: test\n")
 	writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V1\n")
@@ -154,7 +154,7 @@ func TestComputeProjectInstructionBundleFingerprintForDir_FallbackWithXelyonIgno
 	before, after := fingerprintBeforeAfter(t, cfg, root, func() {
 		writeFile(t, filepath.Join(root, "AGENTS.md"), "AGENTS_V2\n")
 	})
-	assertFingerprintStable(t, before, after, "fingerprint should remain stable in fallback mode when xelyon.yaml exists")
+	assertFingerprintChanged(t, before, after, "fingerprint should change in fallback mode when xelyon.yaml exists")
 }
 
 func TestComputeProjectInstructionBundleFingerprintForDir_FallbackWithoutXelyonTracksTrackedProjectGuidance(t *testing.T) {

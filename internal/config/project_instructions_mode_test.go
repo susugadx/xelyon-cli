@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -24,7 +25,7 @@ func TestLoadProjectConfig_AGENTSOnlyStillNil(t *testing.T) {
 	}
 }
 
-func TestLoadProjectInstructionBundle_FallbackModeSkipsGuidanceWhenXelyonExists(t *testing.T) {
+func TestLoadProjectInstructionBundle_FallbackModeLoadsGuidanceWhenXelyonExists(t *testing.T) {
 	requireGit(t)
 
 	root := t.TempDir()
@@ -40,9 +41,13 @@ func TestLoadProjectInstructionBundle_FallbackModeSkipsGuidanceWhenXelyonExists(
 	if bundle.ProjectConfig == nil {
 		t.Fatal("expected ProjectConfig to be loaded")
 	}
-	if len(bundle.ProjectGuidance) != 0 {
-		t.Fatalf("ProjectGuidance len = %d, want 0", len(bundle.ProjectGuidance))
+	if len(bundle.ProjectGuidance) != 1 {
+		t.Fatalf("ProjectGuidance len = %d, want 1", len(bundle.ProjectGuidance))
 	}
+	if bundle.ProjectGuidance[0].Strength != InstructionStrengthProjectGuidance {
+		t.Fatalf("Strength = %q, want %q", bundle.ProjectGuidance[0].Strength, InstructionStrengthProjectGuidance)
+	}
+	assertProjectModeFallbackDeprecationWarning(t, bundle)
 }
 
 func TestLoadProjectInstructionBundle_AlwaysModeKeepsProjectGuidanceWithLegacyXelyon(t *testing.T) {
@@ -63,6 +68,11 @@ func TestLoadProjectInstructionBundle_AlwaysModeKeepsProjectGuidanceWithLegacyXe
 	}
 	if bundle.ProjectGuidance[0].Strength != InstructionStrengthProjectGuidance {
 		t.Fatalf("Strength = %q, want %q", bundle.ProjectGuidance[0].Strength, InstructionStrengthProjectGuidance)
+	}
+	for _, warning := range bundle.WarningMessages() {
+		if strings.Contains(warning, "project.mode=fallback is deprecated") {
+			t.Fatalf("always mode should not emit fallback deprecation warning: %#v", bundle.WarningMessages())
+		}
 	}
 }
 
@@ -98,4 +108,14 @@ func TestLoadProjectInstructionBundle_OffModeSkipsProjectGuidance(t *testing.T) 
 	if len(bundle.ProjectGuidance) != 0 {
 		t.Fatalf("ProjectGuidance len = %d, want 0", len(bundle.ProjectGuidance))
 	}
+}
+
+func assertProjectModeFallbackDeprecationWarning(t *testing.T, bundle *ProjectInstructionBundle) {
+	t.Helper()
+	for _, warning := range bundle.WarningMessages() {
+		if strings.Contains(warning, "project.mode=fallback is deprecated") {
+			return
+		}
+	}
+	t.Fatalf("expected fallback deprecation warning, got %#v", bundle.WarningMessages())
 }

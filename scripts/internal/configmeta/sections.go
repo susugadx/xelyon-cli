@@ -266,7 +266,7 @@ var Sections = map[string]SectionInfo{
 			"CLAUDE.md は互換候補として選択できます",
 		},
 		Fields: map[string]string{
-			"project.mode":               "project-local guidance の読み込みモード（通常は always / off。fallback は legacy 互換）",
+			"project.mode":               "project-local guidance の読み込みモード（always は AGENTS.md などを読み込み、fallback は deprecated alias として同じ挙動、off は無効）",
 			"project.files":              "project-local guidance ファイル候補（basename は root→cwd / root→入力参照 path の scoped chain、/ を含む path は root 相対 explicit file。既定は AGENTS.md）",
 			"project.include_gitignored": "gitignored / untracked guidance を許可",
 			"global.enabled":             "global guidance 読み込みを有効化",

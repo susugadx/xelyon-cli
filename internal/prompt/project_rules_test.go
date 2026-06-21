@@ -221,28 +221,29 @@ func TestBuildProjectInstructionBlock_NoLegacyInstructionsKeepProjectGuidanceLan
 	}
 }
 
-func TestBuildProjectInstructionBlock_XelyonRulesRemainMandatory(t *testing.T) {
+func TestBuildProjectInstructionBlock_DoesNotRenderLegacyMandatoryLanguage(t *testing.T) {
 	block := BuildProjectInstructionBlock(ProjectInstructionBlockInput{
-		MandatoryRules: []string{"Run go test ./..."},
 		ProjectGuidance: []ProjectInstructionEntry{
-			{Label: "CLAUDE.md", Content: "Advisory style note.", Strength: "project_guidance"},
+			{Label: "AGENTS.md", Content: "Repository guidance body.", Strength: "project_guidance"},
 		},
 	})
 
-	if !strings.Contains(block, "PROJECT-SPECIFIC RULES (MANDATORY)") {
-		t.Fatal("mandatory rules header missing")
+	for _, forbidden := range []string{
+		"PROJECT-SPECIFIC RULES (MANDATORY)",
+		"Violating ANY",
+		"critical failure",
+		"mandatory project policy",
+		"Legacy xelyon.yaml Context",
+	} {
+		if strings.Contains(block, forbidden) {
+			t.Fatalf("project instruction block should not render legacy mandatory language %q:\n%s", forbidden, block)
+		}
 	}
-	if !strings.Contains(block, "1. Run go test ./...") {
-		t.Fatal("mandatory rule missing")
+	if !strings.Contains(block, `<repository_instructions scope="." source="AGENTS.md">`) {
+		t.Fatal("missing AGENTS.md repository wrapper")
 	}
-	if strings.Contains(block, "advisory guidance") {
-		t.Fatalf("legacy xelyon.yaml should not downgrade repository guidance to advisory:\n%s", block)
-	}
-	if strings.Contains(block, "1. Advisory style note.") {
-		t.Fatal("guidance content should not be converted into mandatory numbered rules")
-	}
-	if !strings.Contains(block, `<repository_instructions scope="." source="CLAUDE.md">`) {
-		t.Fatal("missing CLAUDE.md repository wrapper")
+	if !strings.Contains(block, "xelyon.yaml is structured repo-local XELYON config") {
+		t.Fatal("missing structured xelyon.yaml precedence wording")
 	}
 }
 

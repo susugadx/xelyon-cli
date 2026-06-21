@@ -10,8 +10,8 @@ import (
 var projectConfigBlockRe = regexp.MustCompile(`(?s)\n?<!-- PROJECT_CONFIG_START -->.*?<!-- PROJECT_CONFIG_END -->\n?`)
 var trailingProjectConfigBlockRe = regexp.MustCompile(`(?s)\n?<!-- PROJECT_CONFIG_START -->.*?<!-- PROJECT_CONFIG_END -->\s*$`)
 
-// BuildRulesBlockFromList は []string のルールリストから mandatory rules ブロックを構築する。
-// xelyon.yaml の rules フィールド用。空リストの場合は空文字を返す。
+// BuildRulesBlockFromList は legacy rules ブロックを構築する互換 helper。
+// 新しい project instruction 注入経路では呼ばない。空リストの場合は空文字を返す。
 func BuildRulesBlockFromList(rules []string) string {
 	if len(rules) == 0 {
 		return ""
@@ -27,7 +27,7 @@ func BuildRulesBlockFromList(rules []string) string {
 	return b.String()
 }
 
-// BuildProjectConfigBlock は project rules/context を system prompt 用の1ブロックにまとめる。
+// BuildProjectConfigBlock は legacy project rules/context を marker 付きブロックにまとめる互換 helper。
 func BuildProjectConfigBlock(rules []string, contexts []string) string {
 	rulesBlock := BuildRulesBlockFromList(rules)
 	contextParts := normalizeProjectContexts(contexts)
@@ -60,14 +60,12 @@ type ProjectInstructionEntry struct {
 
 // ProjectInstructionBlockInput は project instruction block 生成入力 DTO。
 type ProjectInstructionBlockInput struct {
-	MandatoryRules  []string
-	ProjectContexts []string
 	ProjectGuidance []ProjectInstructionEntry
 	GlobalGuidance  []ProjectInstructionEntry
 	Warnings        []string
 }
 
-// BuildProjectInstructionBlock は xelyon.yaml mandatory rules と imported guidance を
+// BuildProjectInstructionBlock は imported guidance と load warning を
 // 優先順位説明付きで 1 ブロックに組み立てる。
 func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 	section, ok := BuildProjectInstructionSection(input)
@@ -79,14 +77,12 @@ func BuildProjectInstructionBlock(input ProjectInstructionBlockInput) string {
 
 // BuildProjectInstructionSection は project instructions を repo_instruction section として構築する。
 func BuildProjectInstructionSection(input ProjectInstructionBlockInput) (PromptSection, bool) {
-	rulesBlock := BuildRulesBlockFromList(input.MandatoryRules)
-	contextParts := normalizeProjectContexts(input.ProjectContexts)
 	warnings := normalizeProjectWarnings(input.Warnings)
 	hasProjectGuidance := len(input.ProjectGuidance) > 0
 	hasGlobalGuidance := len(input.GlobalGuidance) > 0
 	hasWarnings := len(warnings) > 0
 
-	if rulesBlock == "" && len(contextParts) == 0 && !hasProjectGuidance && !hasGlobalGuidance && !hasWarnings {
+	if !hasProjectGuidance && !hasGlobalGuidance && !hasWarnings {
 		return PromptSection{}, false
 	}
 
@@ -95,13 +91,6 @@ func BuildProjectInstructionSection(input ProjectInstructionBlockInput) (PromptS
 	b.WriteString("\n## Project Instruction Precedence\n\n")
 	b.WriteString(buildProjectInstructionPrecedenceBlock())
 
-	if rulesBlock != "" {
-		b.WriteString(rulesBlock)
-	}
-	if len(contextParts) > 0 {
-		b.WriteString("\n\n## Legacy xelyon.yaml Context\n")
-		b.WriteString(strings.Join(contextParts, "\n\n"))
-	}
 	if hasProjectGuidance {
 		appendRepositoryGuidanceSection(&b, "## Imported Project Guidance", projectGuidanceText, input.ProjectGuidance)
 	}

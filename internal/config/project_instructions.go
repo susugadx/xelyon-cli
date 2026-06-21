@@ -7,7 +7,7 @@ import (
 )
 
 // ProjectInstructionBundle は project instruction 注入用の統合データ。
-// xelyon.yaml の mandatory policy と AGENTS/CLAUDE guidance を分離して保持する。
+// xelyon.yaml の structured config と AGENTS/CLAUDE guidance を分離して保持する。
 type ProjectInstructionBundle struct {
 	RootPath   string
 	RootSource ProjectInstructionRootSource
@@ -69,7 +69,10 @@ const (
 	ProjectInstructionWarningInvalidProjectGuidancePath ProjectInstructionWarningCode = "invalid_project_guidance_path"
 	ProjectInstructionWarningLoadSkipped                ProjectInstructionWarningCode = "load_skipped"
 	ProjectInstructionWarningImportLoadSkipped          ProjectInstructionWarningCode = "import_load_skipped"
+	ProjectInstructionWarningDeprecatedFallbackMode     ProjectInstructionWarningCode = "deprecated_project_mode_fallback"
 )
+
+const projectModeFallbackDeprecationMessage = "agent_instructions.project.mode=fallback is deprecated; XELYON now treats it as AGENTS-first guidance loading. Use mode=always to keep this behavior or mode=off to disable project guidance."
 
 // ProjectInstructionWarning は guidance 読み込み時の型付き warning。
 type ProjectInstructionWarning struct {
@@ -154,8 +157,9 @@ func LoadProjectInstructionBundleForDirWithInputPaths(cfg *Config, cwd string, i
 
 	mode := normalizeAgentInstructionProjectMode(cfgForLoad.AgentInstructions.Project.Mode)
 	budget := newInstructionByteBudget(cfgForLoad.AgentInstructions)
+	appendDeprecatedProjectModeFallbackWarning(bundle, mode)
 
-	if shouldLoadProjectGuidance(mode, projectCfg != nil) {
+	if shouldLoadProjectGuidance(mode) {
 		strength := resolveProjectGuidanceStrength()
 		bundle.ProjectGuidance = loadProjectGuidanceFiles(bundle, cfgForLoad.AgentInstructions, gitRoot, strength, &budget, cwd, inputPaths)
 	}
@@ -167,17 +171,22 @@ func LoadProjectInstructionBundleForDirWithInputPaths(cfg *Config, cwd string, i
 	return bundle, nil
 }
 
-func shouldLoadProjectGuidance(mode string, hasProjectConfig bool) bool {
+func shouldLoadProjectGuidance(mode string) bool {
 	switch mode {
 	case AgentInstructionProjectModeOff:
 		return false
-	case AgentInstructionProjectModeAlways:
+	case AgentInstructionProjectModeAlways, AgentInstructionProjectModeFallback:
 		return true
-	case AgentInstructionProjectModeFallback:
-		return !hasProjectConfig
 	default:
-		return !hasProjectConfig
+		return true
 	}
+}
+
+func appendDeprecatedProjectModeFallbackWarning(bundle *ProjectInstructionBundle, mode string) {
+	if mode != AgentInstructionProjectModeFallback {
+		return
+	}
+	appendProjectInstructionWarningMessage(bundle, ProjectInstructionWarningDeprecatedFallbackMode, projectModeFallbackDeprecationMessage)
 }
 
 func resolveProjectGuidanceStrength() InstructionStrength {

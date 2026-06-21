@@ -224,7 +224,7 @@ final_checks:
 
 > **Note:** `final_checks.commands` を定義すると、AI が `completed_with_changes` の完了候補で自動実行します。省略時は `config.yaml` の final_checks 設定が使われます。旧 `verification` も互換入力として読み取られます。
 
-既存 `xelyon.yaml` の `context` / `rules` / `conditional` は互換のため別 section として読み込みますが、新規 project guidance は `AGENTS.md` を推奨します。`xelyon.yaml` が存在するだけで `AGENTS.md` 全体が advisory に格下げされることはありません。
+既存 `xelyon.yaml` の `context` / `rules` / `conditional` は load/save 互換として読み取れますが、通常の system prompt には注入しません。新規 project guidance は `AGENTS.md` に書きます。`xelyon.yaml` が存在するだけで `AGENTS.md` 全体が advisory に格下げされることはありません。
 
 ---
 

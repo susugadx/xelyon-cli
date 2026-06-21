@@ -22,8 +22,8 @@ source-confirmed facts only.
 - `internal/config/defaults_sections.go` の project guidance 候補は `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`。
 - 現在の作業差分では global guidance default を `enabled: true`、候補を `~/.xelyon/AGENTS.md` のみに変更した。
 - 現在の作業差分では `SaveConfig` / 初回 config 作成時に `~/.xelyon/AGENTS.md` を空ファイルで作る。既存ファイルは上書きしない。
-- `internal/config/project_instructions.go` の `project.mode=fallback` は `xelyon.yaml` がある場合に project guidance を読まない。
-- `project.mode=always` は `xelyon.yaml` がある場合でも project guidance を advisory として読む。
+- `internal/config/project_instructions.go` の `project.mode=fallback` は deprecated alias として残し、AGENTS-first 方針により `xelyon.yaml` がある場合でも project guidance を読む。
+- `project.mode=always` は `xelyon.yaml` がある場合でも project guidance を project guidance として読む。
 - `docs/config.md` と `config.yaml.example` は generator 管理で、config default を変えたら `make gen-all` が必要。
 - 現行 README / usage docs は `xelyon.yaml` を project context / rules の主導線として説明している箇所がある。
 
@@ -155,7 +155,7 @@ agent_instructions:
 ```
 
 `project.mode` の product default は `always` にする。
-`fallback` は legacy compatibility mode として読み込み互換を残すが、主導線や `/config` の通常 UI では前面に出さない。
+`fallback` は保存済み config 互換のため deprecated alias として受け付けるが、挙動は `always` と同じにして AGENTS-first を維持する。主導線や `/config` の通常 UI では前面に出さない。
 
 選択例:
 
@@ -342,7 +342,7 @@ Focused tests:
 
 - default config contract: global enabled true, global files only `~/.xelyon/AGENTS.md`
 - default config contract: project mode `always`, project files only `AGENTS.md`
-- legacy compatibility: explicit project mode `fallback` still behaves as legacy fallback
+- legacy compatibility: explicit project mode `fallback` is accepted as a deprecated alias of `always`, emits migration guidance, and still loads AGENTS.md even when `xelyon.yaml` exists
 - compatibility selection: `CLAUDE.md` and `.claude/CLAUDE.md` can still be loaded when present in project files
 - bootstrap: first `LoadConfig` creates empty `~/.xelyon/AGENTS.md`
 - no overwrite: existing `~/.xelyon/AGENTS.md` content is preserved

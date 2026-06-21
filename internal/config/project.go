@@ -11,9 +11,9 @@ import (
 
 // ProjectConfig はプロジェクト固有の設定（xelyon.yaml）
 type ProjectConfig struct {
-	Context                  string                                      `yaml:"context"`                              // AI に注入するプロジェクトコンテキスト
-	Rules                    []string                                    `yaml:"rules"`                                // 必須ルール（番号付きで system prompt に注入）
-	Conditional              []ProjectConditionalBlock                   `yaml:"conditional,omitempty"`                // 条件付きで注入する rules/context
+	Context                  string                                      `yaml:"context"`                              // 互換用の legacy project context（通常 prompt には注入しない）
+	Rules                    []string                                    `yaml:"rules"`                                // 互換用の legacy rules（通常 prompt には注入しない）
+	Conditional              []ProjectConditionalBlock                   `yaml:"conditional,omitempty"`                // 条件付き legacy rules/context（通常 prompt には注入しない）
 	Ignore                   ProjectIgnoreConfig                         `yaml:"ignore,omitempty"`                     // repomap/list_dir/search_code で共有する ignore 設定
 	FinalChecks              *FinalChecksConfig                          `yaml:"final_checks,omitempty"`               // 明示完了時 final checks（config.yaml の final_checks を上書き）
 	ProviderHistoryReduction ProjectStableProviderHistoryReductionConfig `yaml:"provider_history_reduction,omitempty"` // provider-facing history reduction の project-local stable 設定
@@ -22,12 +22,12 @@ type ProjectConfig struct {
 	FilePath string `yaml:"-"` // ロード元ファイルパス
 }
 
-// ProjectConditionalBlock は条件に応じて注入する rules/context のまとまり。
+// ProjectConditionalBlock は条件付き legacy rules/context のまとまり。
 type ProjectConditionalBlock struct {
 	Name    string   `yaml:"name,omitempty"`    // 任意の表示名
 	Paths   []string `yaml:"paths,omitempty"`   // 対象パス glob
-	Rules   []string `yaml:"rules,omitempty"`   // 条件一致時のみ注入するルール
-	Context string   `yaml:"context,omitempty"` // 条件一致時のみ注入するコンテキスト
+	Rules   []string `yaml:"rules,omitempty"`   // 条件一致時に選択される互換用ルール
+	Context string   `yaml:"context,omitempty"` // 条件一致時に選択される互換用コンテキスト
 }
 
 // ProjectIgnoreConfig はプロジェクト共通 ignore 設定。

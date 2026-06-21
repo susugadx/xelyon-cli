@@ -139,7 +139,7 @@ var FieldDescriptions = map[string]string{
 	"agent_instructions.max_total_bytes":            "guidance 全体の最大読み込みバイト数",
 	"agent_instructions.project.files":              "project-local guidance ファイル候補（basename は root→cwd / root→入力参照 path の scoped chain、/ を含む path は root 相対 explicit file。既定は AGENTS.md）",
 	"agent_instructions.project.include_gitignored": "gitignored / untracked guidance を許可",
-	"agent_instructions.project.mode":               "project-local guidance の読み込みモード（通常は always / off。fallback は legacy 互換）",
+	"agent_instructions.project.mode":               "project-local guidance の読み込みモード（always は AGENTS.md などを読み込み、fallback は deprecated alias として同じ挙動、off は無効）",
 	"compression.enabled":                           "自動圧縮を有効化",
 	"compression.keep_recent":                       "圧縮時に保持する直近メッセージ数",
 	"compression.trigger_percent":                   "自動圧縮のトークン使用率閾値（%）",

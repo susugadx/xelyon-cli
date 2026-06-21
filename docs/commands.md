@@ -636,8 +636,8 @@ TUI で project config (`xelyon.yaml`) の編集画面を開きます。global c
 ```
 
 **TUI で編集できる項目:**
-- `context`
-- `rules`
+- `context`（legacy 互換 field。通常の system prompt には注入されません）
+- `rules`（legacy 互換 field。新規 guidance は `AGENTS.md` に書きます）
 - `ignore.patterns`
 - `final_checks.commands`
 - `final_checks.timeout`（`final_checks.commands` がある場合）
