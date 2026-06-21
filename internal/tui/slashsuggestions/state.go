@@ -10,7 +10,10 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tui/theme"
 )
 
-const maxRows = 8
+const (
+	maxRows         = 8
+	minCommandWidth = 8
+)
 
 // State は slash suggestion の選択状態と表示 window を保持する。
 type State struct {
@@ -59,6 +62,8 @@ type RenderRow struct {
 	CommandLabel string
 	Description  string
 	Selected     bool
+
+	categoryColumnWidth int
 }
 
 // Snapshot は state の公開状態を返す。
@@ -144,8 +149,16 @@ func (s State) VisibleRenderRows(availableRows int) []RenderRow {
 	}
 	start := s.windowStart(availableRows)
 	out := make([]RenderRow, 0, len(rows))
+	categoryColumnWidth := 0
 	for i, suggestion := range rows {
-		out = append(out, NewRenderRow(suggestion, start+i == s.selected))
+		row := NewRenderRow(suggestion, start+i == s.selected)
+		categoryColumnWidth = max(categoryColumnWidth, row.categoryColumnWidth)
+		out = append(out, row)
+	}
+	if categoryColumnWidth > 0 {
+		for i := range out {
+			out[i].categoryColumnWidth = categoryColumnWidth
+		}
 	}
 	return out
 }
@@ -271,11 +284,13 @@ func detailText(suggestion slash.Suggestion) string {
 
 // NewRenderRow は suggestion から表示行 DTO を構築する。
 func NewRenderRow(suggestion slash.Suggestion, selected bool) RenderRow {
+	category := suggestion.CategoryDisplayLabel()
 	return RenderRow{
-		Category:     suggestion.CategoryDisplayLabel(),
-		CommandLabel: suggestion.Label,
-		Description:  suggestion.Description,
-		Selected:     selected,
+		Category:            category,
+		CommandLabel:        suggestion.Label,
+		Description:         suggestion.Description,
+		Selected:            selected,
+		categoryColumnWidth: renderColumnWidth(category),
 	}
 }
 
@@ -287,18 +302,24 @@ func RenderRowString(row RenderRow, width int) string {
 	prefixFg := chrome.SuggestionPrefixFg
 	commandFg := chrome.SuggestionCommandFg
 	descriptionFg := chrome.SuggestionDescFg
+	categoryFg := chrome.SuggestionDescFg
 	if row.Selected {
 		bg = chrome.SuggestionSelectedBg
 		prefix = "› "
 		prefixFg = chrome.SuggestionSelectedFg
 		commandFg = chrome.SuggestionSelectedFg
 		descriptionFg = chrome.SuggestionSelectedDimFg
+		categoryFg = chrome.SuggestionSelectedDimFg
 	}
 
-	layout := rowLayoutForWidth(width)
+	layout := rowLayoutForWidth(width, row.categoryColumnWidth)
+	category := paddedPlainText(row.Category, layout.categoryWidth)
 	label := paddedPlainText(row.CommandLabel, layout.commandWidth)
 	description := termtext.TruncateWithANSI(termtext.SanitizeSingleLineANSI(row.Description), layout.descriptionWidth)
 	line := bg + prefixFg + prefix
+	if layout.categoryWidth > 0 {
+		line += categoryFg + category + chrome.Reset + bg + prefixFg + "  " + chrome.Reset + bg
+	}
 	line += commandFg + label + chrome.Reset + bg
 	if layout.descriptionWidth > 0 {
 		line += prefixFg + "  " + chrome.Reset + bg + descriptionFg + description + chrome.Reset + bg
@@ -307,22 +328,40 @@ func RenderRowString(row RenderRow, width int) string {
 }
 
 type rowLayout struct {
+	categoryWidth    int
 	commandWidth     int
 	descriptionWidth int
 }
 
-func rowLayoutForWidth(width int) rowLayout {
-	commandWidth := commandWidth(width)
-	separatorWidth := 4
+func rowLayoutForWidth(width int, categoryWidth int) rowLayout {
+	categoryWidth = categoryColumnWidthForLayout(width, categoryWidth)
+	categoryAreaWidth := 0
+	if categoryWidth > 0 {
+		categoryAreaWidth = categoryWidth + 2
+	}
+	commandWidth := commandWidth(width - categoryAreaWidth)
+	separatorWidth := 4 + categoryAreaWidth
 	return rowLayout{
+		categoryWidth:    categoryWidth,
 		commandWidth:     commandWidth,
 		descriptionWidth: max(0, width-commandWidth-separatorWidth),
 	}
 }
 
+func categoryColumnWidthForLayout(width int, categoryWidth int) int {
+	if categoryWidth <= 0 {
+		return 0
+	}
+	maxCategoryWidth := width - minCommandWidth - 4
+	if maxCategoryWidth <= 0 {
+		return 0
+	}
+	return min(categoryWidth, maxCategoryWidth)
+}
+
 func commandWidth(width int) int {
 	if width <= 24 {
-		return max(8, width-4)
+		return max(minCommandWidth, width-4)
 	}
 	if width <= 44 {
 		return min(24, max(14, width/2))
@@ -340,6 +379,10 @@ func paddedPlainText(text string, width int) string {
 		text += strings.Repeat(" ", padding)
 	}
 	return text
+}
+
+func renderColumnWidth(text string) int {
+	return lipgloss.Width(termtext.SanitizeSingleLineANSI(text))
 }
 
 func isEnterKey(msg tea.KeyMsg) bool {

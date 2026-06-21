@@ -79,7 +79,7 @@ func TestSlashSuggestions_RenderRowsCarryDisplayModel(t *testing.T) {
 	}
 }
 
-func TestSlashSuggestions_RenderRowStartsWithCommandLabel(t *testing.T) {
+func TestSlashSuggestions_RenderRowDisplaysCategoryBeforeCommandLabel(t *testing.T) {
 	m := Model{width: 80}
 	suggestion := slash.Suggestion{
 		Label:       "/model [name]",
@@ -89,11 +89,13 @@ func TestSlashSuggestions_RenderRowStartsWithCommandLabel(t *testing.T) {
 
 	rendered := stripANSI(slashsuggestions.RenderRowString(slashsuggestions.NewRenderRow(suggestion, true), m.width))
 
-	if !strings.HasPrefix(rendered, "› /model [name]") {
-		t.Fatalf("slash suggestion should start with selected command label, got %q", rendered)
+	if !strings.HasPrefix(rendered, "› llm  /model [name]") {
+		t.Fatalf("slash suggestion should render category before command label, got %q", rendered)
 	}
-	if strings.Contains(rendered[:min(len(rendered), 12)], "llm") {
-		t.Fatalf("slash suggestion should not reserve a category column, got %q", rendered)
+	for _, fragment := range []string{"/model [name]", "Switch model"} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("slash suggestion missing %q, got %q", fragment, rendered)
+		}
 	}
 }
 
