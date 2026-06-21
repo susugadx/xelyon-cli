@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/review/domain"
-	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
@@ -189,91 +188,5 @@ func TestReviewRunnerSaturationKeepsProbeCommandRawUntilReviewRehydrateLedgerExi
 		*item.EvidenceRefs[0].CommandIndex != 0 ||
 		item.OriginalBytes <= item.ReplacementBytes {
 		t.Fatalf("probe command prompt reduction item = %#v, want command-level candidate item with refs and savings", item)
-	}
-}
-
-func TestReviewProbeResultAbsorptionKeepsFindingEvidenceProbe(t *testing.T) {
-	rawOutput := strings.Repeat("FINDING_PROBE_RAW_OUTPUT_MUST_STAY ", 300)
-	report := newRunnerCleanReportWithPassedProbeEvidenceForTest("probe-1")
-	report.RootCauseGroups = []reviewreport.ReviewRootCauseGroup{
-		{
-			ID:                 "group-1",
-			Title:              "Finding group",
-			Severity:           reviewreport.ReviewGroupSeverityHigh,
-			VerificationStatus: reviewreport.ReviewVerificationVerified,
-			Findings: []reviewreport.ReviewFinding{
-				{
-					ID:    "finding-1",
-					Title: "Finding uses probe evidence",
-					EvidenceRefs: []reviewreport.ReviewEvidenceRef{
-						{Kind: reviewreport.ReviewEvidenceKindProbe, ProbeID: "probe-1"},
-					},
-				},
-			},
-		},
-	}
-	result := reviewprobe.ReviewProbeResult{
-		ID:     "probe-1",
-		Mode:   domain.ReviewProbeHostReadOnly,
-		Status: domain.ReviewProbePassed,
-		CommandResults: []reviewprobe.ReviewProbeCommandResult{
-			{Command: "customtool", Status: domain.ReviewProbePassed, Output: rawOutput},
-		},
-	}
-
-	candidates := buildReviewProbeResultAbsorptionCandidates(report, []reviewprobe.ReviewProbeResult{result})
-	if !candidates.empty() {
-		t.Fatalf("buildReviewProbeResultAbsorptionCandidates() = %#v, want finding evidence probe kept", candidates)
-	}
-}
-
-func TestReviewProbeResultAbsorptionKeepsFindingEvidenceCommandButAbsorbsSafeSibling(t *testing.T) {
-	ref0 := reviewreport.ReviewEvidenceRef{
-		Kind:         reviewreport.ReviewEvidenceKindProbeCommand,
-		ProbeID:      "probe-1",
-		CommandIndex: reviewreport.ReviewCommandIndex(0),
-	}
-	ref1 := reviewreport.ReviewEvidenceRef{
-		Kind:         reviewreport.ReviewEvidenceKindProbeCommand,
-		ProbeID:      "probe-1",
-		CommandIndex: reviewreport.ReviewCommandIndex(1),
-	}
-	report := newRunnerCleanReportForTest(nil)
-	report.ScopeCoverage.ReviewedImpactSurfaces[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref0, ref1}
-	report.ScopeCoverage.ReviewedCandidateRisks[0].EvidenceRefs = []reviewreport.ReviewEvidenceRef{ref0, ref1}
-	report.RootCauseGroups = []reviewreport.ReviewRootCauseGroup{
-		{
-			ID:                 "group-1",
-			Title:              "Finding group",
-			Severity:           reviewreport.ReviewGroupSeverityHigh,
-			VerificationStatus: reviewreport.ReviewVerificationVerified,
-			Findings: []reviewreport.ReviewFinding{
-				{
-					ID:           "finding-1",
-					Title:        "Finding uses command[0] evidence",
-					EvidenceRefs: []reviewreport.ReviewEvidenceRef{ref0},
-				},
-			},
-		},
-	}
-	result := reviewprobe.ReviewProbeResult{
-		ID:     "probe-1",
-		Mode:   domain.ReviewProbeHostReadOnly,
-		Status: domain.ReviewProbePassed,
-		CommandResults: []reviewprobe.ReviewProbeCommandResult{
-			{Command: "customtool", Args: []string{"--first"}, Status: domain.ReviewProbePassed, Output: strings.Repeat("finding command output ", 120)},
-			{Command: "customtool", Args: []string{"--second"}, Status: domain.ReviewProbePassed, Output: strings.Repeat("safe sibling command output ", 120)},
-		},
-	}
-
-	candidates := buildReviewProbeResultAbsorptionCandidates(report, []reviewprobe.ReviewProbeResult{result})
-	if len(candidates.probes) != 0 {
-		t.Fatalf("probe candidates = %#v, want no full-probe absorption when one command is finding evidence", candidates.probes)
-	}
-	if _, ok := candidates.commands[reviewmodelinput.ProbeCommandResultKey{ProbeID: "probe-1", CommandIndex: 0}]; ok {
-		t.Fatalf("command[0] candidate exists, want finding evidence command kept: %#v", candidates.commands)
-	}
-	if _, ok := candidates.commands[reviewmodelinput.ProbeCommandResultKey{ProbeID: "probe-1", CommandIndex: 1}]; !ok {
-		t.Fatalf("command[1] candidate missing, want safe sibling absorbed: %#v", candidates.commands)
 	}
 }

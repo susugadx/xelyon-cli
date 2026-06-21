@@ -1,16 +1,13 @@
-package review
+package promptreduction
 
 import (
 	"strings"
 
-	"github.com/susugadx/xelyon-cli/internal/review/domain"
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
-	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
-	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
 
-type reviewProbeResultAbsorptionRefSet struct {
+type probeResultAbsorptionRefSet struct {
 	safeProbes            map[string][]string
 	safeCommands          map[reviewmodelinput.ProbeCommandResultKey][]string
 	unsafeProbes          map[string]struct{}
@@ -18,7 +15,7 @@ type reviewProbeResultAbsorptionRefSet struct {
 	unsafeCommandProbeIDs map[string]struct{}
 }
 
-func (refs reviewProbeResultAbsorptionRefSet) probeUnsafeForFullAbsorption(probeID string) bool {
+func (refs probeResultAbsorptionRefSet) probeUnsafeForFullAbsorption(probeID string) bool {
 	if _, unsafe := refs.unsafeProbes[probeID]; unsafe {
 		return true
 	}
@@ -26,7 +23,7 @@ func (refs reviewProbeResultAbsorptionRefSet) probeUnsafeForFullAbsorption(probe
 	return unsafe
 }
 
-func (refs reviewProbeResultAbsorptionRefSet) commandUnsafeForAbsorption(key reviewmodelinput.ProbeCommandResultKey) bool {
+func (refs probeResultAbsorptionRefSet) commandUnsafeForAbsorption(key reviewmodelinput.ProbeCommandResultKey) bool {
 	if _, unsafe := refs.unsafeProbes[key.ProbeID]; unsafe {
 		return true
 	}
@@ -34,8 +31,8 @@ func (refs reviewProbeResultAbsorptionRefSet) commandUnsafeForAbsorption(key rev
 	return unsafe
 }
 
-func reviewProbeResultAbsorptionRefs(report reviewreport.ReviewReport) reviewProbeResultAbsorptionRefSet {
-	refs := reviewProbeResultAbsorptionRefSet{
+func probeResultAbsorptionRefs(report reviewreport.ReviewReport) probeResultAbsorptionRefSet {
+	refs := probeResultAbsorptionRefSet{
 		safeProbes:            make(map[string][]string),
 		safeCommands:          make(map[reviewmodelinput.ProbeCommandResultKey][]string),
 		unsafeProbes:          make(map[string]struct{}),
@@ -56,7 +53,7 @@ func reviewProbeResultAbsorptionRefs(report reviewreport.ReviewReport) reviewPro
 					refs.unsafeProbes[probeID] = struct{}{}
 				}
 			case reviewreport.ReviewEvidenceKindProbeCommand:
-				key, ok := reviewProbeCommandResultKeyFromEvidenceRef(ref)
+				key, ok := probeCommandResultKeyFromEvidenceRef(ref)
 				if !ok {
 					refs.unsafeProbes[probeID] = struct{}{}
 					continue
@@ -121,31 +118,18 @@ func reviewProbeResultAbsorptionRefs(report reviewreport.ReviewReport) reviewPro
 	}
 
 	for probeID, values := range refs.safeProbes {
-		refs.safeProbes[probeID] = reviewpromptreduction.DedupeSortedReviewPromptAbsorptionRefs(values)
+		refs.safeProbes[probeID] = DedupeSortedReviewPromptAbsorptionRefs(values)
 	}
 	for key, values := range refs.safeCommands {
-		refs.safeCommands[key] = reviewpromptreduction.DedupeSortedReviewPromptAbsorptionRefs(values)
+		refs.safeCommands[key] = DedupeSortedReviewPromptAbsorptionRefs(values)
 	}
 	return refs
 }
 
-func reviewProbeCommandResultKeyFromEvidenceRef(ref reviewreport.ReviewEvidenceRef) (reviewmodelinput.ProbeCommandResultKey, bool) {
+func probeCommandResultKeyFromEvidenceRef(ref reviewreport.ReviewEvidenceRef) (reviewmodelinput.ProbeCommandResultKey, bool) {
 	probeID := strings.TrimSpace(ref.ProbeID)
 	if probeID == "" || ref.CommandIndex == nil || *ref.CommandIndex < 0 {
 		return reviewmodelinput.ProbeCommandResultKey{}, false
 	}
 	return reviewmodelinput.ProbeCommandResultKey{ProbeID: probeID, CommandIndex: *ref.CommandIndex}, true
-}
-
-func reviewProbeResultSafeForAbsorbedPrompt(result reviewprobe.ReviewProbeResult) bool {
-	return result.Status == domain.ReviewProbePassed &&
-		!result.MutatedWorktree &&
-		!result.OutputTruncated &&
-		strings.TrimSpace(result.Error) == ""
-}
-
-func reviewProbeCommandResultSafeForAbsorbedPrompt(result reviewprobe.ReviewProbeCommandResult) bool {
-	return result.Status == domain.ReviewProbePassed &&
-		!result.OutputTruncated &&
-		strings.TrimSpace(result.Error) == ""
 }

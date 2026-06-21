@@ -2,35 +2,12 @@ package review
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewprobe "github.com/susugadx/xelyon-cli/internal/review/probe"
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
-
-const (
-	reviewPromptProbeResultAbsorptionMinSavedTokens = 128
-)
-
-type reviewProbeResultAbsorptionCandidate struct {
-	summary          reviewmodelinput.ProbeResultAbsorptionSummary
-	originalBytes    int
-	replacementBytes int
-	savedBytes       int
-	savedTokens      int
-}
-
-type reviewProbeResultAbsorptionCandidates struct {
-	probes   map[string]reviewProbeResultAbsorptionCandidate
-	commands map[reviewmodelinput.ProbeCommandResultKey]reviewProbeResultAbsorptionCandidate
-}
-
-func (c reviewProbeResultAbsorptionCandidates) empty() bool {
-	return len(c.probes) == 0 && len(c.commands) == 0
-}
 
 type reviewProbeResultPromptContextBuild struct {
 	options          reviewmodelinput.ProbeResultPromptContextOptions
@@ -47,72 +24,23 @@ func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx contex
 	if mode == reviewpromptreduction.ReviewPromptReductionModeOff {
 		return reviewProbeResultPromptContextBuild{options: opts}
 	}
-	candidates := buildReviewProbeResultAbsorptionCandidates(report, probeResults)
-	if candidates.empty() {
+	plan := reviewpromptreduction.BuildProbeResultAbsorptionPlan(report, probeResults)
+	if plan.Empty() {
 		return reviewProbeResultPromptContextBuild{options: opts}
 	}
-	if len(candidates.probes) > 0 {
-		opts.AbsorptionCandidateProbeIDs = make(map[string]struct{}, len(candidates.probes))
-		for probeID := range candidates.probes {
-			opts.AbsorptionCandidateProbeIDs[probeID] = struct{}{}
-		}
-	}
-	if len(candidates.commands) > 0 {
-		opts.AbsorptionCandidateCommands = make(map[reviewmodelinput.ProbeCommandResultKey]struct{}, len(candidates.commands))
-		for key := range candidates.commands {
-			opts.AbsorptionCandidateCommands[key] = struct{}{}
-		}
-	}
+	opts = plan.CandidatePromptContextOptions(opts)
 	if r.promptReductionStats == nil {
 		r.promptReductionStats = reviewpromptreduction.NewStats(mode)
 	}
-	rawOutput := r.buildReviewProbeRawOutputForCandidates(ctx, phase, promptKind, candidates, probeResults, redactor)
+	rawOutput := r.buildReviewProbeRawOutputForCandidates(ctx, phase, promptKind, plan, probeResults, redactor)
 	applied := rawOutput.applyAllowed
-	for _, probeID := range sortedReviewProbeAbsorptionProbeIDs(candidates.probes) {
-		candidate := candidates.probes[probeID]
-		if ref, ok := rawOutput.probeRefs[probeID]; ok {
-			candidate.summary.RawArtifactRef = ref.RefID
-			candidate.replacementBytes = len(candidate.summary.Summary) + len(strings.Join(candidate.summary.AbsorbedBy, "\n")) + len(candidate.summary.RawArtifactRef)
-		}
-		r.promptReductionStats.RecordCandidate("probe_result_absorption_candidate", candidate.savedBytes, candidate.savedTokens, applied)
+	artifactRefs := reviewProbeResultAbsorptionArtifactRefs(rawOutput)
+	for _, record := range plan.ReductionRecords(reviewPromptReductionPhase(phase), applied, artifactRefs) {
+		r.promptReductionStats.RecordCandidate(record.Classifier, record.SavedBytes, record.SavedTokens, applied)
 		if !applied {
 			r.promptReductionStats.RecordKeepReason(reviewProbeResultAbsorptionKeepReason(rawOutput))
 		}
-		r.recordPromptReductionItem(reviewpromptreduction.ReviewPromptReductionItem{
-			ID:               "probe_result:" + probeID,
-			Family:           reviewpromptreduction.ReviewPromptReductionFamilyProbeResult,
-			Phase:            reviewPromptReductionPhase(phase),
-			Status:           reviewPromptProbeResultAbsorptionStatus(applied),
-			AbsorbedBy:       reviewpromptreduction.ReviewPromptAbsorptionRefsFromOwners(candidate.summary.AbsorbedBy),
-			EvidenceRefs:     []reviewreport.ReviewEvidenceRef{{Kind: reviewreport.ReviewEvidenceKindProbe, ProbeID: probeID}},
-			RawArtifactRef:   candidate.summary.RawArtifactRef,
-			Summary:          candidate.summary.Summary,
-			OriginalBytes:    candidate.originalBytes,
-			ReplacementBytes: candidate.replacementBytes,
-		})
-	}
-	for _, key := range sortedReviewProbeCommandAbsorptionKeys(candidates.commands) {
-		candidate := candidates.commands[key]
-		if ref, ok := rawOutput.commandRefs[key]; ok {
-			candidate.summary.RawArtifactRef = ref.RefID
-			candidate.replacementBytes = len(candidate.summary.Summary) + len(strings.Join(candidate.summary.AbsorbedBy, "\n")) + len(candidate.summary.RawArtifactRef)
-		}
-		r.promptReductionStats.RecordCandidate("probe_command_result_absorption_candidate", candidate.savedBytes, candidate.savedTokens, applied)
-		if !applied {
-			r.promptReductionStats.RecordKeepReason(reviewProbeResultAbsorptionKeepReason(rawOutput))
-		}
-		r.recordPromptReductionItem(reviewpromptreduction.ReviewPromptReductionItem{
-			ID:               fmt.Sprintf("probe_result:%s:command:%d", key.ProbeID, key.CommandIndex),
-			Family:           reviewpromptreduction.ReviewPromptReductionFamilyProbeResult,
-			Phase:            reviewPromptReductionPhase(phase),
-			Status:           reviewPromptProbeResultAbsorptionStatus(applied),
-			AbsorbedBy:       reviewpromptreduction.ReviewPromptAbsorptionRefsFromOwners(candidate.summary.AbsorbedBy),
-			EvidenceRefs:     []reviewreport.ReviewEvidenceRef{{Kind: reviewreport.ReviewEvidenceKindProbeCommand, ProbeID: key.ProbeID, CommandIndex: reviewreport.ReviewCommandIndex(key.CommandIndex)}},
-			RawArtifactRef:   candidate.summary.RawArtifactRef,
-			Summary:          candidate.summary.Summary,
-			OriginalBytes:    candidate.originalBytes,
-			ReplacementBytes: candidate.replacementBytes,
-		})
+		r.recordPromptReductionItem(record.Item)
 	}
 	rawOutputLedger := reviewpromptreduction.ReviewProbeRawOutputLedgerPtr(rawOutput.ledger)
 	if rawOutputLedger != nil {
@@ -124,26 +52,7 @@ func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx contex
 	if !applied {
 		return reviewProbeResultPromptContextBuild{options: opts}
 	}
-	if len(candidates.probes) > 0 {
-		opts.AbsorbedProbeResults = make(map[string]reviewmodelinput.ProbeResultAbsorptionSummary, len(candidates.probes))
-		for probeID, candidate := range candidates.probes {
-			if ref, ok := rawOutput.probeRefs[probeID]; ok {
-				candidate.summary.RawArtifactRef = ref.RefID
-				candidate.summary.Summary = reviewProbeResultAbsorptionAppliedSummary(probeID, false, 0)
-			}
-			opts.AbsorbedProbeResults[probeID] = candidate.summary
-		}
-	}
-	if len(candidates.commands) > 0 {
-		opts.AbsorbedProbeCommands = make(map[reviewmodelinput.ProbeCommandResultKey]reviewmodelinput.ProbeResultAbsorptionSummary, len(candidates.commands))
-		for key, candidate := range candidates.commands {
-			if ref, ok := rawOutput.commandRefs[key]; ok {
-				candidate.summary.RawArtifactRef = ref.RefID
-				candidate.summary.Summary = reviewProbeResultAbsorptionAppliedSummary(key.ProbeID, true, key.CommandIndex)
-			}
-			opts.AbsorbedProbeCommands[key] = candidate.summary
-		}
-	}
+	opts = plan.AbsorbedPromptContextOptions(opts, artifactRefs)
 	return reviewProbeResultPromptContextBuild{
 		options:          opts,
 		rawOutputContext: rawOutput.context,
@@ -151,9 +60,19 @@ func (r *ReviewRunner) probeResultPromptContextBuildForAbsorbedReport(ctx contex
 	}
 }
 
-func reviewPromptProbeResultAbsorptionStatus(applied bool) reviewpromptreduction.ReviewPromptReductionItemStatus {
-	if applied {
-		return reviewpromptreduction.ReviewPromptReductionItemAbsorbed
+func reviewProbeResultAbsorptionArtifactRefs(rawOutput reviewProbeRawOutputBuild) reviewpromptreduction.ProbeResultAbsorptionArtifactRefs {
+	refs := reviewpromptreduction.ProbeResultAbsorptionArtifactRefs{}
+	if len(rawOutput.probeRefs) > 0 {
+		refs.ProbeResults = make(map[string]string, len(rawOutput.probeRefs))
+		for probeID, ref := range rawOutput.probeRefs {
+			refs.ProbeResults[probeID] = ref.RefID
+		}
 	}
-	return reviewpromptreduction.ReviewPromptReductionItemCandidate
+	if len(rawOutput.commandRefs) > 0 {
+		refs.ProbeCommands = make(map[reviewmodelinput.ProbeCommandResultKey]string, len(rawOutput.commandRefs))
+		for key, ref := range rawOutput.commandRefs {
+			refs.ProbeCommands[key] = ref.RefID
+		}
+	}
+	return refs
 }

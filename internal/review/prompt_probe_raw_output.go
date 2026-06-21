@@ -30,7 +30,7 @@ type reviewProbeRawOutputSource struct {
 	replacementBytes int
 }
 
-func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Context, phase ReviewModelPhase, promptKind string, candidates reviewProbeResultAbsorptionCandidates, probeResults []reviewprobe.ReviewProbeResult, redactor reviewmodelinput.Redactor) reviewProbeRawOutputBuild {
+func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Context, phase ReviewModelPhase, promptKind string, plan reviewpromptreduction.ProbeResultAbsorptionPlan, probeResults []reviewprobe.ReviewProbeResult, redactor reviewmodelinput.Redactor) reviewProbeRawOutputBuild {
 	build := reviewProbeRawOutputBuild{
 		probeRefs:   map[string]rawoutputs.RawOutputRef{},
 		commandRefs: map[reviewmodelinput.ProbeCommandResultKey]rawoutputs.RawOutputRef{},
@@ -44,7 +44,7 @@ func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Contex
 		},
 	}
 	build.ledger.BodyBudgetTokens = max(0, build.ledger.BudgetTokens-build.ledger.MetadataReserveTokens)
-	if candidates.empty() {
+	if plan.Empty() {
 		return build
 	}
 	if reviewpromptreduction.NormalizeReviewRawOutputArtifactsMode(r.rawOutputArtifactsMode) == reviewpromptreduction.ReviewRawOutputArtifactsModeOff {
@@ -56,7 +56,7 @@ func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Contex
 		return build
 	}
 
-	sources := reviewProbeRawOutputSources(candidates, probeResults)
+	sources := reviewProbeRawOutputSources(plan, probeResults)
 	if len(sources) == 0 {
 		build.disabledReason = reviewpromptreduction.ReviewProbeRawOutputReasonUnreflectedEvidenceKeep
 		return build
@@ -101,35 +101,41 @@ func (r *ReviewRunner) buildReviewProbeRawOutputForCandidates(ctx context.Contex
 	return build
 }
 
-func reviewProbeRawOutputSources(candidates reviewProbeResultAbsorptionCandidates, probeResults []reviewprobe.ReviewProbeResult) []reviewProbeRawOutputSource {
+func reviewProbeRawOutputSources(plan reviewpromptreduction.ProbeResultAbsorptionPlan, probeResults []reviewprobe.ReviewProbeResult) []reviewProbeRawOutputSource {
 	resultsByID := make(map[string]reviewprobe.ReviewProbeResult, len(probeResults))
 	for _, result := range probeResults {
 		if strings.TrimSpace(result.ID) != "" {
 			resultsByID[result.ID] = result
 		}
 	}
-	sources := make([]reviewProbeRawOutputSource, 0, len(candidates.probes)+len(candidates.commands))
-	for _, probeID := range sortedReviewProbeAbsorptionProbeIDs(candidates.probes) {
+	sources := make([]reviewProbeRawOutputSource, 0, plan.ProbeCount()+plan.CommandCount())
+	for _, probeID := range plan.ProbeIDs() {
 		result, ok := resultsByID[probeID]
 		if !ok {
 			continue
 		}
-		candidate := candidates.probes[probeID]
+		candidate, ok := plan.ProbeCandidate(probeID)
+		if !ok {
+			continue
+		}
 		sources = append(sources, reviewProbeRawOutputSource{
 			probeID:          probeID,
 			body:             reviewProbeRawOutputBodyForProbe(result),
 			required:         true,
-			absorbedBy:       candidate.summary.AbsorbedBy,
-			originalBytes:    candidate.originalBytes,
-			replacementBytes: candidate.replacementBytes,
+			absorbedBy:       candidate.AbsorbedBy(),
+			originalBytes:    candidate.OriginalBytes(),
+			replacementBytes: candidate.ReplacementBytes(),
 		})
 	}
-	for _, key := range sortedReviewProbeCommandAbsorptionKeys(candidates.commands) {
+	for _, key := range plan.CommandKeys() {
 		result, ok := resultsByID[key.ProbeID]
 		if !ok || key.CommandIndex < 0 || key.CommandIndex >= len(result.CommandResults) {
 			continue
 		}
-		candidate := candidates.commands[key]
+		candidate, ok := plan.CommandCandidate(key)
+		if !ok {
+			continue
+		}
 		commandIndex := key.CommandIndex
 		command := result.CommandResults[commandIndex]
 		sources = append(sources, reviewProbeRawOutputSource{
@@ -138,9 +144,9 @@ func reviewProbeRawOutputSources(candidates reviewProbeResultAbsorptionCandidate
 			command:          command,
 			body:             reviewProbeRawOutputBodyForCommand(command),
 			required:         true,
-			absorbedBy:       candidate.summary.AbsorbedBy,
-			originalBytes:    candidate.originalBytes,
-			replacementBytes: candidate.replacementBytes,
+			absorbedBy:       candidate.AbsorbedBy(),
+			originalBytes:    candidate.OriginalBytes(),
+			replacementBytes: candidate.ReplacementBytes(),
 		})
 	}
 	return sources
