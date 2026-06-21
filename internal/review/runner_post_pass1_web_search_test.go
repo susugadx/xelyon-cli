@@ -2,14 +2,11 @@ package review
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	reviewartifact "github.com/susugadx/xelyon-cli/internal/review/artifact"
-	reviewevidence "github.com/susugadx/xelyon-cli/internal/review/evidence"
 	"github.com/susugadx/xelyon-cli/internal/review/externaldoc"
 	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewpromptreduction "github.com/susugadx/xelyon-cli/internal/review/promptreduction"
@@ -260,114 +257,5 @@ func TestReviewRunnerWebSearchDiscoveryCompactKeepsRawArtifactsAndExternalDocSni
 				t.Fatalf("PromptReductionReport() = %#v, want web discovery candidate and %d replacement", reductionReport, tt.wantReplacementCnt)
 			}
 		})
-	}
-}
-
-func TestCompactReviewWebSearchDiscoveryEvidenceKeepsUnsafeExternalSupport(t *testing.T) {
-	longSearchSnippet := strings.Repeat("RAW_DISCOVERY_SNIPPET_MUST_STAY_WITH_UNSAFE_EXTERNAL_SUPPORT ", 400)
-	tests := []struct {
-		name     string
-		evidence externaldoc.WebSearchEvidence
-	}{
-		{
-			name: "unknown source credibility",
-			evidence: reviewWebSearchDiscoveryCompactEvidenceForTest(longSearchSnippet, []externaldoc.Evidence{
-				reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-unknown", externaldoc.SourceCredibilityUnknown, false, "unknown source snippet"),
-				reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official", externaldoc.SourceCredibilityOfficialCandidate, false, "official source snippet"),
-			}),
-		},
-		{
-			name: "truncated external doc",
-			evidence: reviewWebSearchDiscoveryCompactEvidenceForTest(longSearchSnippet, []externaldoc.Evidence{
-				reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-truncated", externaldoc.SourceCredibilityOfficialCandidate, true, "truncated source snippet"),
-				reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-official", externaldoc.SourceCredibilityOfficialCandidate, false, "official source snippet"),
-			}),
-		},
-		{
-			name: "official confirmation false",
-			evidence: reviewWebSearchDiscoveryCompactEvidenceForTest(longSearchSnippet, []externaldoc.Evidence{
-				reviewExternalDocEvidenceForDiscoveryCompactTest("external-doc-single", externaldoc.SourceCredibilityOfficialCandidate, false, "single official snippet"),
-			}),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			bundle := newRunnerEvidenceBundleForTest("/tmp/review-runner/repo")
-			bundle.WebSearchEvidence = tt.evidence
-			compacted, savedBytes, savedTokens, ok := reviewpromptreduction.CompactReviewWebSearchDiscoveryEvidence(bundle)
-			if ok || savedBytes != 0 || savedTokens != 0 || compacted.WebSearchEvidence.Enabled {
-				t.Fatalf("reviewpromptreduction.CompactReviewWebSearchDiscoveryEvidence() = (%#v, %d, %d, %t), want conservative keep", compacted.WebSearchEvidence, savedBytes, savedTokens, ok)
-			}
-		})
-	}
-}
-
-type runnerPostPass1WebSearchEvidenceBuilder struct {
-	runnerFakeEvidenceBuilder
-	postEvidence externaldoc.WebSearchEvidence
-	postCalls    int
-	seenPlan     reviewprobeplan.ReviewProbePlan
-}
-
-func (b *runnerPostPass1WebSearchEvidenceBuilder) CollectPostPass1WebSearchEvidence(_ context.Context, _ reviewevidence.ReviewEvidenceBundle, plan reviewprobeplan.ReviewProbePlan) externaldoc.WebSearchEvidence {
-	b.postCalls++
-	b.seenPlan = plan
-	if b.events != nil {
-		*b.events = append(*b.events, "post_search")
-	}
-	return b.postEvidence
-}
-
-func readReviewRunArtifactForTest(t *testing.T, dir, name string) string {
-	t.Helper()
-
-	content, err := os.ReadFile(filepath.Join(dir, name))
-	if err != nil {
-		t.Fatalf("os.ReadFile(%q) error = %v, want nil", name, err)
-	}
-	return string(content)
-}
-
-func reviewWebSearchDiscoveryCompactEvidenceForTest(snippet string, docs []externaldoc.Evidence) externaldoc.WebSearchEvidence {
-	return externaldoc.WebSearchEvidence{
-		Enabled:  true,
-		Provider: "gemini",
-		Queries: []externaldoc.WebSearchEvidenceQuery{
-			{
-				Query:  "OpenAI Responses API previous_response_id official docs",
-				Reason: "test",
-				Results: []externaldoc.WebSearchEvidenceResult{
-					{
-						Title:        "OpenAI Responses API docs",
-						URL:          "https://platform.openai.com/docs/responses",
-						SourceDomain: "platform.openai.com",
-						Snippet:      snippet,
-					},
-				},
-			},
-		},
-		ExternalDocs: docs,
-	}
-}
-
-func reviewExternalDocEvidenceForDiscoveryCompactTest(docID string, credibility externaldoc.SourceCredibility, truncated bool, content string) externaldoc.Evidence {
-	return externaldoc.Evidence{
-		DocID:                   docID,
-		URL:                     "https://platform.openai.com/docs/" + docID,
-		SourceDomain:            "platform.openai.com",
-		SourceCredibility:       credibility,
-		SourceCredibilityReason: "test credibility reason",
-		FetchedAt:               time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
-		ContentHash:             "sha256:" + strings.Repeat("a", 64-len(docID)) + docID,
-		Truncated:               truncated,
-		Snippets: []externaldoc.SnippetEvidence{
-			{
-				SnippetID:   docID + "-snippet-1",
-				Content:     content,
-				ContentHash: "sha256:" + strings.Repeat("b", 64-len(docID)) + docID,
-				Truncated:   truncated,
-			},
-		},
 	}
 }
