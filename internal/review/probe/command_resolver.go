@@ -13,8 +13,6 @@ type CommandResolutionContext struct {
 	Env        []string
 }
 
-type commandResolutionContext = CommandResolutionContext
-
 // ResolveCommandPath は PATH から command を解決し、repo/scratch 内 executable を拒否する。
 func ResolveCommandPath(command string, ctx CommandResolutionContext) (string, error) {
 	trimmedCommand := strings.TrimSpace(command)
@@ -59,10 +57,6 @@ func ResolveCommandPath(command string, ctx CommandResolutionContext) (string, e
 	}
 
 	return "", newBlockedCommandErrorf("command %s could not be resolved from PATH", trimmedCommand)
-}
-
-func resolveCommandPath(command string, ctx commandResolutionContext) (string, error) {
-	return ResolveCommandPath(command, ctx)
 }
 
 func resolveCommandResolutionBaseDir(workDir string) (string, error) {

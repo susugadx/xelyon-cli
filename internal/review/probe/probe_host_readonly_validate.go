@@ -53,7 +53,7 @@ func (e *hostReadOnlyExecutor) buildHostReadOnlyCommandPlan(commandEnv []string,
 	if _, err := planHostReadOnlyCommand(e.repoRoot, workDir, commandName, cmd.Args); err != nil {
 		return hostReadOnlyCommand{}, err
 	}
-	commandPath, err := resolveCommandPath(commandName, commandResolutionContext{
+	commandPath, err := ResolveCommandPath(commandName, CommandResolutionContext{
 		RepoRoot:   e.repoRoot,
 		ScratchDir: runtimeRoot,
 		WorkDir:    workDir,
