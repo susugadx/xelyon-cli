@@ -516,6 +516,7 @@ type EffectivePrompt struct {
 - [x] UTF-8 safe truncation
 - [x] environment blocker と code failure を区別
 - [x] AGENTS/xelyon duplicate drift を解消
+- [x] core system constitution の ask/stop/verification 差分を現行 prompt に反映する
 - [x] deterministic task state を continuation/compression の source of truth にする
 - [x] repeated test command は TaskLedger で最新結果に正規化する
 - [x] passed rerun 後の stale `do_not_repeat` を continuation merge で除去する

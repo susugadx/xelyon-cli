@@ -12,7 +12,7 @@
 |---|---|---|
 | P0-1 圧縮 summary の system role 昇格 | 完了 | `xelyon.continuation.v1` の構造化 continuation、schema validation、`do_not_repeat`、rune-safe truncation に移行。 |
 | P0-2 OpenAI response chain と prompt fingerprint | 完了 | effective prompt fingerprint で response chain reuse を制御。 |
-| P1-1 中核 prompt の ask/stop 矛盾 | 部分完了 | ask 条件を consequential choice に限定し、investigation/tool 方針を短縮。core prompt v2 への全面置換は未実施。 |
+| P1-1 中核 prompt の ask/stop 矛盾 | 完了 | core prompt v2 から ask/stop/verification と instruction precedence の差分を取り込み、reasonable reversible default と strongest practical verification に寄せた。全面置換ではなく現行 contract への差分反映。 |
 | P1-2 review の static proof / coverage 分離 | 完了 | reviewer system prompt 分離、static proof 許可、clean 正当化、coverage gap と finding の分離を実装。 |
 | P1-3 project rules 注入 anchor | 完了 | prose anchor 依存をやめ、repository instruction wrapper と実 `SystemPrompt` 経由のテストへ寄せた。 |
 | P1-4 subagent prompt/schema/runtime | 完了 | bounded analysis を許可し、親判断を維持したまま schema と runtime を同期。default concurrency は prompt 側で明示。 |
@@ -28,7 +28,7 @@
 
 ### 次にやるなら
 
-1. P1-1: core prompt v2 への全面置換要否を、現行 prompt と dogfood 結果で再評価する。
+1. Dogfood で最新 prompt の過剰停止・過剰質問・検証 blocker 報告の実挙動を確認する。
 
 ## 1. 結論
 
@@ -214,7 +214,7 @@ XELYON の中核 system prompt は、もっと短くしてよい。ただし、�
 
 - `internal/prompt/project_rules.go:10` — `### 10. Verification Protocol (MANDATORY)` を regex で探す
 - `internal/prompt/project_rules.go:150-173` — Rule #10 直後を想定し、fallback も古い文言を探す
-- 現在の prompt は `internal/prompt/system.go:258-262` の `### 6. Verification Protocol` と `The task is not complete until verification passes.`
+- 監査当時の prompt は `internal/prompt/system.go:258-262` の `### 6. Verification Protocol` と `The task is not complete until verification passes.`
 - `internal/prompt/project_rules_test.go` は旧 section #10 fixture を検証しており、実際の `SystemPrompt` との統合テストになっていない
 
 **影響**

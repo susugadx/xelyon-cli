@@ -372,6 +372,34 @@ func TestHandleStrReplaceErrors_QueuesRuntimeDirectiveWithoutFakeSystemMessage(t
 	}
 }
 
+func TestNormalModeSystemPromptPreservesStrippedAskPolicy(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+
+	prompt := agent.normalModeSystemPromptForRequest(context.Background(), "implement the change", false)
+	for _, want := range []string{
+		"Do not use ambiguity as a reason to stop when a reasonable reversible default exists.",
+		"Ask only when a choice is consequential, irreversible, externally visible, costly, permission-sensitive, or impossible to infer responsibly",
+		"do not ask for preferences that repo evidence can resolve",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("normal-mode provider prompt missing ask policy %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"ask_user_question",
+		"If uncertain: proceed with a stated assumption when the choice is local and reversible",
+		"Use tools proactively: verify before modifying",
+	} {
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("normal-mode provider prompt kept planning-only or stale wording %q", forbidden)
+		}
+	}
+}
+
 func TestHandleNormalModeNoToolResponse_TextPlanFallsBackToFinalResponse(t *testing.T) {
 	disableColors(t)
 
