@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/readtool"
 	"github.com/susugadx/xelyon-cli/internal/tools/search"
 )
 
@@ -18,7 +18,7 @@ func executePrefetchReads(execCtx tools.ExecutionContext, items []search.SymbolB
 		if target == "" {
 			continue
 		}
-		for _, section := range filetool.ExecuteReadTargetsWithDetailSections(execCtx, target, "compact") {
+		for _, section := range readtool.ExecuteReadTargetsWithDetailSections(execCtx, target, "compact") {
 			if section.Failed || strings.TrimSpace(section.Output) == "" {
 				continue
 			}

@@ -20,6 +20,7 @@ func validateNumericRangeIssues(cfg *Config) []ValidationIssue {
 	if issue, ok := validateResponsesServerCompactionCompactThresholdIssue(cfg.Responses.ServerCompaction.CompactThreshold); ok {
 		issues = append(issues, issue)
 	}
+	issues = append(issues, validateMCPSurfaceBudgetIssues(cfg)...)
 	return issues
 }
 
@@ -67,6 +68,36 @@ func validateResponsesServerCompactionCompactThresholdIssue(value int) (Validati
 		Suggestion: "0",
 		Severity:   ValidationSeverityError,
 		CanAutoFix: false,
+	}, true
+}
+
+func validateMCPSurfaceBudgetIssues(cfg *Config) []ValidationIssue {
+	defaults := defaultMCPSurfaceBudgetConfig()
+	var issues []ValidationIssue
+	if issue, ok := validatePositiveOrZeroConfigIssue("mcp.surface_budget.max_tools", cfg.MCP.SurfaceBudget.MaxTools, defaults.MaxTools); ok {
+		issues = append(issues, issue)
+	}
+	if issue, ok := validatePositiveOrZeroConfigIssue("mcp.surface_budget.estimated_tokens", cfg.MCP.SurfaceBudget.EstimatedTokens, defaults.EstimatedTokens); ok {
+		issues = append(issues, issue)
+	}
+	if issue, ok := validatePositiveOrZeroConfigIssue("mcp.surface_budget.max_schema_bytes_per_tool", cfg.MCP.SurfaceBudget.MaxSchemaBytesPerTool, defaults.MaxSchemaBytesPerTool); ok {
+		issues = append(issues, issue)
+	}
+	return issues
+}
+
+func validatePositiveOrZeroConfigIssue(field string, value, defaultVal int) (ValidationIssue, bool) {
+	if value >= 0 {
+		return ValidationIssue{}, false
+	}
+	return ValidationIssue{
+		Field:      field,
+		Value:      fmt.Sprintf("%d", value),
+		Message:    "0 または正の整数を指定してください（0 はデフォルト値を使用）",
+		Suggestion: fmt.Sprintf("%d", defaultVal),
+		Severity:   ValidationSeverityError,
+		CanAutoFix: true,
+		FixedValue: defaultVal,
 	}, true
 }
 

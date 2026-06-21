@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/listtool"
 )
 
 const (
@@ -119,11 +119,11 @@ func (c *ToolCache) Load() error {
 	}
 
 	for path, entry := range pc.Dirs {
-		key := filetool.NormalizeListDirCacheKey(path)
+		key := listtool.NormalizeCacheKey(path)
 		if key == "" {
 			continue
 		}
-		dirPath := filetool.ListDirCachePhysicalPath(key)
+		dirPath := listtool.CachePhysicalPath(key)
 		info, err := os.Stat(dirPath)
 		if err != nil {
 			continue

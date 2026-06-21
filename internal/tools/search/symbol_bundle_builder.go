@@ -1,23 +1,11 @@
 package search
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/navigation"
 )
-
-type symbolBundleSectionInput struct {
-	Kind       string
-	Title      string
-	Items      []genericSymbolRef
-	TotalItems []genericSymbolRef
-	Limit      int
-	IsTest     bool
-}
 
 type goSymbolBundleBuildOptions struct {
 	implementationLimit int
@@ -248,87 +236,4 @@ func addNavigationTestSection(bundle *SymbolBundle, tests []navigation.TestRef, 
 		Total: total,
 		More:  more,
 	})
-}
-
-func buildGenericSymbolBundle(lang, query string, def genericSymbolDef, body []string, inputs []symbolBundleSectionInput) *SymbolBundle {
-	displayName := def.Name
-	if displayName == "" {
-		displayName = query
-	}
-
-	bundle := &SymbolBundle{
-		Identity: SymbolBundleIdentity{
-			Language:    lang,
-			Query:       query,
-			Canonical:   canonicalSymbolBundleKey(lang, def.File, def.Line, displayName),
-			DisplayName: displayName,
-			Kind:        def.Kind,
-			File:        def.File,
-			Line:        def.Line,
-			EndLine:     def.Line,
-		},
-		Definition: SymbolBundleDefinition{
-			File:      def.File,
-			Line:      def.Line,
-			EndLine:   def.Line,
-			Signature: def.Signature,
-			Body:      append([]string(nil), body...),
-		},
-		Debug: SymbolBundleDebug{Source: "generic-resolver"},
-	}
-
-	for _, input := range inputs {
-		section := buildGenericBundleSection(def, input)
-		if section != nil {
-			bundle.Sections = append(bundle.Sections, *section)
-		}
-	}
-	finalizeSymbolBundleDiagnostics(bundle)
-
-	return bundle
-}
-
-func stableGoSymbolBundleKey(packageDir, receiverNorm, name, kind, signature string) string {
-	sigHash := sha256.Sum256([]byte(strings.TrimSpace(signature)))
-	return fmt.Sprintf("%s|%s|%s|%s|%s|%s",
-		"go",
-		filepath.ToSlash(filepath.Clean(packageDir)),
-		strings.TrimSpace(receiverNorm),
-		strings.TrimSpace(name),
-		strings.TrimSpace(kind),
-		hex.EncodeToString(sigHash[:8]),
-	)
-}
-
-func canonicalGoSymbolBundleKey(symbol navigation.SymbolCandidate) string {
-	key := strings.TrimSpace(symbol.StableKey)
-	if key == "" {
-		key = stableGoSymbolBundleKey(symbol.PackageDir, symbol.ReceiverNorm, symbol.Name, symbol.Kind, symbol.Signature)
-	}
-	if symbol.StableKeyCollision && strings.TrimSpace(symbol.File) != "" {
-		return key + "|file=" + filepath.ToSlash(filepath.Clean(symbol.File))
-	}
-	return key
-}
-
-func canonicalSymbolBundleKey(lang, file string, line int, displayName string) string {
-	return fmt.Sprintf("%s|%s|%d|%s", lang, file, line, displayName)
-}
-
-func attachBundleRoute(bundle *SymbolBundle, route searchRouteTrace) *SymbolBundle {
-	if bundle == nil {
-		return nil
-	}
-	bundle.Debug.Route = route
-	if bundle.Debug.MatchedPatterns == nil && route.SymbolCandidates != nil {
-		bundle.Debug.MatchedPatterns = append([]string(nil), route.SymbolCandidates...)
-	}
-	return bundle
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

@@ -1,10 +1,7 @@
 package search
 
 import (
-	"fmt"
 	"regexp"
-
-	"github.com/susugadx/xelyon-cli/internal/locator"
 )
 
 const (
@@ -14,38 +11,20 @@ const (
 
 // resolveLuaSymbol は Lua 向けの enhanced symbol fast path。
 func resolveLuaSymbol(symbol string, opts SearchOptions) genericResolveResult {
-	defs := findGenericDefinitions(symbol, opts)
-	if len(defs) == 0 {
-		return genericResolveResult{Status: genericSymbolNone}
-	}
-	if len(defs) > 1 {
-		return genericResolveResult{Output: formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts), Status: genericSymbolMultiple}
-	}
+	return resolveGenericEnhancedSymbol(symbol, opts, genericEnhancedSymbolSpec{
+		language:      "lua",
+		buildSections: buildLuaSymbolSections,
+	})
+}
 
-	def := defs[0]
-	refs := findGenericReferences(symbol, opts)
-	filteredRefs := filterGenericRefs(refs, def)
-
-	var normalRefs, testRefs []genericSymbolRef
-	for _, ref := range filteredRefs {
-		if ref.IsTest {
-			testRefs = append(testRefs, ref)
-		} else {
-			normalRefs = append(normalRefs, ref)
-		}
-	}
-
+func buildLuaSymbolSections(normalRefs []genericSymbolRef, testRefs []genericSymbolRef, symbol string) []symbolBundleSectionInput {
 	requires, callers, otherRefs := classifyLuaRefs(normalRefs, symbol)
-	bundle := buildGenericSymbolBundle("lua", symbol, def, []string{
-		fmt.Sprintf("%d: %s", def.Line, def.Signature),
-	}, []symbolBundleSectionInput{
+	return []symbolBundleSectionInput{
 		{Kind: "requires", Title: "Requires", Items: requires, Limit: luaRequireLimit},
 		{Kind: "callers", Title: "Callers", Items: callers, Limit: luaCallerLimit},
 		{Kind: "references", Title: "References", Items: otherRefs, Limit: genericRefLimit},
 		{Kind: "tests", Title: "Related Tests", Items: testRefs, Limit: genericTestLimit, IsTest: true},
-	})
-	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
-	return genericResolveResult{Output: formatLuaSymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+	}
 }
 
 // classifyLuaRefs は Lua の参照を分類する。
@@ -66,9 +45,4 @@ func classifyLuaRefs(refs []genericSymbolRef, symbol string) (requires, callers,
 		}
 	}
 	return
-}
-
-// formatLuaSymbolResult は Lua の分類済みシンボル結果をフォーマットする。
-func formatLuaSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
-	return formatSymbolBundle(bundle, reg, nil)
 }

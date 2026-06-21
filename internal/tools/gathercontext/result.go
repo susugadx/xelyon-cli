@@ -2,7 +2,7 @@ package gathercontext
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/directquery"
 )
 
 type routeKind string
@@ -29,7 +29,7 @@ type executionResult struct {
 }
 
 type directPlan struct {
-	route filetool.GatherContextDirectRoute
+	route directquery.Route
 	err   string
 }
 

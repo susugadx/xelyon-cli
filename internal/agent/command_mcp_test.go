@@ -48,6 +48,7 @@ func TestHandleMCPCommand_PrintsSnapshotOnlyStatus(t *testing.T) {
 				"Highest estimated token tools",
 				"Recommendations",
 				"mcpServers fragment",
+				"mcp.surface_budget",
 				"\"beta\": {\"tools\": {\"include\": [\"<needed_tool>\"]}}",
 			} {
 				if !strings.Contains(got, want) {
@@ -150,6 +151,9 @@ func newMCPStatusTestAgent(t *testing.T, out *bytes.Buffer) *Agent {
 		}},
 		total:           len(tools),
 		estimatedTokens: 42,
+		budget:          config.EffectiveMCPSurfaceBudget(cfg),
+		model:           agent.CurrentModel,
+		toolSignature:   mcpVisibleToolSurfaceSignature(visibleMCPTools(tools)),
 	}
 	return agent
 }

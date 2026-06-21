@@ -7,14 +7,14 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/readtool"
 )
 
 type ToolExecCallback func(idx int, tc *tools.ToolCall, result toolruntime.Result)
 
 type readFileBatchExecution struct {
 	Execution toolruntime.Result
-	Sections  []filetool.ReadExecutionSection
+	Sections  []readtool.ReadExecutionSection
 }
 
 // executeToolForParallel は並列実行用のツール実行関数。
@@ -81,8 +81,8 @@ func (a *Agent) executeReadFileBatchResult(ctx context.Context, paths []string) 
 	}
 
 	execCtx := a.toolExecutionContext(ctx, strings.NewReader(""), io.Discard, io.Discard)
-	sections := filetool.ExecuteReadPathsWithDetailSections(execCtx, paths, "")
-	result := filetool.RenderReadExecutionSections(sections)
+	sections := readtool.ExecuteReadPathsWithDetailSections(execCtx, paths, "")
+	result := readtool.RenderReadExecutionSections(sections)
 	a.recordToolResultOptimizations(tc, result)
 
 	if a.ToolCache != nil {
@@ -92,7 +92,7 @@ func (a *Agent) executeReadFileBatchResult(ctx context.Context, paths []string) 
 	return readFileBatchExecution{
 		Execution: toolruntime.Result{
 			Result:      result,
-			Observation: filetool.MergeReadExecutionSectionObservations(sections),
+			Observation: readtool.MergeReadExecutionSectionObservations(sections),
 			Error:       tools.IsErrorResult(result),
 		},
 		Sections: sections,

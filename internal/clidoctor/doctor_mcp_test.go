@@ -186,13 +186,15 @@ func TestRenderMCPDoctorTextIncludesToolSurfaceSummary(t *testing.T) {
 
 	text := out.String()
 	for _, want := range []string{
-		"tool surface: visible=1 registered=1 total=2 omitted=1 estimated_tokens=12 schema=34 bytes",
+		"tool surface: visible=1 registered=1 total=2 omitted=1 estimated_tokens=12 budget=max 80 tools / 32000 tokens / 128 KiB schema per tool schema=34 bytes",
 		"top omitted reasons: token_budget_exceeded=1",
 		"largest schema tools:",
 		"mcp_sample_heavy: 34 bytes schema",
 		"highest estimated token tools:",
 		"mcp_sample_heavy: 12 tokens",
 		"recommendations:",
+		"1. Narrow ~/.xelyon/mcp.json mcpServers.<server>.tools.include/exclude:",
+		"2. If the server is intentionally large, raise ~/.xelyon/config.yaml mcp.surface_budget:",
 		"\"sample\": {\"tools\": {\"include\": [\"safe\"]}}",
 	} {
 		if !strings.Contains(text, want) {

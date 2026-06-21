@@ -1,14 +1,17 @@
 package file
 
-import "github.com/susugadx/xelyon-cli/internal/tools"
+import (
+	"github.com/susugadx/xelyon-cli/internal/tools"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/listtool"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/readtool"
+)
 
-// RegisterTools は file パッケージのツール群を Registry に登録する。
+// RegisterTools は file tool owner package 群を Registry に登録する。
 func RegisterTools(r *tools.Registry) {
-	r.Register(&ReadFileTool{})
-	r.Register(&WriteFileTool{})
-	r.Register(&StrReplaceTool{})
-	r.Register(&DeleteFileTool{})
-	r.Register(&ListDirTool{})
+	readtool.RegisterTools(r)
+	mutation.RegisterTools(r)
+	listtool.RegisterTools(r)
 }
 
 func init() {

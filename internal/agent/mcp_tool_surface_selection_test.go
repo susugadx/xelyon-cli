@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/mcp"
 )
 
@@ -19,9 +20,9 @@ func TestSelectMCPToolSurfaceRoundRobinBudget(t *testing.T) {
 	}
 
 	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
-		maxTools:           4,
-		maxEstimatedTokens: 32000,
-		maxSchemaBytes:     defaultMCPToolSurfaceMaxSchemaBytes,
+		MaxTools:              4,
+		EstimatedTokens:       32000,
+		MaxSchemaBytesPerTool: defaultMCPToolSurfaceBudget().MaxSchemaBytesPerTool,
 	})
 
 	got := exportedMCPToolNamesForTest(selection.selected)
@@ -47,9 +48,9 @@ func TestMCPToolSurfaceBudgetOmitsOversizedSchema(t *testing.T) {
 	}
 
 	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
-		maxTools:           10,
-		maxEstimatedTokens: 32000,
-		maxSchemaBytes:     64,
+		MaxTools:              10,
+		EstimatedTokens:       32000,
+		MaxSchemaBytesPerTool: 64,
 	})
 
 	if got := exportedMCPToolNamesForTest(selection.selected); !reflect.DeepEqual(got, []string{"mcp_alpha_small"}) {
@@ -63,15 +64,42 @@ func TestMCPToolSurfaceBudgetOmitsOversizedSchema(t *testing.T) {
 	}
 }
 
+func TestMCPToolSurfaceBudgetSkipsTokenEstimateForOversizedSchema(t *testing.T) {
+	hugeSchema := json.RawMessage(`{"type":"object","properties":{"payload":{"type":"string","description":"` + strings.Repeat("x", 128) + `"}}}`)
+	mcpTools := []mcp.MCPTool{
+		{ServerName: "alpha", Name: "small", Description: "Small", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{ServerName: "alpha", Name: "huge", Description: "Huge", InputSchema: hugeSchema},
+	}
+
+	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
+		MaxTools:              10,
+		EstimatedTokens:       32000,
+		MaxSchemaBytesPerTool: 64,
+	})
+
+	if got := exportedMCPToolNamesForTest(selection.selected); !reflect.DeepEqual(got, []string{"mcp_alpha_small"}) {
+		t.Fatalf("selected tools = %#v, want small only", got)
+	}
+	if got := selection.omittedExportedNames(); !reflect.DeepEqual(got, []string{"mcp_alpha_huge"}) {
+		t.Fatalf("omitted tools = %#v, want huge only", got)
+	}
+	if selection.omitted[0].reason != "schema_too_large" {
+		t.Fatalf("omission reason = %q, want schema_too_large", selection.omitted[0].reason)
+	}
+	if selection.omitted[0].estimatedTokens != 0 {
+		t.Fatalf("oversized schema estimated tokens = %d, want 0 before schema parsing", selection.omitted[0].estimatedTokens)
+	}
+}
+
 func TestMCPToolSurfaceBudgetCanOmitAllToolsWhenTokenBudgetExceeded(t *testing.T) {
 	mcpTools := []mcp.MCPTool{
 		{ServerName: "alpha", Name: "huge", Description: strings.Repeat("large description ", 50)},
 	}
 
 	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
-		maxTools:           10,
-		maxEstimatedTokens: 1,
-		maxSchemaBytes:     defaultMCPToolSurfaceMaxSchemaBytes,
+		MaxTools:              10,
+		EstimatedTokens:       1,
+		MaxSchemaBytesPerTool: defaultMCPToolSurfaceBudget().MaxSchemaBytesPerTool,
 	})
 
 	if len(selection.selected) != 0 {
@@ -91,9 +119,9 @@ func TestMCPToolSurfaceAnalysisReportsMetricsAndRecommendations(t *testing.T) {
 		{ServerName: "alpha", Name: "two", Description: "Two", InputSchema: json.RawMessage(`{"type":"object"}`)},
 	}
 	selection := selectMCPToolSurfaceWithBudget("gpt-4o", mcpTools, mcpToolSurfaceBudget{
-		maxTools:           1,
-		maxEstimatedTokens: 32000,
-		maxSchemaBytes:     defaultMCPToolSurfaceMaxSchemaBytes,
+		MaxTools:              1,
+		EstimatedTokens:       32000,
+		MaxSchemaBytesPerTool: defaultMCPToolSurfaceBudget().MaxSchemaBytesPerTool,
 	})
 
 	report := selection.analysis()
@@ -114,5 +142,57 @@ func TestMCPToolSurfaceAnalysisReportsMetricsAndRecommendations(t *testing.T) {
 	}
 	if len(report.Recommendations) != 1 || report.Recommendations[0].ServerName != "alpha" {
 		t.Fatalf("recommendations = %#v, want alpha narrowing recommendation", report.Recommendations)
+	}
+}
+
+func TestCurrentMCPToolSurfaceUsesConfigBudget(t *testing.T) {
+	cfg := config.CloneConfig(config.DefaultConfig())
+	cfg.MCP.SurfaceBudget.MaxTools = 1
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	manager := mcp.NewManager()
+	tools := []mcp.MCPTool{
+		{ServerName: "alpha", Name: "one", Description: "One"},
+		{ServerName: "alpha", Name: "two", Description: "Two"},
+	}
+	setManagerToolsForTest(t, manager, tools)
+	agent := &Agent{
+		CurrentModel: "gpt-4o",
+		Runtime:      runtime,
+		mcpManager:   manager,
+	}
+
+	selection := agent.currentMCPToolSurface()
+	if got := exportedMCPToolNamesForTest(selection.selected); !reflect.DeepEqual(got, []string{"mcp_alpha_one"}) {
+		t.Fatalf("selected tools = %#v, want one tool from config max_tools=1", got)
+	}
+	if got := selection.omittedExportedNames(); !reflect.DeepEqual(got, []string{"mcp_alpha_two"}) {
+		t.Fatalf("omitted tools = %#v, want second tool omitted", got)
+	}
+	if selection.budget.MaxTools != 1 {
+		t.Fatalf("selection budget = %#v, want config max_tools=1", selection.budget)
+	}
+}
+
+func TestCurrentMCPToolSurfaceInvalidatesCacheWhenToolsChangeWithSameCount(t *testing.T) {
+	cfg := config.CloneConfig(config.DefaultConfig())
+	runtime := NewAgentRuntimeWithConfig(cfg)
+	manager := mcp.NewManager()
+	setManagerToolsForTest(t, manager, []mcp.MCPTool{
+		{ServerName: "alpha", Name: "one", Description: "One"},
+	})
+	agent := &Agent{
+		CurrentModel: "gpt-4o",
+		Runtime:      runtime,
+		mcpManager:   manager,
+	}
+	agent.refreshMCPToolSurface()
+
+	setManagerToolsForTest(t, manager, []mcp.MCPTool{
+		{ServerName: "alpha", Name: "two", Description: "Two"},
+	})
+
+	selection := agent.currentMCPToolSurface()
+	if got := exportedMCPToolNamesForTest(selection.selected); !reflect.DeepEqual(got, []string{"mcp_alpha_two"}) {
+		t.Fatalf("selected tools = %#v, want refreshed tool after same-count manager update", got)
 	}
 }

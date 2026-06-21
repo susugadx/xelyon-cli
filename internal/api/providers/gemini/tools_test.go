@@ -9,7 +9,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
-	filetool "github.com/susugadx/xelyon-cli/internal/tools/file"
+	"github.com/susugadx/xelyon-cli/internal/tools/file/mutation"
 
 	// ツール登録のための blank import
 	_ "github.com/susugadx/xelyon-cli/internal/tools/dev"
@@ -721,7 +721,7 @@ func TestConvertToGeminiSchema_JSONSerializable(t *testing.T) {
 }
 
 func TestGeminiToolDeclaration_StrReplaceBatchEditsKeepsNestedProperties(t *testing.T) {
-	strReplace := &filetool.StrReplaceTool{}
+	strReplace := &mutation.StrReplaceTool{}
 	ctx := api.WithToolDefinitions(context.Background(), []api.ToolDefinition{{
 		Name:        strReplace.Name(),
 		Description: strReplace.Description(),

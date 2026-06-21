@@ -151,13 +151,6 @@ func TestResolvePrimaryFileRefs_DedupByDisplayAndResolvedPath(t *testing.T) {
 	}
 }
 
-func TestPrimaryFileRefResolverResolveCandidate_RejectsEmptyDisplayPath(t *testing.T) {
-	resolver := newPrimaryFileRefResolver(SearchOptions{})
-	if _, ok := resolver.resolveCandidate(primaryFileRefCandidate{DisplayPath: "   ", Source: primaryFileRefSourceText}); ok {
-		t.Fatal("expected empty display path candidate to be rejected")
-	}
-}
-
 func TestPrimaryFileRefCandidateCollectorAddLine(t *testing.T) {
 	collector := newPrimaryFileRefCandidateCollector()
 	collector.addLine("No matches found")

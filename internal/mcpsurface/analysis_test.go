@@ -90,10 +90,81 @@ func TestAnalyzeJSONDoesNotCarryRawSchemaOrDescription(t *testing.T) {
 	}
 }
 
+func TestApplyBudgetOmitsByTokenAndSchema(t *testing.T) {
+	reportTools := []Tool{
+		{ServerName: "alpha", ToolName: "one", ExportedName: "mcp_alpha_one", Registered: true, Visible: true, SchemaBytes: 10, EstimatedTokens: 5},
+		{ServerName: "alpha", ToolName: "two", ExportedName: "mcp_alpha_two", Registered: true, Visible: true, SchemaBytes: 10, EstimatedTokens: 5},
+		{ServerName: "beta", ToolName: "huge_schema", ExportedName: "mcp_beta_huge_schema", Registered: true, Visible: true, SchemaBytes: 100, EstimatedTokens: 1},
+		{ServerName: "beta", ToolName: "huge_tokens", ExportedName: "mcp_beta_huge_tokens", Registered: true, Visible: true, SchemaBytes: 10, EstimatedTokens: 100},
+	}
+
+	selection := ApplyBudget(reportTools, Budget{
+		MaxTools:              10,
+		EstimatedTokens:       20,
+		MaxSchemaBytesPerTool: 50,
+	})
+
+	if got := toolNames(selection.Selected); !reflect.DeepEqual(got, []string{"mcp_alpha_one", "mcp_alpha_two"}) {
+		t.Fatalf("selected = %#v, want alpha one/two", got)
+	}
+	reasons := map[string]string{}
+	for _, omitted := range selection.Omitted {
+		reasons[omitted.ExportedName] = omitted.OmittedReason
+		if !omitted.Registered || omitted.Visible {
+			t.Fatalf("omitted tool = %+v, want registered hidden", omitted)
+		}
+	}
+	if reasons["mcp_beta_huge_schema"] != OmittedReasonSchemaTooLarge {
+		t.Fatalf("schema omission reason = %q, want %q", reasons["mcp_beta_huge_schema"], OmittedReasonSchemaTooLarge)
+	}
+	if reasons["mcp_beta_huge_tokens"] != OmittedReasonTokenBudgetExceeded {
+		t.Fatalf("token omission reason = %q, want %q", reasons["mcp_beta_huge_tokens"], OmittedReasonTokenBudgetExceeded)
+	}
+}
+
+func TestApplyBudgetOmitsByToolCount(t *testing.T) {
+	selection := ApplyBudget([]Tool{
+		{ServerName: "alpha", ToolName: "one", ExportedName: "mcp_alpha_one", Registered: true, Visible: true, SchemaBytes: 10, EstimatedTokens: 1},
+		{ServerName: "alpha", ToolName: "two", ExportedName: "mcp_alpha_two", Registered: true, Visible: true, SchemaBytes: 10, EstimatedTokens: 1},
+		{ServerName: "alpha", ToolName: "three", ExportedName: "mcp_alpha_three", Registered: true, Visible: true, SchemaBytes: 10, EstimatedTokens: 1},
+	}, Budget{MaxTools: 2, EstimatedTokens: 100, MaxSchemaBytesPerTool: 100})
+
+	if got := toolNames(selection.Selected); !reflect.DeepEqual(got, []string{"mcp_alpha_one", "mcp_alpha_three"}) {
+		t.Fatalf("selected = %#v, want first two sorted tools by tool name", got)
+	}
+	if len(selection.Omitted) != 1 || selection.Omitted[0].ExportedName != "mcp_alpha_two" || selection.Omitted[0].OmittedReason != OmittedReasonToolCountBudgetExceeded {
+		t.Fatalf("omitted = %#v, want alpha two omitted by tool count", selection.Omitted)
+	}
+}
+
+func TestAnalyzeIncludesEffectiveBudgetWhenProvided(t *testing.T) {
+	budget := Budget{MaxTools: 3, EstimatedTokens: 123, MaxSchemaBytesPerTool: 456}
+	report := Analyze([]Tool{{
+		ServerName:      "alpha",
+		ToolName:        "one",
+		ExportedName:    "mcp_alpha_one",
+		Registered:      true,
+		Visible:         true,
+		EstimatedTokens: 10,
+	}}, Options{Budget: budget})
+
+	if report.EffectiveBudget == nil || *report.EffectiveBudget != budget {
+		t.Fatalf("EffectiveBudget = %#v, want %#v", report.EffectiveBudget, budget)
+	}
+}
+
 func toolMetricNames(metrics []ToolMetric) []string {
 	names := make([]string, 0, len(metrics))
 	for _, metric := range metrics {
 		names = append(names, metric.ExportedName)
+	}
+	return names
+}
+
+func toolNames(tools []Tool) []string {
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		names = append(names, tool.ExportedName)
 	}
 	return names
 }

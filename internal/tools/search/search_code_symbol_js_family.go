@@ -1,10 +1,6 @@
 package search
 
-import (
-	"fmt"
-
-	"github.com/susugadx/xelyon-cli/internal/locator"
-)
+import "fmt"
 
 const (
 	jsImportLimit  = 5
@@ -54,7 +50,7 @@ func resolveJSFamilySymbol(symbol string, opts SearchOptions) genericResolveResu
 	})
 	setJSFamilyBundleDiagnostics(bundle, refResult.diagnostics, filteredTotalRefs)
 	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
-	return genericResolveResult{Output: formatJSFamilySymbolResult(bundle, opts.LocatorRegistry), Status: genericSymbolSingle, Bundle: bundle}
+	return genericResolveResult{Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil), Status: genericSymbolSingle, Bundle: bundle}
 }
 
 type jsFamilySymbolRefs struct {
@@ -63,10 +59,4 @@ type jsFamilySymbolRefs struct {
 	typeRefs []genericSymbolRef
 	others   []genericSymbolRef
 	tests    []genericSymbolRef
-}
-
-// formatJSFamilySymbolResult は TS/JS の分類済みシンボル結果をフォーマットする。
-// 出力形式は Go fast path と同様のセクション構造で、locator ID を付与する。
-func formatJSFamilySymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
-	return formatSymbolBundle(bundle, reg, nil)
 }

@@ -314,6 +314,13 @@ mcp:
     enabled: true
     # Headlessモードでも接続（デフォルト: false）
     headless: false
+    surface_budget:
+        # provider に公開する MCP tool 数の上限
+        max_tools: 80
+        # MCP tool definitions の推定 token 上限
+        estimated_tokens: 32000
+        # 1 tool あたりの input schema byte 上限
+        max_schema_bytes_per_tool: 131072
 
 # ============================================================
 # Final Checks 設定
@@ -327,6 +334,12 @@ final_checks:
     timeout: 600
 ```
 <!-- CONFIG-EXAMPLE-END -->
+
+`mcp.surface_budget` は MCP tool を provider 定義、system prompt、request context に載せるときの global budget です。
+既定値は大量の schema を常時 provider に渡して prompt 品質と latency を悪化させないために上げていません。
+MCP tool が省略される場合は、まず `~/.xelyon/mcp.json` の `mcpServers.<server>.tools.include` / `tools.exclude` で必要な tool に絞ってください。
+意図的に大きい server で公開 tool を絞れない場合だけ、`mcp.surface_budget.max_tools`、`mcp.surface_budget.estimated_tokens`、`mcp.surface_budget.max_schema_bytes_per_tool` を増やします。
+`/mcp status` と `xelyon doctor mcp --connect` で effective budget、omitted reason、提案される `mcpServers` 断片を確認できます。
 
 `openai_subscription.max_output_tokens: 0` は subscription backend の既定に任せるため、Responses request には `max_output_tokens` を送らないことを意味します。2026-06-08 時点の live smoke では subscription endpoint が `max_output_tokens` を `Unsupported parameter: max_output_tokens` として拒否したため、`openai_subscription` は provider / model override で非 0 が設定されていてもこの parameter を送りません。これは `openai` provider の API key 経路とは別の provider 固有契約です。
 

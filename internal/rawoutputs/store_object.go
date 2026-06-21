@@ -1,10 +1,12 @@
 package rawoutputs
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"hash"
 	"io"
 	"os"
@@ -227,46 +229,168 @@ func (s *Store) commitPreparedObject(sessionID, tempPath string, artifact RawOut
 }
 
 func (s *Store) readAndVerifyObject(record ManifestRecord) ([]byte, error) {
-	path, err := s.safeExistingSessionFilePath(record.Ref.SessionID, record.Artifact.RelativePath)
+	var body bytes.Buffer
+	_, err := s.scanAndVerifyObject(context.Background(), record, chunkScannerFunc(func(chunk []byte) error {
+		_, err := body.Write(chunk)
+		return err
+	}))
 	if err != nil {
 		return nil, err
+	}
+	return body.Bytes(), nil
+}
+
+func (s *Store) scanAndVerifyObject(ctx context.Context, record ManifestRecord, scanner ChunkScanner) (ScanResult, error) {
+	path, err := s.safeExistingSessionFilePath(record.Ref.SessionID, record.Artifact.RelativePath)
+	if err != nil {
+		return ScanResult{}, err
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, reasonError(ReasonArtifactMissing, "object missing")
+			return ScanResult{}, reasonError(ReasonArtifactMissing, "object missing")
 		}
-		return nil, reasonError(ReasonPathInvalid, "stat object: %w", err)
+		return ScanResult{}, reasonError(ReasonPathInvalid, "stat object: %w", err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return nil, reasonError(ReasonPathInvalid, "object path is symlink")
+		return ScanResult{}, reasonError(ReasonPathInvalid, "object path is symlink")
 	}
-	stored, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
-		return nil, reasonError(ReasonPathInvalid, "read object: %w", err)
+		return ScanResult{}, reasonError(ReasonPathInvalid, "open object: %w", err)
 	}
-	body := stored
+	defer f.Close()
+
+	writer := newVerifyingChunkWriter(ctx, scanner)
 	if record.Artifact.Encrypted {
-		if crypto.IsSessionStreamEncrypted(stored) {
-			var decrypted bytes.Buffer
-			if err := crypto.DecryptSessionStream(context.Background(), &decrypted, bytes.NewReader(stored), s.opts.Passphrase); err != nil {
-				return nil, reasonError(ReasonDecryptFailed, "decrypt object: %w", err)
+		reader := bufio.NewReader(f)
+		peeked, peekErr := reader.Peek(len(crypto.SessionStreamEncryptionMagic))
+		if peekErr == nil && crypto.IsSessionStreamEncrypted(peeked) {
+			if err := crypto.DecryptSessionStream(ctx, writer, reader, s.opts.Passphrase); err != nil {
+				if scannerErr, ok := rawOutputChunkScannerErrorCause(err); ok {
+					return ScanResult{}, rawOutputChunkScannerError{err: scannerErr}
+				}
+				if writer.consumerErr != nil && errors.Is(err, writer.consumerErr) {
+					return ScanResult{}, rawOutputChunkScannerError{err: writer.consumerErr}
+				}
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return ScanResult{}, err
+				}
+				return ScanResult{}, reasonError(ReasonDecryptFailed, "decrypt object: %w", err)
 			}
-			body = decrypted.Bytes()
 		} else {
+			stored, err := io.ReadAll(reader)
+			if err != nil {
+				return ScanResult{}, reasonError(ReasonPathInvalid, "read object: %w", err)
+			}
 			decrypted, err := crypto.DecryptSession(stored, s.opts.Passphrase)
 			if err != nil {
-				return nil, reasonError(ReasonDecryptFailed, "decrypt object: %w", err)
+				return ScanResult{}, reasonError(ReasonDecryptFailed, "decrypt object: %w", err)
 			}
-			body = decrypted
+			if _, err := writer.Write(decrypted); err != nil {
+				return ScanResult{}, err
+			}
+		}
+	} else if err := s.scanPlainObject(ctx, f, writer); err != nil {
+		return ScanResult{}, err
+	}
+
+	got := "sha256:" + hex.EncodeToString(writer.hash.Sum(nil))
+	if got != record.Artifact.ContentHash || got != record.Ref.ContentHash {
+		return ScanResult{}, reasonError(ReasonArtifactHashMismatch, "hash mismatch got %s want %s", got, record.Artifact.ContentHash)
+	}
+	return ScanResult{
+		Ref:         record.Ref,
+		ContentHash: got,
+		SizeBytes:   writer.total,
+	}, nil
+}
+
+func (s *Store) scanPlainObject(ctx context.Context, f *os.File, writer *verifyingChunkWriter) error {
+	buf := make([]byte, s.opts.ChunkBytes)
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		n, readErr := f.Read(buf)
+		if n > 0 {
+			if _, err := writer.Write(buf[:n]); err != nil {
+				return err
+			}
+		}
+		if readErr == io.EOF {
+			return nil
+		}
+		if readErr != nil {
+			return reasonError(ReasonPathInvalid, "read object: %w", readErr)
 		}
 	}
-	hash := sha256.Sum256(body)
-	got := "sha256:" + hex.EncodeToString(hash[:])
-	if got != record.Artifact.ContentHash || got != record.Ref.ContentHash {
-		return nil, reasonError(ReasonArtifactHashMismatch, "hash mismatch got %s want %s", got, record.Artifact.ContentHash)
+}
+
+type verifyingChunkWriter struct {
+	ctx         context.Context
+	scanner     ChunkScanner
+	hash        hash.Hash
+	total       int64
+	consumerErr error
+}
+
+func newVerifyingChunkWriter(ctx context.Context, scanner ChunkScanner) *verifyingChunkWriter {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	return body, nil
+	return &verifyingChunkWriter{
+		ctx:     ctx,
+		scanner: scanner,
+		hash:    sha256.New(),
+	}
+}
+
+func (w *verifyingChunkWriter) Write(chunk []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	if len(chunk) == 0 {
+		return 0, nil
+	}
+	if _, err := w.hash.Write(chunk); err != nil {
+		return 0, err
+	}
+	w.total += int64(len(chunk))
+	if err := w.scanner.Scan(chunk); err != nil {
+		w.consumerErr = err
+		return 0, rawOutputChunkScannerError{err: err}
+	}
+	return len(chunk), nil
+}
+
+type rawOutputChunkScannerError struct {
+	err error
+}
+
+func (e rawOutputChunkScannerError) Error() string {
+	if e.err == nil {
+		return "raw output chunk scanner error"
+	}
+	return e.err.Error()
+}
+
+func (e rawOutputChunkScannerError) Unwrap() error {
+	return e.err
+}
+
+func rawOutputChunkScannerErrorCause(err error) (error, bool) {
+	var scannerErr rawOutputChunkScannerError
+	if errors.As(err, &scannerErr) && scannerErr.err != nil {
+		return scannerErr.err, true
+	}
+	return nil, false
+}
+
+type chunkScannerFunc func([]byte) error
+
+func (f chunkScannerFunc) Scan(chunk []byte) error {
+	return f(chunk)
 }
 
 func buildRefID(req CreateRequest, contentHash string) string {

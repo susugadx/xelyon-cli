@@ -258,6 +258,73 @@ func TestLoadConfig_ProviderHistoryReductionExplicitFalse(t *testing.T) {
 	}
 }
 
+func TestLoadConfigMCPSurfaceBudgetDefaultsAndOverrides(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	configYAML := strings.Join([]string{
+		"mcp:",
+		"  surface_budget:",
+		"    max_tools: 12",
+		"    estimated_tokens: 3456",
+		"    max_schema_bytes_per_tool: 7890",
+		"",
+	}, "\n")
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfigReadOnly()
+	if err != nil {
+		t.Fatalf("LoadConfigReadOnly() error = %v", err)
+	}
+	if got := cfg.MCP.SurfaceBudget; got.MaxTools != 12 || got.EstimatedTokens != 3456 || got.MaxSchemaBytesPerTool != 7890 {
+		t.Fatalf("MCP.SurfaceBudget = %#v, want override values", got)
+	}
+	effective := EffectiveMCPSurfaceBudget(cfg)
+	if effective.MaxTools != 12 || effective.EstimatedTokens != 3456 || effective.MaxSchemaBytesPerTool != 7890 {
+		t.Fatalf("EffectiveMCPSurfaceBudget() = %#v, want override values", effective)
+	}
+}
+
+func TestLoadConfigMCPSurfaceBudgetZeroUsesDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".xelyon")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config dir: %v", err)
+	}
+
+	configYAML := strings.Join([]string{
+		"mcp:",
+		"  surface_budget:",
+		"    max_tools: 0",
+		"    estimated_tokens: 0",
+		"    max_schema_bytes_per_tool: 0",
+		"",
+	}, "\n")
+	configPath := filepath.Join(configDir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0600); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	cfg, err := LoadConfigReadOnly()
+	if err != nil {
+		t.Fatalf("LoadConfigReadOnly() error = %v", err)
+	}
+	defaults := defaultMCPSurfaceBudgetConfig()
+	if got := cfg.MCP.SurfaceBudget; got != defaults {
+		t.Fatalf("MCP.SurfaceBudget = %#v, want defaults %#v", got, defaults)
+	}
+}
+
 func TestLoadConfig_ProviderHistoryRawOutputArtifacts(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)

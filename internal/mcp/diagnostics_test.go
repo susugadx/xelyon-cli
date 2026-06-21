@@ -9,6 +9,7 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/mcpsurface"
 	"github.com/susugadx/xelyon-cli/internal/token"
 )
 
@@ -88,6 +89,9 @@ func TestDiagnoseConnectReportsToolVisibilityAndUnknownReferences(t *testing.T) 
 	if server.Connection == nil {
 		t.Fatal("Connection = nil, want connection report")
 	}
+	if report.ToolSurface == nil || report.ToolSurface.VisibleTools != 1 || report.ToolSurface.OmittedTools != 0 {
+		t.Fatalf("report.ToolSurface = %#v, want global runtime surface with one visible tool", report.ToolSurface)
+	}
 	if server.Connection.Status != "ok" || !server.Connection.Attempted {
 		t.Fatalf("Connection = %+v, want attempted ok", *server.Connection)
 	}
@@ -133,6 +137,90 @@ func TestDiagnoseConnectReportsToolVisibilityAndUnknownReferences(t *testing.T) 
 	}
 }
 
+func TestDiagnoseConnectProjectsGlobalBudgetToPerServerSurfaces(t *testing.T) {
+	command, args := mcpHelperCommand(t)
+	homeDir := t.TempDir()
+	writeMCPDiagnosticConfig(t, homeDir, Config{
+		MCPServers: map[string]ServerConfig{
+			"alpha": {
+				Command: command,
+				Args:    args,
+				Env: map[string]string{
+					"GO_WANT_XELYON_MCP_HELPER": "1",
+				},
+				Approval: "auto",
+				Tools: &ToolsFilter{
+					Include: []string{"echo"},
+				},
+			},
+			"beta": {
+				Command: command,
+				Args:    args,
+				Env: map[string]string{
+					"GO_WANT_XELYON_MCP_HELPER": "1",
+				},
+				Approval: "auto",
+				Tools: &ToolsFilter{
+					Include: []string{"echo"},
+				},
+			},
+		},
+	})
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		HomeDir:      homeDir,
+		MCPEnabled:   true,
+		Connect:      true,
+		IncludeTools: true,
+		SurfaceBudget: mcpsurface.Budget{
+			MaxTools:              1,
+			EstimatedTokens:       32000,
+			MaxSchemaBytesPerTool: 131072,
+		},
+	})
+
+	if report.ToolSurface == nil {
+		t.Fatal("report.ToolSurface = nil, want global runtime surface")
+	}
+	if report.ToolSurface.VisibleTools != 1 || report.ToolSurface.OmittedTools != 1 || report.ToolSurface.RegisteredTools != 2 {
+		t.Fatalf("report.ToolSurface = %+v, want visible=1 omitted=1 registered=2", *report.ToolSurface)
+	}
+	if len(report.Servers) != 2 {
+		t.Fatalf("servers = %d, want 2", len(report.Servers))
+	}
+	alpha := report.Servers[0]
+	beta := report.Servers[1]
+	if alpha.Name != "alpha" || beta.Name != "beta" {
+		t.Fatalf("server order = %q, %q, want alpha, beta", alpha.Name, beta.Name)
+	}
+	if alpha.Connection == nil || beta.Connection == nil {
+		t.Fatalf("connections = %#v %#v, want both connection reports", alpha.Connection, beta.Connection)
+	}
+	if alpha.Connection.ToolSurface == nil || beta.Connection.ToolSurface == nil {
+		t.Fatalf("connection surfaces = %#v %#v, want both tool surfaces", alpha.Connection.ToolSurface, beta.Connection.ToolSurface)
+	}
+	if alpha.Connection.ToolSurface.VisibleTools != 1 || alpha.Connection.ToolSurface.OmittedTools != 1 || alpha.Connection.ToolSurface.RegisteredTools != 1 {
+		t.Fatalf("alpha connection surface = %+v, want visible registered echo plus filtered hidden", *alpha.Connection.ToolSurface)
+	}
+	if beta.Connection.ToolSurface.VisibleTools != 0 || beta.Connection.ToolSurface.OmittedTools != 2 || beta.Connection.ToolSurface.RegisteredTools != 1 {
+		t.Fatalf("beta connection surface = %+v, want global budget hidden echo plus filtered hidden", *beta.Connection.ToolSurface)
+	}
+	if len(beta.Connection.ToolSurface.OmittedReasons) != 2 {
+		t.Fatalf("beta omitted reasons = %#v, want budget and filtered reasons", beta.Connection.ToolSurface.OmittedReasons)
+	}
+	requireReasonCount(t, beta.Connection.ToolSurface.OmittedReasons, mcpsurface.OmittedReasonToolCountBudgetExceeded, 1)
+	requireReasonCount(t, beta.Connection.ToolSurface.OmittedReasons, string(toolSkipFiltered), 1)
+	if len(beta.Tools) != 2 {
+		t.Fatalf("beta tools = %#v, want echo and hidden rows", beta.Tools)
+	}
+	if beta.Tools[0].Name != "echo" || beta.Tools[0].Visible || beta.Tools[0].HiddenReason != mcpsurface.OmittedReasonToolCountBudgetExceeded {
+		t.Fatalf("beta echo tool = %+v, want hidden by global budget", beta.Tools[0])
+	}
+	if beta.Tools[1].Name != "hidden" || beta.Tools[1].Visible || beta.Tools[1].HiddenReason != string(toolSkipFiltered) {
+		t.Fatalf("beta hidden tool = %+v, want filtered reason preserved", beta.Tools[1])
+	}
+}
+
 func TestPopulateConnectionDiagnosticsMarksDuplicateToolCollisionHidden(t *testing.T) {
 	manager := NewManager()
 	manager.SetOutput(io.Discard)
@@ -151,7 +239,13 @@ func TestPopulateConnectionDiagnosticsMarksDuplicateToolCollisionHidden(t *testi
 		SkippedToolCount:    summary.skipped,
 	}
 	serverReport := &DiagnosticServerReport{Name: "helper"}
-	populateConnectionDiagnostics(manager, "helper", serverConfig, listedTools, connection, serverReport, true)
+	toolSurfaceTools := populateConnectionDiagnostics(manager, "helper", serverConfig, listedTools, connection, serverReport, true)
+	serverReport.Connection = connection
+	report := DiagnosticReport{Servers: []DiagnosticServerReport{*serverReport}}
+	applyDiagnosticRuntimeToolSurface(&report, nil, mcpsurface.DefaultBudget(), true, map[string][]mcpsurface.Tool{
+		"helper": toolSurfaceTools,
+	})
+	server := report.Servers[0]
 
 	if connection.RawToolCount != 2 || connection.RegisteredToolCount != 1 || connection.SkippedToolCount != 1 || connection.CollisionToolCount != 1 {
 		t.Fatalf("Connection counts = %+v, want raw=2 registered=1 skipped=1 collision=1", *connection)
@@ -172,16 +266,100 @@ func TestPopulateConnectionDiagnosticsMarksDuplicateToolCollisionHidden(t *testi
 	if len(connection.ToolSurface.OmittedReasons) != 1 || connection.ToolSurface.OmittedReasons[0].Reason != string(toolSkipCollision) {
 		t.Fatalf("ToolSurface omitted reasons = %#v, want collision", connection.ToolSurface.OmittedReasons)
 	}
-	if len(serverReport.Tools) != 2 {
-		t.Fatalf("Tools = %#v, want two duplicate entries", serverReport.Tools)
+	if len(server.Tools) != 2 {
+		t.Fatalf("Tools = %#v, want two duplicate entries", server.Tools)
 	}
-	first := serverReport.Tools[0]
+	first := server.Tools[0]
 	if first.Name != "dup" || first.ExportedName != "mcp_helper_dup" || first.Approval != "auto" || !first.Visible || first.HiddenReason != "" {
 		t.Fatalf("first tool = %+v, want visible duplicate winner", first)
 	}
-	second := serverReport.Tools[1]
+	second := server.Tools[1]
 	if second.Name != "dup" || second.ExportedName != "mcp_helper_dup" || second.Approval != "auto" || second.Visible || second.HiddenReason != string(toolSkipCollision) {
 		t.Fatalf("second tool = %+v, want hidden duplicate collision", second)
+	}
+}
+
+func TestApplyDiagnosticRuntimeToolSurfaceProjectsBudgetToConnectionSurface(t *testing.T) {
+	manager := NewManager()
+	manager.SetOutput(io.Discard)
+	listedTools := []*sdkmcp.Tool{
+		{Name: "one"},
+		{Name: "two"},
+	}
+	serverConfig := ServerConfig{Approval: "auto"}
+	connection := &DiagnosticConnectionReport{RegisteredToolCount: 2}
+	serverReport := &DiagnosticServerReport{Name: "helper"}
+
+	toolSurfaceTools := populateConnectionDiagnostics(manager, "helper", serverConfig, listedTools, connection, serverReport, true)
+	serverReport.Connection = connection
+	report := DiagnosticReport{Servers: []DiagnosticServerReport{*serverReport}}
+	applyDiagnosticRuntimeToolSurface(&report, []MCPTool{
+		{ServerName: "helper", Name: "one"},
+		{ServerName: "helper", Name: "two"},
+	}, mcpsurface.Budget{
+		MaxTools:              1,
+		EstimatedTokens:       32000,
+		MaxSchemaBytesPerTool: 131072,
+	}, true, map[string][]mcpsurface.Tool{
+		"helper": toolSurfaceTools,
+	})
+	server := report.Servers[0]
+
+	if connection.ToolSurface == nil {
+		t.Fatal("ToolSurface = nil, want budgeted analysis")
+	}
+	if connection.ToolSurface.VisibleTools != 1 || connection.ToolSurface.OmittedTools != 1 || connection.ToolSurface.RegisteredTools != 2 {
+		t.Fatalf("ToolSurface counts = %+v, want visible=1 omitted=1 registered=2", *connection.ToolSurface)
+	}
+	if len(connection.ToolSurface.OmittedReasons) != 1 || connection.ToolSurface.OmittedReasons[0].Reason != mcpsurface.OmittedReasonToolCountBudgetExceeded {
+		t.Fatalf("ToolSurface omitted reasons = %#v, want tool_count_budget_exceeded", connection.ToolSurface.OmittedReasons)
+	}
+	if connection.ToolSurface.EffectiveBudget == nil || connection.ToolSurface.EffectiveBudget.MaxTools != 1 {
+		t.Fatalf("EffectiveBudget = %#v, want max_tools=1", connection.ToolSurface.EffectiveBudget)
+	}
+	if len(server.Tools) != 2 {
+		t.Fatalf("Tools = %#v, want two tool reports", server.Tools)
+	}
+	if !server.Tools[0].Visible || server.Tools[0].Name != "one" {
+		t.Fatalf("first tool = %+v, want visible one", server.Tools[0])
+	}
+	if server.Tools[1].Visible || server.Tools[1].HiddenReason != mcpsurface.OmittedReasonToolCountBudgetExceeded {
+		t.Fatalf("second tool = %+v, want budget hidden two", server.Tools[1])
+	}
+}
+
+func TestApplyDiagnosticRuntimeToolSurfaceUpdatesToolReports(t *testing.T) {
+	report := DiagnosticReport{
+		Servers: []DiagnosticServerReport{{
+			Name: "helper",
+			Tools: []DiagnosticToolReport{
+				{Name: "one", ExportedName: "mcp_helper_one", Visible: true},
+				{Name: "two", ExportedName: "mcp_helper_two", Visible: true},
+			},
+		}},
+	}
+	tools := []MCPTool{
+		{ServerName: "helper", Name: "one", Description: "One"},
+		{ServerName: "helper", Name: "two", Description: "Two"},
+	}
+
+	applyDiagnosticRuntimeToolSurface(&report, tools, mcpsurface.Budget{
+		MaxTools:              1,
+		EstimatedTokens:       32000,
+		MaxSchemaBytesPerTool: 131072,
+	}, true, nil)
+
+	if report.ToolSurface == nil {
+		t.Fatal("ToolSurface = nil, want global runtime surface")
+	}
+	if report.ToolSurface.VisibleTools != 1 || report.ToolSurface.OmittedTools != 1 || report.ToolSurface.RegisteredTools != 2 {
+		t.Fatalf("ToolSurface counts = %+v, want visible=1 omitted=1 registered=2", *report.ToolSurface)
+	}
+	if !report.Servers[0].Tools[0].Visible || report.Servers[0].Tools[0].HiddenReason != "" {
+		t.Fatalf("first tool = %+v, want visible", report.Servers[0].Tools[0])
+	}
+	if report.Servers[0].Tools[1].Visible || report.Servers[0].Tools[1].HiddenReason != mcpsurface.OmittedReasonToolCountBudgetExceeded {
+		t.Fatalf("second tool = %+v, want runtime budget hidden", report.Servers[0].Tools[1])
 	}
 }
 
@@ -214,7 +392,17 @@ func TestPopulateConnectionDiagnosticsEstimatesTokensFromActualProviderSchemaWit
 	connection := &DiagnosticConnectionReport{RegisteredToolCount: 1}
 	serverReport := &DiagnosticServerReport{Name: "helper"}
 
-	populateConnectionDiagnostics(manager, "helper", ServerConfig{}, listedTools, connection, serverReport, true)
+	toolSurfaceTools := populateConnectionDiagnostics(manager, "helper", ServerConfig{}, listedTools, connection, serverReport, true)
+	serverReport.Connection = connection
+	report := DiagnosticReport{Servers: []DiagnosticServerReport{*serverReport}}
+	applyDiagnosticRuntimeToolSurface(&report, []MCPTool{{
+		ServerName:  "helper",
+		Name:        "heavy",
+		Description: "SECRET_DESCRIPTION",
+		InputSchema: schemaBytes,
+	}}, mcpsurface.DefaultBudget(), true, map[string][]mcpsurface.Tool{
+		"helper": toolSurfaceTools,
+	})
 
 	if connection.ToolSurface == nil {
 		t.Fatal("ToolSurface = nil, want tool surface analysis")
@@ -385,4 +573,17 @@ func TestDiagnoseServerFilterUnknownFails(t *testing.T) {
 		t.Fatalf("SummaryStatus = %q, want fail", report.SummaryStatus())
 	}
 	requireMCPDiagnosticCheck(t, report.Checks, "server_filter", DiagnosticStatusFail)
+}
+
+func requireReasonCount(t *testing.T, reasons []mcpsurface.ReasonCount, reason string, count int) {
+	t.Helper()
+	for _, item := range reasons {
+		if item.Reason == reason {
+			if item.Count != count {
+				t.Fatalf("reason %q count = %d, want %d in %#v", reason, item.Count, count, reasons)
+			}
+			return
+		}
+	}
+	t.Fatalf("reason %q not found in %#v", reason, reasons)
 }

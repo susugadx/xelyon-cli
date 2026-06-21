@@ -73,15 +73,7 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) genericResolveResul
 	def := defs[0]
 	refs := findGenericReferences(symbol, opts)
 	filteredRefs := filterGenericRefs(refs, def)
-
-	var normalRefs, testRefs []genericSymbolRef
-	for _, ref := range filteredRefs {
-		if ref.IsTest {
-			testRefs = append(testRefs, ref)
-		} else {
-			normalRefs = append(normalRefs, ref)
-		}
-	}
+	normalRefs, testRefs := splitGenericTestRefs(filteredRefs)
 
 	bundle := buildGenericSymbolBundle(resolveLanguage(opts), symbol, def, []string{
 		fmt.Sprintf("%d: %s", def.Line, def.Signature),
@@ -95,6 +87,38 @@ func resolveGenericSymbol(symbol string, opts SearchOptions) genericResolveResul
 		Status:      genericSymbolSingle,
 		Bundle:      bundle,
 		Observation: observationForSymbolBundle(bundle, opts),
+	}
+}
+
+type genericEnhancedSymbolSpec struct {
+	language      string
+	buildSections func(normalRefs []genericSymbolRef, testRefs []genericSymbolRef, symbol string) []symbolBundleSectionInput
+}
+
+func resolveGenericEnhancedSymbol(symbol string, opts SearchOptions, spec genericEnhancedSymbolSpec) genericResolveResult {
+	defs := findGenericDefinitions(symbol, opts)
+	if len(defs) == 0 {
+		return genericResolveResult{Status: genericSymbolNone}
+	}
+	if len(defs) > 1 {
+		return genericResolveResult{
+			Output: formatGenericMultipleDefsWithOptions(symbol, defs, opts.LocatorRegistry, opts),
+			Status: genericSymbolMultiple,
+		}
+	}
+
+	def := defs[0]
+	refs := findGenericReferences(symbol, opts)
+	filteredRefs := filterGenericRefs(refs, def)
+	normalRefs, testRefs := splitGenericTestRefs(filteredRefs)
+	bundle := buildGenericSymbolBundle(spec.language, symbol, def, []string{
+		fmt.Sprintf("%d: %s", def.Line, def.Signature),
+	}, spec.buildSections(normalRefs, testRefs, symbol))
+	bundle.Debug.FileRootPath = invocationCWDOrGetwd(opts)
+	return genericResolveResult{
+		Output: formatSymbolBundle(bundle, opts.LocatorRegistry, nil),
+		Status: genericSymbolSingle,
+		Bundle: bundle,
 	}
 }
 
@@ -195,6 +219,17 @@ func filterGenericRefs(refs []genericSymbolRef, def genericSymbolDef) []genericS
 	return filtered
 }
 
+func splitGenericTestRefs(refs []genericSymbolRef) (normalRefs []genericSymbolRef, testRefs []genericSymbolRef) {
+	for _, ref := range refs {
+		if ref.IsTest {
+			testRefs = append(testRefs, ref)
+		} else {
+			normalRefs = append(normalRefs, ref)
+		}
+	}
+	return normalRefs, testRefs
+}
+
 func formatGenericMultipleDefsWithOptions(symbol string, defs []genericSymbolDef, reg *locator.Registry, opts SearchOptions) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Multiple definitions found for %q:\n", symbol)
@@ -214,10 +249,6 @@ const (
 	genericRefLimit  = 15
 	genericTestLimit = 5
 )
-
-func formatGenericSymbolResult(bundle *SymbolBundle, reg *locator.Registry) string {
-	return formatSymbolBundle(bundle, reg, nil)
-}
 
 func collectNavigationCandidatesAffectedFiles(candidates []navigation.SymbolCandidate, opts SearchOptions) []string {
 	paths := make([]string, 0, len(candidates))

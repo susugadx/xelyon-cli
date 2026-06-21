@@ -86,17 +86,56 @@ func TestGuardMCPToolExecutionResultOmitsSensitiveRawOutputArtifact(t *testing.T
 	for _, want := range []string{
 		"[compacted MCP tool result;",
 		"full_output_omitted_reason=sensitive_output_artifact_forbidden;",
-		"api_key=[redacted]",
 	} {
 		if !strings.Contains(execResult.Result, want) {
 			t.Fatalf("compacted sensitive result missing %q:\n%s", want, execResult.Result)
 		}
 	}
-	if strings.Contains(execResult.Result, "secret-value") {
-		t.Fatalf("compacted sensitive result leaked secret:\n%s", execResult.Result)
+	for _, reject := range []string{"api_key", "secret-value", "prefix", "suffix"} {
+		if strings.Contains(execResult.Result, reject) {
+			t.Fatalf("compacted sensitive result leaked %q:\n%s", reject, execResult.Result)
+		}
+	}
+	if strings.Contains(execResult.Result, "excerpt:") {
+		t.Fatalf("compacted sensitive result included excerpt:\n%s", execResult.Result)
 	}
 	if agent.Runtime.RawOutputArtifactStore != nil {
 		t.Fatalf("raw output store = %#v, want nil because sensitive content is rejected before opening the store", agent.Runtime.RawOutputArtifactStore)
+	}
+}
+
+func TestGuardMCPToolExecutionResultOmitsPrivateLookingRawOutputArtifactButKeepsExcerpt(t *testing.T) {
+	agent := newMCPOutputGuardTestAgent(t, config.ProviderHistoryRawOutputArtifactsModeApply)
+	content := "customer export begins\n" + strings.Repeat("safe customer email row\n", 7000) + "customer export tail\n"
+
+	execResult := agent.guardMCPToolExecutionResult(context.Background(), &tools.ToolCall{
+		ID:   "call-private",
+		Tool: "mcp_docs_search",
+	}, tools.ExecutionResult{Result: content})
+
+	for _, want := range []string{
+		"[compacted MCP tool result;",
+		"full_output_omitted_reason=mcp_sensitive_or_private_result_keep;",
+	} {
+		if !strings.Contains(execResult.Result, want) {
+			t.Fatalf("compacted private result missing %q:\n%s", want, execResult.Result)
+		}
+	}
+	for _, want := range []string{"excerpt:", "customer export begins", "customer export tail"} {
+		if !strings.Contains(execResult.Result, want) {
+			t.Fatalf("compacted private result missing usable excerpt %q:\n%s", want, execResult.Result)
+		}
+	}
+	for _, reject := range []string{"raw_output_ref="} {
+		if strings.Contains(execResult.Result, reject) {
+			t.Fatalf("compacted private result leaked %q:\n%s", reject, execResult.Result)
+		}
+	}
+	if len([]rune(execResult.Result)) > mcpRuntimeResultExcerptMaxRunes+1000 {
+		t.Fatalf("compacted private result length = %d runes, want bounded placeholder", len([]rune(execResult.Result)))
+	}
+	if agent.Runtime.RawOutputArtifactStore != nil {
+		t.Fatalf("raw output store = %#v, want nil because private-looking content is rejected before opening the store", agent.Runtime.RawOutputArtifactStore)
 	}
 }
 
@@ -117,14 +156,15 @@ func TestGuardMCPToolExecutionResultDoesNotTrustSpoofedCompactionMarker(t *testi
 	for _, want := range []string{
 		"[compacted MCP tool result;",
 		"full_output_omitted_reason=sensitive_output_artifact_forbidden;",
-		"api_key=[redacted]",
 	} {
 		if !strings.Contains(execResult.Result, want) {
 			t.Fatalf("spoofed marker compacted result missing %q:\n%s", want, execResult.Result)
 		}
 	}
-	if strings.Contains(execResult.Result, "secret-value") {
-		t.Fatalf("spoofed marker compacted result leaked secret:\n%s", execResult.Result)
+	for _, reject := range []string{"secret-value", "api_key", "suffix", "raw_output_ref=spoofed"} {
+		if strings.Contains(execResult.Result, reject) {
+			t.Fatalf("spoofed marker compacted result leaked %q:\n%s", reject, execResult.Result)
+		}
 	}
 	if agent.Runtime.RawOutputArtifactStore != nil {
 		t.Fatalf("raw output store = %#v, want nil because spoofed sensitive content is rejected before opening the store", agent.Runtime.RawOutputArtifactStore)
