@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -233,11 +234,25 @@ func buildGuidanceLoadPlans(paths []string, includeLocalFiles bool, resolver gui
 }
 
 func loadGuidanceFiles(bundle *ProjectInstructionBundle, budget *instructionByteBudget, plans []guidanceLoadPlan) []InstructionFile {
+	return loadGuidanceFilesInOrder(bundle, budget, plans, sequentialGuidancePlanOrder(len(plans)))
+}
+
+type orderedInstructionFile struct {
+	PlanIndex int
+	File      InstructionFile
+}
+
+func loadGuidanceFilesInOrder(bundle *ProjectInstructionBundle, budget *instructionByteBudget, plans []guidanceLoadPlan, order []int) []InstructionFile {
 	var files []InstructionFile
-	for _, plan := range plans {
+	var loadedFiles []orderedInstructionFile
+	for _, planIndex := range order {
+		if planIndex < 0 || planIndex >= len(plans) {
+			continue
+		}
 		if budget.exhausted() {
 			break
 		}
+		plan := plans[planIndex]
 		file, loaded, stop := loadGuidanceFileFromPlan(bundle, budget, plan)
 		if stop {
 			break
@@ -245,9 +260,42 @@ func loadGuidanceFiles(bundle *ProjectInstructionBundle, budget *instructionByte
 		if !loaded {
 			continue
 		}
-		files = append(files, file)
+		loadedFiles = append(loadedFiles, orderedInstructionFile{PlanIndex: planIndex, File: file})
+	}
+	sort.SliceStable(loadedFiles, func(i, j int) bool {
+		return loadedFiles[i].PlanIndex < loadedFiles[j].PlanIndex
+	})
+	for _, item := range loadedFiles {
+		files = append(files, item.File)
 	}
 	return files
+}
+
+func sequentialGuidancePlanOrder(count int) []int {
+	if count <= 0 {
+		return nil
+	}
+	order := make([]int, count)
+	for i := range order {
+		order[i] = i
+	}
+	return order
+}
+
+func nearestFirstGuidanceBudgetOrder(plans []guidanceLoadPlan) []int {
+	order := sequentialGuidancePlanOrder(len(plans))
+	sort.SliceStable(order, func(i, j int) bool {
+		return repositoryScopeDepth(plans[order[i]].LoadOptions.RepositoryScope) > repositoryScopeDepth(plans[order[j]].LoadOptions.RepositoryScope)
+	})
+	return order
+}
+
+func repositoryScopeDepth(scope string) int {
+	scope = normalizeRepositoryInstructionScope(scope)
+	if scope == "." {
+		return 0
+	}
+	return len(strings.Split(scope, "/"))
 }
 
 func loadGuidanceFileFromPlan(bundle *ProjectInstructionBundle, budget *instructionByteBudget, plan guidanceLoadPlan) (file InstructionFile, loaded bool, stop bool) {
@@ -381,7 +429,7 @@ func buildGlobalGuidanceLoadPlans(aiCfg AgentInstructionsConfig, budget *instruc
 
 func loadProjectGuidanceFiles(bundle *ProjectInstructionBundle, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget, cwd string, inputPaths []string) []InstructionFile {
 	plans := buildProjectGuidanceLoadPlans(bundle.RootPath, cwd, inputPaths, aiCfg, gitRoot, strength, budget)
-	return loadGuidanceFiles(bundle, budget, plans)
+	return loadGuidanceFilesInOrder(bundle, budget, plans, nearestFirstGuidanceBudgetOrder(plans))
 }
 
 func loadGlobalGuidanceFiles(bundle *ProjectInstructionBundle, aiCfg AgentInstructionsConfig, budget *instructionByteBudget) []InstructionFile {

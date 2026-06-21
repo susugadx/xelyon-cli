@@ -135,7 +135,7 @@ func ParseSummaryContinuation(raw string) (SummaryContinuationRecord, error) {
 		return SummaryContinuationRecord{}, errors.New("empty summary continuation JSON")
 	}
 
-	if strings.Contains(raw, `"schema_version"`) {
+	if hasTopLevelSummaryContinuationSchemaVersion(raw) {
 		return parseSummaryContinuationV1(raw)
 	}
 
@@ -158,6 +158,15 @@ func ParseSummaryContinuation(raw string) (SummaryContinuationRecord, error) {
 		return SummaryContinuationRecord{}, err
 	}
 	return record, nil
+}
+
+func hasTopLevelSummaryContinuationSchemaVersion(raw string) bool {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+		return false
+	}
+	_, ok := obj["schema_version"]
+	return ok
 }
 
 // FormatSummaryContinuationMessage は検証済み継続文脈を assistant 履歴用の data-only message に整形する。

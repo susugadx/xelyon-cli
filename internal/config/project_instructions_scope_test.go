@@ -77,6 +77,44 @@ func TestLoadProjectInstructionBundle_InputPathAddsScopedChain(t *testing.T) {
 	}
 }
 
+func TestLoadProjectInstructionBundle_InputPathMissingFileUsesNearestExistingParentScope(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "root\n")
+	writeFile(t, filepath.Join(root, "internal", "agent", "AGENTS.md"), "agent\n")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.IncludeGitignored = true
+
+	bundle, err := LoadProjectInstructionBundleForDirWithInputPaths(cfg, root, []string{"internal/agent/new_feature.go"})
+	if err != nil {
+		t.Fatalf("LoadProjectInstructionBundleForDirWithInputPaths() error = %v", err)
+	}
+	gotLabels := instructionFileLabels(bundle.ProjectGuidance)
+	wantLabels := []string{"AGENTS.md", "internal/agent/AGENTS.md"}
+	if !reflect.DeepEqual(gotLabels, wantLabels) {
+		t.Fatalf("labels = %#v, want %#v", gotLabels, wantLabels)
+	}
+}
+
+func TestLoadProjectInstructionBundle_InputPathMissingNestedDirectoryFallsBackToExistingParentScope(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "root\n")
+	writeFile(t, filepath.Join(root, "internal", "agent", "AGENTS.md"), "agent\n")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.IncludeGitignored = true
+
+	bundle, err := LoadProjectInstructionBundleForDirWithInputPaths(cfg, root, []string{"internal/agent/generated/new_feature.go"})
+	if err != nil {
+		t.Fatalf("LoadProjectInstructionBundleForDirWithInputPaths() error = %v", err)
+	}
+	gotLabels := instructionFileLabels(bundle.ProjectGuidance)
+	wantLabels := []string{"AGENTS.md", "internal/agent/AGENTS.md"}
+	if !reflect.DeepEqual(gotLabels, wantLabels) {
+		t.Fatalf("labels = %#v, want %#v", gotLabels, wantLabels)
+	}
+}
+
 func TestLoadProjectInstructionBundle_SlashEntryStaysRootRelativeOnly(t *testing.T) {
 	requireGit(t)
 
@@ -151,6 +189,25 @@ func TestComputeProjectInstructionBundleFingerprintWithInputPathsIgnoresInvalidI
 	assertFingerprintStable(t, baseKey, invalidKey, "invalid or missing input paths should not affect the guidance fingerprint")
 }
 
+func TestLoadProjectInstructionBundle_InputPathParentTraversalSegmentIsRejected(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "root\n")
+	writeFile(t, filepath.Join(root, "pkg", "AGENTS.md"), "pkg\n")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.IncludeGitignored = true
+
+	bundle, err := LoadProjectInstructionBundleForDirWithInputPaths(cfg, root, []string{"internal/../pkg/new_feature.go"})
+	if err != nil {
+		t.Fatalf("LoadProjectInstructionBundleForDirWithInputPaths() error = %v", err)
+	}
+	gotLabels := instructionFileLabels(bundle.ProjectGuidance)
+	wantLabels := []string{"AGENTS.md"}
+	if !reflect.DeepEqual(gotLabels, wantLabels) {
+		t.Fatalf("labels = %#v, want %#v", gotLabels, wantLabels)
+	}
+}
+
 func TestComputeProjectInstructionBundleFingerprintWithInputPathsUsesDirectoryScope(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "AGENTS.md"), "root\n")
@@ -185,6 +242,38 @@ func TestLoadProjectInstructionBundle_InputPathSymlinkDirectoryOutsideRootSkippe
 	assertFingerprintStable(t, baseKey, symlinkKey, "outside-root symlink input paths should not affect selected guidance fingerprint")
 
 	bundle, err := LoadProjectInstructionBundleForDirWithInputPaths(cfg, root, []string{"link/outside.go"})
+	if err != nil {
+		t.Fatalf("LoadProjectInstructionBundleForDirWithInputPaths() error = %v", err)
+	}
+	gotLabels := instructionFileLabels(bundle.ProjectGuidance)
+	wantLabels := []string{"AGENTS.md"}
+	if !reflect.DeepEqual(gotLabels, wantLabels) {
+		t.Fatalf("labels = %#v, want %#v", gotLabels, wantLabels)
+	}
+}
+
+func TestLoadProjectInstructionBundle_MissingInputPathUnderOutsideRootSymlinkIsRejected(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "repo")
+	outside := filepath.Join(base, "outside")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "AGENTS.md"), "root\n")
+	writeFile(t, filepath.Join(outside, "AGENTS.md"), "outside\n")
+	createSymlinkOrSkip(t, outside, filepath.Join(root, "link"))
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.IncludeGitignored = true
+
+	baseKey := ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(cfg, root, nil, nil)
+	symlinkKey := ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(cfg, root, []string{"link/new_feature.go"}, nil)
+	assertFingerprintStable(t, baseKey, symlinkKey, "outside-root symlink input path should not fall back to root scope")
+
+	bundle, err := LoadProjectInstructionBundleForDirWithInputPaths(cfg, root, []string{"link/new_feature.go"})
 	if err != nil {
 		t.Fatalf("LoadProjectInstructionBundleForDirWithInputPaths() error = %v", err)
 	}

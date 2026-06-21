@@ -232,6 +232,21 @@ func TestParseSummaryContinuation_LegacyWrapperCompatibility(t *testing.T) {
 	}
 }
 
+func TestParseSummaryContinuation_LegacyWrapperAllowsNestedSchemaVersionString(t *testing.T) {
+	raw := `{"continuation_context":{"current_task":"fix compression","progress_status":"tests pending","key_decisions":["literal \"schema_version\" mention"],"files_changed":["internal/prompt/compress.go"],"remaining_work":["run tests"],"do_not_repeat":["bad command"]}}`
+
+	record, err := ParseSummaryContinuation(raw)
+	if err != nil {
+		t.Fatalf("ParseSummaryContinuation() legacy error = %v", err)
+	}
+	if record.SchemaVersion != "" {
+		t.Fatalf("SchemaVersion = %q, want legacy record without v1 schema", record.SchemaVersion)
+	}
+	if len(record.KeyDecisions) != 1 || record.KeyDecisions[0] != `literal "schema_version" mention` {
+		t.Fatalf("KeyDecisions = %#v, want legacy parser to preserve nested string", record.KeyDecisions)
+	}
+}
+
 func TestMergeTaskStateIntoSummaryContinuation_AddsDeterministicFacts(t *testing.T) {
 	store := taskstate.NewStoreWithRoot(t.TempDir())
 	recorder := store.Recorder()

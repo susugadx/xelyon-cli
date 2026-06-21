@@ -93,8 +93,13 @@ func appendProjectInstructionInputScopesToFingerprint(builder *projectInstructio
 	if builder == nil || len(inputScopes) == 0 {
 		return
 	}
-	for i, inputScope := range inputScopes {
-		builder.Add("input_scope."+strconv.Itoa(i), strings.TrimSpace(inputScope))
+	next := 0
+	for _, inputScope := range inputScopes {
+		if normalizeRepositoryInstructionScope(inputScope) == "." {
+			continue
+		}
+		builder.Add("input_scope."+strconv.Itoa(next), strings.TrimSpace(inputScope))
+		next++
 	}
 }
 

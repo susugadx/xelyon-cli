@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -124,6 +125,53 @@ func TestLoadProjectInstructionBundle_MaxTotalBytesTruncatesAcrossFiles(t *testi
 	if !strings.Contains(bundle.ProjectGuidance[1].Content, "agent_instructions.max_total_bytes") {
 		t.Fatalf("missing max_total_bytes truncation note: %q", bundle.ProjectGuidance[1].Content)
 	}
+}
+
+func TestLoadProjectInstructionBundle_MaxTotalBytesPrioritizesNearestInputScope(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "AGENTS.md"), strings.Repeat("r", 80))
+	writeFile(t, filepath.Join(root, "internal", "agent", "AGENTS.md"), "NEAREST\n")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.IncludeGitignored = true
+	cfg.AgentInstructions.MaxFileBytes = 200
+	cfg.AgentInstructions.MaxTotalBytes = len("NEAREST\n")
+
+	bundle, err := LoadProjectInstructionBundleForDirWithInputPaths(cfg, root, []string{"internal/agent/new_feature.go"})
+	if err != nil {
+		t.Fatalf("LoadProjectInstructionBundleForDirWithInputPaths() error = %v", err)
+	}
+	gotLabels := instructionFileLabels(bundle.ProjectGuidance)
+	wantLabels := []string{"internal/agent/AGENTS.md"}
+	if !reflect.DeepEqual(gotLabels, wantLabels) {
+		t.Fatalf("labels = %#v, want %#v", gotLabels, wantLabels)
+	}
+	if got := bundle.ProjectGuidance[0].Content; got != "NEAREST\n" {
+		t.Fatalf("nearest guidance content = %q, want NEAREST", got)
+	}
+}
+
+func TestComputeProjectInstructionBundleFingerprintWithInputPathsUsesNearestBudgetPriority(t *testing.T) {
+	root := t.TempDir()
+	rootPath := filepath.Join(root, "AGENTS.md")
+	nearestPath := filepath.Join(root, "internal", "agent", "AGENTS.md")
+	writeFile(t, rootPath, strings.Repeat("r", 80))
+	writeFile(t, nearestPath, "NEAREST_V1\n")
+
+	cfg := DefaultConfig()
+	cfg.AgentInstructions.Project.IncludeGitignored = true
+	cfg.AgentInstructions.MaxFileBytes = 200
+	cfg.AgentInstructions.MaxTotalBytes = len("NEAREST_V1\n")
+	inputPaths := []string{"internal/agent/new_feature.go"}
+
+	before := ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(cfg, root, inputPaths, nil)
+	overwriteFileAndBumpMTime(t, rootPath, strings.Repeat("R", 80))
+	afterRootChange := ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(cfg, root, inputPaths, nil)
+	assertFingerprintStable(t, before, afterRootChange, "root guidance excluded by nearest-first total budget should not affect fingerprint")
+
+	overwriteFileAndBumpMTime(t, nearestPath, "NEAREST_V2\n")
+	afterNearestChange := ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(cfg, root, inputPaths, nil)
+	assertFingerprintChanged(t, afterRootChange, afterNearestChange, "selected nearest guidance should affect fingerprint")
 }
 
 func TestLoadProjectInstructionBundle_ExpandImportsDisabledKeepsDirectiveLine(t *testing.T) {

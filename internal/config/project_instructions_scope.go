@@ -177,6 +177,9 @@ func resolveProjectInstructionInputDirectory(rootPath, inputPath string) (string
 	if filepath.IsAbs(normalized) {
 		return "", false
 	}
+	if hasProjectInstructionParentTraversalSegment(normalized) {
+		return "", false
+	}
 	cleaned := filepath.Clean(normalized)
 	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
 		return "", false
@@ -186,19 +189,61 @@ func resolveProjectInstructionInputDirectory(rootPath, inputPath string) (string
 		return "", false
 	}
 	info, err := os.Stat(fullPath)
-	if err != nil {
-		return "", false
-	}
 	var targetDir string
-	if info.IsDir() {
+	switch {
+	case err == nil && info.IsDir():
 		targetDir = fullPath
-	} else {
+	case err == nil:
 		targetDir = filepath.Dir(fullPath)
+	case os.IsNotExist(err):
+		var ok bool
+		targetDir, ok = nearestExistingProjectInstructionInputParent(rootPath, filepath.Dir(fullPath))
+		if !ok {
+			return "", false
+		}
+	default:
+		return "", false
 	}
 	if !isSafeInstructionPathWithinRoot(rootPath, "", targetDir) {
 		return "", false
 	}
 	return targetDir, true
+}
+
+func hasProjectInstructionParentTraversalSegment(path string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
+}
+
+func nearestExistingProjectInstructionInputParent(rootPath, targetDir string) (string, bool) {
+	rootAbs, targetAbs, ok := normalizedProjectInstructionRootAndTarget(rootPath, targetDir)
+	if !ok {
+		return "", false
+	}
+	for {
+		info, err := os.Stat(targetAbs)
+		if err == nil {
+			if !info.IsDir() {
+				return "", false
+			}
+			return targetAbs, true
+		}
+		if !os.IsNotExist(err) {
+			return "", false
+		}
+		if targetAbs == rootAbs {
+			return "", false
+		}
+		parent := filepath.Dir(targetAbs)
+		if parent == targetAbs || !isPathWithinBase(rootAbs, parent) {
+			return "", false
+		}
+		targetAbs = parent
+	}
 }
 
 func normalizedProjectInstructionRootAndTarget(rootPath, targetPath string) (string, string, bool) {

@@ -101,7 +101,7 @@ func BuildProjectInstructionSection(input ProjectInstructionBlockInput) (PromptS
 		b.WriteString("\n\n## Guidance Load Notes\n")
 		for _, warning := range warnings {
 			b.WriteString("\n- ")
-			b.WriteString(warning)
+			b.WriteString(neutralizeProjectInstructionBlockDelimiters(warning))
 		}
 	}
 	b.WriteString("\n<!-- PROJECT_CONFIG_END -->")
@@ -122,9 +122,9 @@ func appendGuidanceSection(b *strings.Builder, heading string, intro string, ent
 			continue
 		}
 		b.WriteString("\n\n### ")
-		b.WriteString(guidanceHeadingLabel(entry))
+		b.WriteString(neutralizeProjectInstructionBlockDelimiters(guidanceHeadingLabel(entry)))
 		b.WriteString("\n")
-		b.WriteString(content)
+		b.WriteString(neutralizeProjectInstructionBlockDelimiters(content))
 	}
 }
 
@@ -146,9 +146,18 @@ func appendRepositoryGuidanceSection(b *strings.Builder, heading string, intro s
 		b.WriteString("\" source=\"")
 		b.WriteString(escapeInstructionAttribute(instructionEntrySource(entry)))
 		b.WriteString("\">\n")
-		b.WriteString(content)
+		b.WriteString(neutralizeProjectInstructionBlockDelimiters(content))
 		b.WriteString("\n</repository_instructions>")
 	}
+}
+
+func neutralizeProjectInstructionBlockDelimiters(content string) string {
+	return strings.NewReplacer(
+		"</repository_instructions>", "&lt;/repository_instructions&gt;",
+		"<repository_instructions", "&lt;repository_instructions",
+		"<!-- PROJECT_CONFIG_START -->", "&lt;!-- PROJECT_CONFIG_START --&gt;",
+		"<!-- PROJECT_CONFIG_END -->", "&lt;!-- PROJECT_CONFIG_END --&gt;",
+	).Replace(content)
 }
 
 func instructionEntryScope(entry ProjectInstructionEntry) string {
