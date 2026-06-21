@@ -11,6 +11,11 @@ import (
 	"strings"
 )
 
+const (
+	mcpRuntimeRawOutputArtifactsDryRunReason        = "raw_output_artifacts_dry_run"
+	mcpRuntimeRawOutputArtifactsDisabledReasonValue = "raw_output_artifacts_disabled"
+)
+
 func (a *Agent) createMCPRuntimeRawOutputArtifact(ctx context.Context, toolCall *tools.ToolCall, result string) (rawoutputs.RawOutputRef, string) {
 	if a == nil || a.Runtime == nil {
 		return rawoutputs.RawOutputRef{}, "raw_output_artifact_runtime_missing"
@@ -70,9 +75,9 @@ func (a *Agent) createMCPRuntimeRawOutputArtifact(ctx context.Context, toolCall 
 func mcpRuntimeRawOutputArtifactsDisabledReason(runtime *AgentRuntime) string {
 	switch providerHistoryRawOutputArtifactsModeForRuntime(runtime) {
 	case providerhistory.RawOutputArtifactsDryRun:
-		return "raw_output_artifacts_dry_run"
+		return mcpRuntimeRawOutputArtifactsDryRunReason
 	default:
-		return "raw_output_artifacts_disabled"
+		return mcpRuntimeRawOutputArtifactsDisabledReasonValue
 	}
 }
 

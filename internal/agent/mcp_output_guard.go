@@ -16,12 +16,28 @@ func (a *Agent) guardMCPToolExecutionResult(ctx context.Context, toolCall *tools
 	if !shouldCompactMCPToolResult(toolCall, execResult.Result) {
 		return execResult
 	}
-	ref, _ := a.createMCPRuntimeRawOutputArtifact(ctx, toolCall, execResult.Result)
+	ref, omittedReason := a.createMCPRuntimeRawOutputArtifact(ctx, toolCall, execResult.Result)
 	if strings.TrimSpace(ref.RefID) == "" {
+		if mcpRuntimeOmitReasonKeepsOriginalResult(omittedReason) {
+			return execResult
+		}
+		if strings.TrimSpace(omittedReason) == "" {
+			omittedReason = "raw_output_ref_missing"
+		}
+		execResult.Result = buildMCPRuntimeResultPlaceholder(ref, omittedReason, execResult.Result)
 		return execResult
 	}
 	execResult.Result = buildMCPRuntimeResultPlaceholder(ref, "", execResult.Result)
 	return execResult
+}
+
+func mcpRuntimeOmitReasonKeepsOriginalResult(reason string) bool {
+	switch strings.TrimSpace(reason) {
+	case mcpRuntimeRawOutputArtifactsDryRunReason, mcpRuntimeRawOutputArtifactsDisabledReasonValue:
+		return true
+	default:
+		return false
+	}
 }
 
 func shouldCompactMCPToolResult(toolCall *tools.ToolCall, result string) bool {
