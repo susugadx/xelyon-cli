@@ -53,6 +53,12 @@ func resolveProjectMapInputCandidate(cwd, rootPath, candidate string) (string, b
 	}
 
 	sessionAbs := filepath.Clean(filepath.Join(cwd, filepath.FromSlash(candidate)))
+	if isExplicitCWDRelativeProjectMapPath(candidate) {
+		if strings.TrimSpace(cwd) == "" || !projectMapPathExists(sessionAbs) {
+			return "", false
+		}
+		return canonicalizeProjectMapPriorityPath(rootPath, sessionAbs)
+	}
 	rootAbs := filepath.Clean(filepath.Join(rootPath, filepath.FromSlash(candidate)))
 
 	sessionExists := projectMapPathExists(sessionAbs)
@@ -112,6 +118,11 @@ func looksRepoRelativeProjectMapPath(candidate string) bool {
 		return false
 	}
 	return strings.Contains(candidate, "/")
+}
+
+func isExplicitCWDRelativeProjectMapPath(candidate string) bool {
+	candidate = strings.ReplaceAll(filepath.ToSlash(strings.TrimSpace(candidate)), "\\", "/")
+	return strings.HasPrefix(candidate, "./")
 }
 
 func isWindowsAbsoluteProjectMapPath(candidate string) bool {

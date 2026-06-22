@@ -73,10 +73,15 @@ func resolveProjectInstructionInputCandidate(cwd, rootPath, candidate string) (s
 	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
 		return "", false
 	}
-	return resolveMissingProjectInstructionInputCandidate(cwd, rootPath, cleaned)
+	return resolveMissingProjectInstructionInputCandidate(cwd, rootPath, candidate, cleaned)
 }
 
-func resolveMissingProjectInstructionInputCandidate(cwd, rootPath, cleaned string) (string, bool) {
+func resolveMissingProjectInstructionInputCandidate(cwd, rootPath, rawCandidate, cleaned string) (string, bool) {
+	if looksRepoRelativeProjectMapPath(rawCandidate) {
+		if path, ok := canonicalizeProjectMapPriorityPath(rootPath, filepath.Join(rootPath, cleaned)); ok {
+			return path, true
+		}
+	}
 	if strings.TrimSpace(cwd) == "" {
 		return canonicalizeProjectMapPriorityPath(rootPath, filepath.Join(rootPath, cleaned))
 	}

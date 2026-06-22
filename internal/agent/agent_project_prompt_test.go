@@ -22,6 +22,25 @@ func TestExtractProjectMapPathsFromInput_QuotedFilename(t *testing.T) {
 	}
 }
 
+func TestExtractProjectMapPathsFromInput_PreservesDotSlashPath(t *testing.T) {
+	t.Parallel()
+
+	got := extractProjectMapPathsFromInput("次は./pkg/new_feature.go を作る")
+	want := []string{"./pkg/new_feature.go"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("extractProjectMapPathsFromInput() = %#v, want %#v", got, want)
+	}
+}
+
+func TestExtractProjectMapPathsFromInput_IgnoresGoPackageEllipsis(t *testing.T) {
+	t.Parallel()
+
+	if got := extractProjectMapPathsFromInput("go test ./..."); got != nil {
+		t.Fatalf("extractProjectMapPathsFromInput() = %#v, want nil for go package ellipsis", got)
+	}
+}
+
 func TestBuildProjectInstructionBlock_IgnoresLegacyXelyonProse(t *testing.T) {
 	bundle := &config.ProjectInstructionBundle{
 		ProjectConfig: &config.ProjectConfig{

@@ -70,7 +70,8 @@ func TestMCPRawOutputArtifactOmitReasonAllowsRuntimeExcerpt(t *testing.T) {
 		want   bool
 	}{
 		{name: "secret-like artifact forbidden", reason: string(rawoutputs.ReasonSensitiveArtifactForbidden), want: false},
-		{name: "private-looking artifact keep", reason: MCPSensitiveOrPrivateResultKeepReason, want: true},
+		{name: "private-looking artifact keep", reason: MCPSensitiveOrPrivateResultKeepReason, want: false},
+		{name: "artifact dry run", reason: "raw_output_artifacts_dry_run", want: true},
 		{name: "artifact disabled", reason: "raw_output_artifacts_disabled", want: true},
 		{name: "empty", reason: "", want: true},
 	}

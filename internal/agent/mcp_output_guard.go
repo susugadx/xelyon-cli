@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"github.com/susugadx/xelyon-cli/internal/providerhistory"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"strings"
 )
@@ -16,11 +17,11 @@ func (a *Agent) guardMCPToolExecutionResult(ctx context.Context, toolCall *tools
 	if !shouldCompactMCPToolResult(toolCall, execResult.Result) {
 		return execResult
 	}
+	if a == nil || a.Runtime == nil || providerHistoryRawOutputArtifactsModeForRuntime(a.Runtime) != providerhistory.RawOutputArtifactsApply {
+		return execResult
+	}
 	ref, omittedReason := a.createMCPRuntimeRawOutputArtifact(ctx, toolCall, execResult.Result)
 	if strings.TrimSpace(ref.RefID) == "" {
-		if mcpRuntimeOmitReasonKeepsOriginalResult(omittedReason) {
-			return execResult
-		}
 		if strings.TrimSpace(omittedReason) == "" {
 			omittedReason = "raw_output_ref_missing"
 		}
@@ -29,15 +30,6 @@ func (a *Agent) guardMCPToolExecutionResult(ctx context.Context, toolCall *tools
 	}
 	execResult.Result = buildMCPRuntimeResultPlaceholder(ref, "", execResult.Result)
 	return execResult
-}
-
-func mcpRuntimeOmitReasonKeepsOriginalResult(reason string) bool {
-	switch strings.TrimSpace(reason) {
-	case mcpRuntimeRawOutputArtifactsDryRunReason, mcpRuntimeRawOutputArtifactsDisabledReasonValue:
-		return true
-	default:
-		return false
-	}
 }
 
 func shouldCompactMCPToolResult(toolCall *tools.ToolCall, result string) bool {

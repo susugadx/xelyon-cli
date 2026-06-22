@@ -251,6 +251,7 @@ func TestNormalModeRequestOmitsRuntimeMCPResultWithoutRawOutputRef(t *testing.T)
 			tool:       "mcp_customer_export",
 			output:     providerHistoryLargePrivateLookingMCPRuntimeResult(),
 			wantReason: providerhistory.MCPSensitiveOrPrivateResultKeepReason,
+			forbidden:  []string{"customer export begins", "safe customer email row", "customer export tail", "excerpt:"},
 		},
 		{
 			name: "sensitive output",
@@ -259,7 +260,7 @@ func TestNormalModeRequestOmitsRuntimeMCPResultWithoutRawOutputRef(t *testing.T)
 				strings.Repeat("safe line\n", 7000) +
 				"api_key=secret-value\nsuffix\n",
 			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
-			forbidden:  []string{"api_key", "secret-value"},
+			forbidden:  []string{"api_key", "secret-value", "excerpt:"},
 		},
 	}
 

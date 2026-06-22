@@ -127,7 +127,7 @@ func TestLoadProjectInstructionBundle_MaxTotalBytesTruncatesAcrossFiles(t *testi
 	}
 }
 
-func TestLoadProjectInstructionBundle_MaxTotalBytesPrioritizesNearestInputScope(t *testing.T) {
+func TestLoadProjectInstructionBundle_MaxTotalBytesPreservesRootAndNearestInputScope(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "AGENTS.md"), strings.Repeat("r", 80))
 	writeFile(t, filepath.Join(root, "internal", "agent", "AGENTS.md"), "NEAREST\n")
@@ -142,11 +142,15 @@ func TestLoadProjectInstructionBundle_MaxTotalBytesPrioritizesNearestInputScope(
 		t.Fatalf("LoadProjectInstructionBundleForDirWithInputPaths() error = %v", err)
 	}
 	gotLabels := instructionFileLabels(bundle.ProjectGuidance)
-	wantLabels := []string{"internal/agent/AGENTS.md"}
+	wantLabels := []string{"AGENTS.md", "internal/agent/AGENTS.md"}
 	if !reflect.DeepEqual(gotLabels, wantLabels) {
 		t.Fatalf("labels = %#v, want %#v", gotLabels, wantLabels)
 	}
-	if got := bundle.ProjectGuidance[0].Content; got != "NEAREST\n" {
+	rootGuidance := bundle.ProjectGuidance[0]
+	if !rootGuidance.Truncated || !strings.Contains(rootGuidance.Content, "agent_instructions.max_total_bytes") {
+		t.Fatalf("root guidance = %#v, want truncated max_total_bytes placeholder", rootGuidance)
+	}
+	if got := bundle.ProjectGuidance[1].Content; got != "NEAREST\n" {
 		t.Fatalf("nearest guidance content = %q, want NEAREST", got)
 	}
 }
@@ -167,7 +171,7 @@ func TestComputeProjectInstructionBundleFingerprintWithInputPathsUsesNearestBudg
 	before := ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(cfg, root, inputPaths, nil)
 	overwriteFileAndBumpMTime(t, rootPath, strings.Repeat("R", 80))
 	afterRootChange := ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(cfg, root, inputPaths, nil)
-	assertFingerprintStable(t, before, afterRootChange, "root guidance excluded by nearest-first total budget should not affect fingerprint")
+	assertFingerprintStable(t, before, afterRootChange, "root guidance content truncated out by scoped total budget should not affect fingerprint")
 
 	overwriteFileAndBumpMTime(t, nearestPath, "NEAREST_V2\n")
 	afterNearestChange := ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(cfg, root, inputPaths, nil)

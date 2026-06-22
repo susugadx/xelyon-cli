@@ -234,7 +234,7 @@ func buildGuidanceLoadPlans(paths []string, includeLocalFiles bool, resolver gui
 }
 
 func loadGuidanceFiles(bundle *ProjectInstructionBundle, budget *instructionByteBudget, plans []guidanceLoadPlan) []InstructionFile {
-	return loadGuidanceFilesInOrder(bundle, budget, plans, sequentialGuidancePlanOrder(len(plans)))
+	return loadGuidanceFilesInOrder(bundle, budget, plans, sequentialGuidancePlanOrder(len(plans)), guidanceLoadOrderOptions{})
 }
 
 type orderedInstructionFile struct {
@@ -242,17 +242,24 @@ type orderedInstructionFile struct {
 	File      InstructionFile
 }
 
-func loadGuidanceFilesInOrder(bundle *ProjectInstructionBundle, budget *instructionByteBudget, plans []guidanceLoadPlan, order []int) []InstructionFile {
+type guidanceLoadOrderOptions struct {
+	LoadRootScopeAfterBudgetExhausted bool
+}
+
+func loadGuidanceFilesInOrder(bundle *ProjectInstructionBundle, budget *instructionByteBudget, plans []guidanceLoadPlan, order []int, opts guidanceLoadOrderOptions) []InstructionFile {
 	var files []InstructionFile
 	var loadedFiles []orderedInstructionFile
 	for _, planIndex := range order {
 		if planIndex < 0 || planIndex >= len(plans) {
 			continue
 		}
-		if budget.exhausted() {
+		plan := plans[planIndex]
+		if budget.exhausted() && !shouldLoadGuidancePlanAfterBudgetExhausted(plan, opts) {
+			if opts.LoadRootScopeAfterBudgetExhausted {
+				continue
+			}
 			break
 		}
-		plan := plans[planIndex]
 		file, loaded, stop := loadGuidanceFileFromPlan(bundle, budget, plan)
 		if stop {
 			break
@@ -269,6 +276,16 @@ func loadGuidanceFilesInOrder(bundle *ProjectInstructionBundle, budget *instruct
 		files = append(files, item.File)
 	}
 	return files
+}
+
+func shouldLoadGuidancePlanAfterBudgetExhausted(plan guidanceLoadPlan, opts guidanceLoadOrderOptions) bool {
+	if !opts.LoadRootScopeAfterBudgetExhausted || !plan.Valid {
+		return false
+	}
+	if plan.LoadOptions.Scope != "project" {
+		return false
+	}
+	return normalizeRepositoryInstructionScope(plan.LoadOptions.RepositoryScope) == "."
 }
 
 func sequentialGuidancePlanOrder(count int) []int {
@@ -429,7 +446,9 @@ func buildGlobalGuidanceLoadPlans(aiCfg AgentInstructionsConfig, budget *instruc
 
 func loadProjectGuidanceFiles(bundle *ProjectInstructionBundle, aiCfg AgentInstructionsConfig, gitRoot string, strength InstructionStrength, budget *instructionByteBudget, cwd string, inputPaths []string) []InstructionFile {
 	plans := buildProjectGuidanceLoadPlans(bundle.RootPath, cwd, inputPaths, aiCfg, gitRoot, strength, budget)
-	return loadGuidanceFilesInOrder(bundle, budget, plans, nearestFirstGuidanceBudgetOrder(plans))
+	return loadGuidanceFilesInOrder(bundle, budget, plans, nearestFirstGuidanceBudgetOrder(plans), guidanceLoadOrderOptions{
+		LoadRootScopeAfterBudgetExhausted: true,
+	})
 }
 
 func loadGlobalGuidanceFiles(bundle *ProjectInstructionBundle, aiCfg AgentInstructionsConfig, budget *instructionByteBudget) []InstructionFile {

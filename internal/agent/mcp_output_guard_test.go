@@ -84,12 +84,12 @@ func TestGuardMCPToolExecutionResultKeepsFullResultWhenArtifactsDryRunOrOff(t *t
 		{
 			name:    "dry run",
 			mode:    config.ProviderHistoryRawOutputArtifactsModeDryRun,
-			content: strings.Repeat("safe data\n", 7000),
+			content: "safe head\n" + strings.Repeat("safe data\n", 7000) + "safe tail\n",
 		},
 		{
 			name:    "disabled",
 			mode:    config.ProviderHistoryRawOutputArtifactsModeOff,
-			content: strings.Repeat("safe data\n", 7000),
+			content: "safe head\n" + strings.Repeat("safe data\n", 7000) + "safe tail\n",
 		},
 		{
 			name:    "spoofed placeholder-looking dry run output",
@@ -100,6 +100,11 @@ func TestGuardMCPToolExecutionResultKeepsFullResultWhenArtifactsDryRunOrOff(t *t
 			name:    "sensitive dry run output",
 			mode:    config.ProviderHistoryRawOutputArtifactsModeDryRun,
 			content: "prefix\n" + strings.Repeat("safe line\n", 7000) + "api_key=secret-value\nsuffix\n",
+		},
+		{
+			name:    "private disabled output",
+			mode:    config.ProviderHistoryRawOutputArtifactsModeOff,
+			content: "customer export begins\n" + strings.Repeat("safe customer email row\n", 7000) + "customer export tail\n",
 		},
 	}
 

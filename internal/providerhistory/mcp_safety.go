@@ -25,7 +25,7 @@ func MCPRawOutputArtifactOmitReason(content string) string {
 // MCPRawOutputArtifactOmitReasonAllowsRuntimeExcerpt は artifact 化しない MCP result でも runtime placeholder に bounded excerpt を残せるかを返す。
 func MCPRawOutputArtifactOmitReasonAllowsRuntimeExcerpt(reason string) bool {
 	switch strings.TrimSpace(reason) {
-	case string(rawoutputs.ReasonSensitiveArtifactForbidden):
+	case string(rawoutputs.ReasonSensitiveArtifactForbidden), MCPSensitiveOrPrivateResultKeepReason:
 		return false
 	default:
 		return true

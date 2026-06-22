@@ -110,7 +110,7 @@ func TestInitializeProjectInstructions_LoadsScopedGuidanceForExistingCwdRelative
 	}
 }
 
-func TestInitializeProjectInstructions_LoadsScopedGuidanceForMissingCwdRelativeSlashPath(t *testing.T) {
+func TestInitializeProjectInstructions_PrefersRootRelativeGuidanceForMissingRepoRelativeSlashPath(t *testing.T) {
 	root := t.TempDir()
 	cwd := filepath.Join(root, "work")
 	writeTestFile(t, filepath.Join(root, "xelyon.yaml"), "context: \"repo\"\n")
@@ -120,9 +120,85 @@ func TestInitializeProjectInstructions_LoadsScopedGuidanceForMissingCwdRelativeS
 
 	agent := initializeProjectInstructionPromptForInput(t, root, cwd, "pkg/new_feature.go を作る")
 
+	assertProjectInstructionPromptHasScope(t, agent.SystemPrompt, "pkg")
+	if strings.Contains(agent.SystemPrompt, `<repository_instructions scope="work/pkg" source="work/pkg/AGENTS.md">`) {
+		t.Fatalf("prompt used cwd-relative missing path before repo-relative path:\n%s", agent.SystemPrompt)
+	}
+}
+
+func TestInitializeProjectInstructions_DotSlashMissingPathUsesCWDRelativeGuidance(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "work")
+	writeTestFile(t, filepath.Join(root, "xelyon.yaml"), "context: \"repo\"\n")
+	writeTestFile(t, filepath.Join(root, "AGENTS.md"), "# root guidance\n")
+	writeTestFile(t, filepath.Join(root, "pkg", "AGENTS.md"), "# root pkg guidance\n")
+	writeTestFile(t, filepath.Join(root, "work", "pkg", "AGENTS.md"), "# work pkg guidance\n")
+
+	agent := initializeProjectInstructionPromptForInput(t, root, cwd, "./pkg/new_feature.go を作る")
+
 	assertProjectInstructionPromptHasScope(t, agent.SystemPrompt, "work/pkg")
 	if strings.Contains(agent.SystemPrompt, `<repository_instructions scope="pkg" source="pkg/AGENTS.md">`) {
-		t.Fatalf("prompt used root-relative missing fallback before cwd-relative missing path:\n%s", agent.SystemPrompt)
+		t.Fatalf("prompt used repo-relative guidance after dot-slash extraction:\n%s", agent.SystemPrompt)
+	}
+}
+
+func TestInitializeProjectInstructions_DotSlashMissingCWDPathIgnoresExistingRootRelativeFile(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "work")
+	writeTestFile(t, filepath.Join(root, "xelyon.yaml"), "context: \"repo\"\n")
+	writeTestFile(t, filepath.Join(root, "AGENTS.md"), "# root guidance\n")
+	writeTestFile(t, filepath.Join(root, "pkg", "AGENTS.md"), "# root pkg guidance\n")
+	writeTestFile(t, filepath.Join(root, "pkg", "foo.go"), "package pkg\n")
+	writeTestFile(t, filepath.Join(root, "work", "pkg", "AGENTS.md"), "# work pkg guidance\n")
+
+	agent := initializeProjectInstructionPromptForInput(t, root, cwd, "./pkg/foo.go を見て")
+
+	assertProjectInstructionPromptHasScope(t, agent.SystemPrompt, "work/pkg")
+	if strings.Contains(agent.SystemPrompt, `<repository_instructions scope="pkg" source="pkg/AGENTS.md">`) {
+		t.Fatalf("prompt used existing repo-relative file after explicit dot-slash input:\n%s", agent.SystemPrompt)
+	}
+}
+
+func TestResolveProjectInstructionInputCandidate_ExplicitDotSlashMissingPathUsesCWD(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "work")
+
+	got, ok := resolveProjectInstructionInputCandidate(cwd, root, "./pkg/new_feature.go")
+	if !ok {
+		t.Fatal("resolveProjectInstructionInputCandidate() ok = false, want true")
+	}
+	want := "work/pkg/new_feature.go"
+	if got != want {
+		t.Fatalf("resolveProjectInstructionInputCandidate() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveProjectInstructionInputCandidate_ExplicitDotSlashIgnoresExistingRootPath(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "work")
+	writeTestFile(t, filepath.Join(root, "pkg", "foo.go"), "package pkg\n")
+
+	got, ok := resolveProjectInstructionInputCandidate(cwd, root, "./pkg/foo.go")
+	if !ok {
+		t.Fatal("resolveProjectInstructionInputCandidate() ok = false, want true")
+	}
+	want := "work/pkg/foo.go"
+	if got != want {
+		t.Fatalf("resolveProjectInstructionInputCandidate() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveProjectInstructionInputCandidate_MissingRepoRelativePathFromNestedCWDUsesRoot(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "work")
+
+	got, ok := resolveProjectInstructionInputCandidate(cwd, root, "internal/agent/new_feature.go")
+	if !ok {
+		t.Fatal("resolveProjectInstructionInputCandidate() ok = false, want true")
+	}
+	want := "internal/agent/new_feature.go"
+	if got != want {
+		t.Fatalf("resolveProjectInstructionInputCandidate() = %q, want %q", got, want)
 	}
 }
 
