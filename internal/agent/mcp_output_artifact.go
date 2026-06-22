@@ -17,14 +17,14 @@ const (
 )
 
 func (a *Agent) createMCPRuntimeRawOutputArtifact(ctx context.Context, toolCall *tools.ToolCall, result string) (rawoutputs.RawOutputRef, string) {
+	if reason := providerhistory.MCPRawOutputArtifactOmitReason(result); reason != "" {
+		return rawoutputs.RawOutputRef{}, reason
+	}
 	if a == nil || a.Runtime == nil {
 		return rawoutputs.RawOutputRef{}, "raw_output_artifact_runtime_missing"
 	}
 	if providerHistoryRawOutputArtifactsModeForRuntime(a.Runtime) != providerhistory.RawOutputArtifactsApply {
 		return rawoutputs.RawOutputRef{}, mcpRuntimeRawOutputArtifactsDisabledReason(a.Runtime)
-	}
-	if reason := providerhistory.MCPRawOutputArtifactOmitReason(result); reason != "" {
-		return rawoutputs.RawOutputRef{}, reason
 	}
 	sessionID := strings.TrimSpace(a.providerHistoryRawOutputArtifactSessionID())
 	if sessionID == "" {

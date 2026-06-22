@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"github.com/susugadx/xelyon-cli/internal/providerhistory"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"strings"
 )
@@ -15,9 +14,6 @@ const (
 
 func (a *Agent) guardMCPToolExecutionResult(ctx context.Context, toolCall *tools.ToolCall, execResult tools.ExecutionResult) tools.ExecutionResult {
 	if !shouldCompactMCPToolResult(toolCall, execResult.Result) {
-		return execResult
-	}
-	if a == nil || a.Runtime == nil || providerHistoryRawOutputArtifactsModeForRuntime(a.Runtime) != providerhistory.RawOutputArtifactsApply {
 		return execResult
 	}
 	ref, omittedReason := a.createMCPRuntimeRawOutputArtifact(ctx, toolCall, execResult.Result)

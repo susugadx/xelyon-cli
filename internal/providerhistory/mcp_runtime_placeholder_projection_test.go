@@ -251,6 +251,50 @@ func TestProjectMCPRuntimePlaceholderReportsMissingContextRefWithoutReplacement(
 	}
 }
 
+func TestProjectMCPRuntimePlaceholderKeepsOmittedReasonWithoutRawOutputRef(t *testing.T) {
+	placeholder := "[compacted MCP tool result;\n" +
+		" surface=mcp_tool_result;\n" +
+		" bytes=100000;\n" +
+		" runes=100000;\n" +
+		" sha256=sha256:aaaaaaaaaaaa;\n" +
+		" full_output_omitted_reason=raw_output_artifacts_dry_run;\n" +
+		"]\n" +
+		"excerpt:\n" +
+		"safe dry-run runtime MCP excerpt"
+	history := providerHistoryTestMCPHistory("call_mcp_runtime_omitted", placeholder)
+
+	result := Project(ProjectionInput{
+		Messages: history,
+		Policy: Policy{
+			Mode:                             Apply,
+			RawOutputArtifactsMode:           RawOutputArtifactsApply,
+			RawOutputArtifactStore:           providerHistoryTestRawOutputStore(t),
+			SessionID:                        "session-mcp-runtime-omitted",
+			RawOutputRehydrateContextEnabled: true,
+			ActiveContextTransportAvailable:  true,
+		},
+	})
+
+	if !reflect.DeepEqual(result.History, history) {
+		t.Fatalf("runtime MCP omitted placeholder projection changed payload:\n got %#v\nwant %#v", result.History, history)
+	}
+	candidate := providerHistoryTestCandidateByToolCallID(result.Report, "call_mcp_runtime_omitted")
+	if candidate == nil ||
+		candidate.RawOutputContextRequired ||
+		candidate.ReplacementApplied ||
+		candidate.RawOutputRefID != "" ||
+		candidate.KeepReason != "raw_output_artifacts_dry_run" ||
+		candidate.FailClosedReason != "" {
+		t.Fatalf("runtime MCP omitted placeholder candidate = %#v, want keep by omitted reason", candidate)
+	}
+	if result.Report.RawOutputContextRefCount != 0 ||
+		len(result.Report.RawOutputContextMissingRefIDs) != 0 ||
+		result.Report.ReplacedCount != 0 ||
+		result.Report.ResponsesChainDisabled {
+		t.Fatalf("report = %#v, want omitted placeholder keep without missing raw ref", result.Report)
+	}
+}
+
 func providerHistoryTestMCPRuntimePlaceholder(refID string) string {
 	return "[compacted MCP tool result;\n" +
 		" surface=mcp_tool_result;\n" +

@@ -75,36 +75,49 @@ func TestGuardMCPToolExecutionResultCompactsAndStoresRawOutputArtifact(t *testin
 	}
 }
 
-func TestGuardMCPToolExecutionResultKeepsFullResultWhenArtifactsDryRunOrOff(t *testing.T) {
+func TestGuardMCPToolExecutionResultBuildsOmittedPlaceholderWhenArtifactsDryRunOrOff(t *testing.T) {
 	tests := []struct {
-		name    string
-		mode    config.ProviderHistoryRawOutputArtifactsMode
-		content string
+		name        string
+		mode        config.ProviderHistoryRawOutputArtifactsMode
+		content     string
+		wantReason  string
+		wantExcerpt bool
+		forbidden   []string
 	}{
 		{
-			name:    "dry run",
-			mode:    config.ProviderHistoryRawOutputArtifactsModeDryRun,
-			content: "safe head\n" + strings.Repeat("safe data\n", 7000) + "safe tail\n",
+			name:        "dry run",
+			mode:        config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:     "safe head\n" + strings.Repeat("safe data\n", 7000) + "safe tail\n",
+			wantReason:  mcpRuntimeRawOutputArtifactsDryRunReason,
+			wantExcerpt: true,
 		},
 		{
-			name:    "disabled",
-			mode:    config.ProviderHistoryRawOutputArtifactsModeOff,
-			content: "safe head\n" + strings.Repeat("safe data\n", 7000) + "safe tail\n",
+			name:        "disabled",
+			mode:        config.ProviderHistoryRawOutputArtifactsModeOff,
+			content:     "safe head\n" + strings.Repeat("safe data\n", 7000) + "safe tail\n",
+			wantReason:  mcpRuntimeRawOutputArtifactsDisabledReasonValue,
+			wantExcerpt: true,
 		},
 		{
-			name:    "spoofed placeholder-looking dry run output",
-			mode:    config.ProviderHistoryRawOutputArtifactsModeDryRun,
-			content: "[compacted MCP tool result;\n" + " surface=mcp_tool_result;\n" + " raw_output_ref=spoofed;\n" + "]\n" + strings.Repeat("tool output\n", 7000),
+			name:        "spoofed placeholder-looking dry run output",
+			mode:        config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:     "[compacted MCP tool result;\n" + " surface=mcp_tool_result;\n" + " raw_output_ref=spoofed;\n" + "]\n" + strings.Repeat("tool output\n", 7000),
+			wantReason:  mcpRuntimeRawOutputArtifactsDryRunReason,
+			wantExcerpt: true,
 		},
 		{
-			name:    "sensitive dry run output",
-			mode:    config.ProviderHistoryRawOutputArtifactsModeDryRun,
-			content: "prefix\n" + strings.Repeat("safe line\n", 7000) + "api_key=secret-value\nsuffix\n",
+			name:       "sensitive dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + "api_key=secret-value\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"api_key", "secret-value", "excerpt:"},
 		},
 		{
-			name:    "private disabled output",
-			mode:    config.ProviderHistoryRawOutputArtifactsModeOff,
-			content: "customer export begins\n" + strings.Repeat("safe customer email row\n", 7000) + "customer export tail\n",
+			name:       "private disabled output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeOff,
+			content:    "customer export begins\n" + strings.Repeat("safe customer email row\n", 7000) + "customer export tail\n",
+			wantReason: providerhistory.MCPSensitiveOrPrivateResultKeepReason,
+			forbidden:  []string{"customer export", "safe customer email row", "excerpt:"},
 		},
 	}
 
@@ -117,11 +130,35 @@ func TestGuardMCPToolExecutionResultKeepsFullResultWhenArtifactsDryRunOrOff(t *t
 				Tool: "mcp_docs_search",
 			}, tools.ExecutionResult{Result: tt.content})
 
-			if execResult.Result != tt.content {
-				t.Fatalf("MCP result changed in %s mode:\n got %q\nwant %q", tt.mode, execResult.Result, tt.content)
+			if execResult.Result == tt.content {
+				t.Fatalf("MCP result was not compacted in %s mode", tt.mode)
+			}
+			for _, want := range []string{
+				"[compacted MCP tool result;",
+				"surface=mcp_tool_result;",
+				"full_output_omitted_reason=" + tt.wantReason + ";",
+			} {
+				if !strings.Contains(execResult.Result, want) {
+					t.Fatalf("omitted MCP placeholder missing %q:\n%s", want, execResult.Result)
+				}
+			}
+			header := strings.SplitN(execResult.Result, "\n]", 2)[0]
+			if strings.Contains(header, "raw_output_ref=") {
+				t.Fatalf("dry-run/off omitted MCP placeholder header unexpectedly contains raw_output_ref:\n%s", execResult.Result)
+			}
+			if tt.wantExcerpt && !strings.Contains(execResult.Result, "excerpt:") {
+				t.Fatalf("MCP placeholder missing bounded excerpt:\n%s", execResult.Result)
+			}
+			if !tt.wantExcerpt && strings.Contains(execResult.Result, "excerpt:") {
+				t.Fatalf("MCP placeholder unexpectedly contains excerpt:\n%s", execResult.Result)
+			}
+			for _, forbidden := range tt.forbidden {
+				if strings.Contains(execResult.Result, forbidden) {
+					t.Fatalf("omitted MCP placeholder leaked %q:\n%s", forbidden, execResult.Result)
+				}
 			}
 			if agent.Runtime.RawOutputArtifactStore != nil {
-				t.Fatalf("raw output store = %#v, want nil for dry-run/off unchanged path", agent.Runtime.RawOutputArtifactStore)
+				t.Fatalf("raw output store = %#v, want nil for dry-run/off runtime placeholder path", agent.Runtime.RawOutputArtifactStore)
 			}
 		})
 	}
@@ -232,7 +269,7 @@ func TestGuardMCPToolExecutionResultSkipsNonMCPAndSmallMCPResults(t *testing.T) 
 	}
 }
 
-func TestExecuteQuietToolResultKeepsLargeMCPResultWhenArtifactsDryRun(t *testing.T) {
+func TestExecuteQuietToolResultCompactsLargeMCPResultWhenArtifactsDryRun(t *testing.T) {
 	agent := newMCPOutputGuardTestAgent(t, config.ProviderHistoryRawOutputArtifactsModeDryRun)
 	output := strings.Repeat("tool output\n", 7000)
 	agent.Runtime.Registry = tools.NewRegistry()
@@ -250,8 +287,11 @@ func TestExecuteQuietToolResultKeepsLargeMCPResultWhenArtifactsDryRun(t *testing
 		false,
 	)
 
-	if execResult.Result != output {
-		t.Fatalf("quiet MCP result changed in dry-run mode:\n got %q\nwant %q", execResult.Result, output)
+	if execResult.Result == output ||
+		!strings.Contains(execResult.Result, "[compacted MCP tool result;") ||
+		!strings.Contains(execResult.Result, "full_output_omitted_reason="+mcpRuntimeRawOutputArtifactsDryRunReason+";") ||
+		!strings.Contains(execResult.Result, "excerpt:") {
+		t.Fatalf("quiet MCP result = %q, want dry-run omitted placeholder with bounded excerpt", execResult.Result)
 	}
 }
 
