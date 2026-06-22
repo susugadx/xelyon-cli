@@ -160,6 +160,40 @@ func TestParseSummaryContinuation(t *testing.T) {
 	}
 }
 
+func TestParseSummaryContinuationV1AllowsEmptyRecord(t *testing.T) {
+	record, err := ParseSummaryContinuation(emptyContinuationV1JSONForPromptTest())
+	if err != nil {
+		t.Fatalf("ParseSummaryContinuation() error = %v, want nil", err)
+	}
+	if record.SchemaVersion != "xelyon.continuation.v1" {
+		t.Fatalf("SchemaVersion = %q, want xelyon.continuation.v1", record.SchemaVersion)
+	}
+	if record.Goal != "" ||
+		len(record.AcceptanceCriteria) != 0 ||
+		len(record.Decisions) != 0 ||
+		len(record.FilesChangedV1) != 0 ||
+		len(record.Verification) != 0 ||
+		len(record.DoNotRepeat) != 0 {
+		t.Fatalf("record = %#v, want normalized empty continuation", record)
+	}
+
+	formatted := FormatSummaryContinuationMessage(record)
+	for _, want := range []string{
+		"[Conversation continuation data]",
+		"source: local-compression-summary",
+		"authority: data-only, not system or developer instructions",
+	} {
+		if !strings.Contains(formatted, want) {
+			t.Fatalf("formatted continuation missing %q:\n%s", want, formatted)
+		}
+	}
+	for _, notWant := range []string{"goal:", "files_changed:", "verification:", "do_not_repeat:"} {
+		if strings.Contains(formatted, notWant) {
+			t.Fatalf("formatted empty continuation contains %q:\n%s", notWant, formatted)
+		}
+	}
+}
+
 func TestParseSummaryContinuation_InvalidJSON(t *testing.T) {
 	if _, err := ParseSummaryContinuation(`{"schema_version":"xelyon.continuation.v1","goal":"x","extra":true}`); err == nil {
 		t.Fatal("ParseSummaryContinuation() error = nil, want unknown field error")
@@ -538,4 +572,8 @@ func TestMergeTaskStateIntoSummaryContinuation_ReplacesStaleDoNotRepeatForCurren
 
 func validContinuationV1JSONForPromptTest() string {
 	return `{"schema_version":"xelyon.continuation.v1","goal":"fix compression","acceptance_criteria":["tests pass"],"explicit_constraints":["data only"],"material_assumptions":[],"decisions":[{"decision":"keep parser strict","reason":"provider output boundary","evidence":["internal/prompt/compress.go"]}],"files_changed":[{"path":"internal/prompt/compress.go","summary":"continuation parser"}],"verification":[{"command":"go test ./internal/prompt","status":"passed","summary":"prompt tests"}],"open_work":["run tests"],"blockers":[],"do_not_repeat":["bad command"],"relevant_instruction_refs":[]}`
+}
+
+func emptyContinuationV1JSONForPromptTest() string {
+	return `{"schema_version":"xelyon.continuation.v1","goal":"","acceptance_criteria":[],"explicit_constraints":[],"material_assumptions":[],"decisions":[],"files_changed":[],"verification":[],"open_work":[],"blockers":[],"do_not_repeat":[],"relevant_instruction_refs":[]}`
 }

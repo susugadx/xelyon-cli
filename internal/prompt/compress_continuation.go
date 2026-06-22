@@ -448,19 +448,7 @@ func normalizeSummaryStringList(values []string) []string {
 
 func validateSummaryContinuationRecord(record SummaryContinuationRecord) error {
 	if record.SchemaVersion == "xelyon.continuation.v1" {
-		if record.Goal == "" &&
-			len(record.AcceptanceCriteria) == 0 &&
-			len(record.ExplicitConstraints) == 0 &&
-			len(record.MaterialAssumptions) == 0 &&
-			len(record.Decisions) == 0 &&
-			len(record.FilesChangedV1) == 0 &&
-			len(record.Verification) == 0 &&
-			len(record.OpenWork) == 0 &&
-			len(record.Blockers) == 0 &&
-			len(record.DoNotRepeat) == 0 &&
-			len(record.RelevantInstructionRefs) == 0 {
-			return errors.New("xelyon.continuation.v1 JSON has no usable content")
-		}
+		// v1 は schema shape を DTO decode 側で検証し、空 content は deterministic merge の入力として許容する。
 		return nil
 	}
 	if record.CurrentTask == "" &&
