@@ -9,10 +9,10 @@ import (
 var (
 	displayURLPattern          = regexp.MustCompile(`https?://[^\s<>"'\]\)}]+`)
 	privateKeyBlockPattern     = regexp.MustCompile(`(?is)-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----`)
-	secretAssignmentPattern    = regexp.MustCompile(`(?i)\b(access_token|refresh_token|id_token|session_token|auth_token|api_key|apikey|client_secret|private_key|password|passwd|secret|token|jwt|signature|sig)=([^\s&;]+)`)
-	secretJSONFieldPattern     = regexp.MustCompile(`(?i)["']?(authorization|proxy-authorization|x-api-key|api-key|access-token|refresh-token|id-token|session-token|auth-token|client-secret|private-key|set-cookie|cookie|access_token|refresh_token|id_token|session_token|auth_token|api_key|apikey|client_secret|private_key|password|passwd|secret|token|jwt|signature|sig)["']?\s*:\s*["'][^"']+["']`)
+	secretAssignmentPattern    = regexp.MustCompile(`(?i)\b(access_token|refresh_token|id_token|session_token|auth_token|api_key|apikey|client_secret|private_key|password|passwd|secret|jwt|signature|sig)=([^\s&;]+)`)
+	secretJSONFieldPattern     = regexp.MustCompile(`(?i)["']?(authorization|proxy-authorization|x-api-key|api-key|access-token|refresh-token|id-token|session-token|auth-token|client-secret|private-key|set-cookie|cookie|access_token|refresh_token|id_token|session_token|auth_token|api_key|apikey|client_secret|private_key|password|passwd|secret|jwt|signature|sig)["']?\s*:\s*["'][^"']+["']`)
 	authHeaderDisplayPattern   = regexp.MustCompile("(?i)(\\bauthorization\\s*[:=]\\s*)(?:([A-Za-z][A-Za-z0-9._-]*)\\s+)?([^\\s'\";]+)")
-	secretHeaderPattern        = regexp.MustCompile("(?i)\\b(x-api-key|api-key|apikey|access-token|refresh-token|id-token|session-token|auth-token|client-secret)\\s*[:=]\\s*([^\\s'\";]+)")
+	secretHeaderPattern        = regexp.MustCompile("(?i)\\b(x-api-key|api-key|apikey|client-secret)\\s*[:=]\\s*([^\\s'\";]+)")
 	cookieHeaderPattern        = regexp.MustCompile(`(?i)\b(set-cookie|cookie)\s*[:=]\s*[^\r\n]+`)
 	secretQueryFallbackPattern = regexp.MustCompile(`(?i)([?&](?:access_token|refresh_token|id_token|session_token|auth_token|api_key|apikey|key|secret|password|passwd|token|client_secret|jwt|signature|sig)=)[^&#\s]+`)
 )
@@ -80,6 +80,7 @@ func LooksSensitiveContent(value string) bool {
 	}
 	if secretAssignmentPattern.MatchString(value) ||
 		secretJSONFieldPattern.MatchString(value) ||
+		tokenKeyValueLooksSensitive(value) ||
 		authHeaderDisplayPattern.MatchString(value) ||
 		secretHeaderPattern.MatchString(value) ||
 		cookieHeaderPattern.MatchString(value) ||
@@ -95,6 +96,7 @@ func redactDisplaySecrets(value string) string {
 	value = privateKeyBlockPattern.ReplaceAllString(value, "[redacted private key]")
 	value = secretAssignmentPattern.ReplaceAllString(value, "$1=[redacted]")
 	value = secretJSONFieldPattern.ReplaceAllString(value, "$1: [redacted]")
+	value = redactTokenKeyValues(value)
 	value = authHeaderDisplayPattern.ReplaceAllStringFunc(value, redactAuthorizationHeader)
 	value = secretHeaderPattern.ReplaceAllString(value, "$1: [redacted]")
 	value = cookieHeaderPattern.ReplaceAllString(value, "$1: [redacted]")

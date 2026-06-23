@@ -77,12 +77,13 @@ func TestGuardMCPToolExecutionResultCompactsAndStoresRawOutputArtifact(t *testin
 
 func TestGuardMCPToolExecutionResultBuildsOmittedPlaceholderWhenArtifactsDryRunOrOff(t *testing.T) {
 	tests := []struct {
-		name        string
-		mode        config.ProviderHistoryRawOutputArtifactsMode
-		content     string
-		wantReason  string
-		wantExcerpt bool
-		forbidden   []string
+		name         string
+		mode         config.ProviderHistoryRawOutputArtifactsMode
+		content      string
+		wantReason   string
+		wantExcerpt  bool
+		wantContains []string
+		forbidden    []string
 	}{
 		{
 			name:        "dry run",
@@ -90,6 +91,14 @@ func TestGuardMCPToolExecutionResultBuildsOmittedPlaceholderWhenArtifactsDryRunO
 			content:     "safe head\n" + strings.Repeat("safe data\n", 7000) + "safe tail\n",
 			wantReason:  mcpRuntimeRawOutputArtifactsDryRunReason,
 			wantExcerpt: true,
+		},
+		{
+			name:         "dry run output with token metrics",
+			mode:         config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:      strings.Repeat(`{"usage":{"tokens":4096,"cached_tokens":45,"token_count":4,"total_tokens":4141},"text":"safe metrics"}`+"\n", 1200),
+			wantReason:   mcpRuntimeRawOutputArtifactsDryRunReason,
+			wantExcerpt:  true,
+			wantContains: []string{`"tokens":4096`, `"cached_tokens":45`, `"total_tokens":4141`},
 		},
 		{
 			name:        "disabled",
@@ -111,6 +120,83 @@ func TestGuardMCPToolExecutionResultBuildsOmittedPlaceholderWhenArtifactsDryRunO
 			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + "api_key=secret-value\nsuffix\n",
 			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
 			forbidden:  []string{"api_key", "secret-value", "excerpt:"},
+		},
+		{
+			name:       "short bare token dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + "token=abc123\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"token=abc123", "abc123", "excerpt:"},
+		},
+		{
+			name:       "suffix token JSON dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + `{"github_token":"ghp_secret","csrfToken":"csrf-secret"}` + "\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"github_token", "ghp_secret", "csrfToken", "csrf-secret", "excerpt:"},
+		},
+		{
+			name:       "dotted token JSON dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + `{"github.token":"ghp_dot","auth.token":123456}` + "\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"github.token", "ghp_dot", "auth.token", "123456", "excerpt:"},
+		},
+		{
+			name:       "numeric exact token dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + "token=123456\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"token=123456", "123456", "excerpt:"},
+		},
+		{
+			name:       "quoted exact token assignment dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + `"token"=abc123` + "\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{`"token"=abc123`, "abc123", "excerpt:"},
+		},
+		{
+			name:       "quoted exact token assignment value dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + `"token"="quoted-secret"` + "\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{`"token"="quoted-secret"`, "quoted-secret", "excerpt:"},
+		},
+		{
+			name:       "structured exact token assignment dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + `token={"value":"abc123"}` + "\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"token", "value", "abc123", "excerpt:"},
+		},
+		{
+			name:       "embedded quoted token field dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + `"token":"abc123"` + "\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"token", "abc123", "excerpt:"},
+		},
+		{
+			name:       "embedded unquoted dotted token field dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + "github.token:ghp_dot\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"github.token", "ghp_dot", "excerpt:"},
+		},
+		{
+			name:       "dotted token assignment dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + "github.token=ghp_dot\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"github.token", "ghp_dot", "excerpt:"},
+		},
+		{
+			name:       "quoted spaced token label dry run output",
+			mode:       config.ProviderHistoryRawOutputArtifactsModeDryRun,
+			content:    "prefix\n" + strings.Repeat("safe line\n", 7000) + `{"GitHub Token":"ghp_secret"}` + "\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"GitHub Token", "ghp_secret", "excerpt:"},
 		},
 		{
 			name:       "private disabled output",
@@ -157,6 +243,11 @@ func TestGuardMCPToolExecutionResultBuildsOmittedPlaceholderWhenArtifactsDryRunO
 					t.Fatalf("omitted MCP placeholder leaked %q:\n%s", forbidden, execResult.Result)
 				}
 			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(execResult.Result, want) {
+					t.Fatalf("omitted MCP placeholder missing expected excerpt %q:\n%s", want, execResult.Result)
+				}
+			}
 			if agent.Runtime.RawOutputArtifactStore != nil {
 				t.Fatalf("raw output store = %#v, want nil for dry-run/off runtime placeholder path", agent.Runtime.RawOutputArtifactStore)
 			}
@@ -184,6 +275,34 @@ func TestGuardMCPToolExecutionResultBuildsOmittedPlaceholderWhenApplyRawOutputRe
 			content:      "prefix\n" + strings.Repeat("safe line\n", 7000) + "api_key=secret-value\nsuffix\n",
 			wantReason:   string(rawoutputs.ReasonSensitiveArtifactForbidden),
 			forbidden:    []string{"api_key", "secret-value", "excerpt:"},
+			wantStoreNil: true,
+		},
+		{
+			name:         "quoted exact token assignment",
+			content:      "prefix\n" + strings.Repeat("safe line\n", 7000) + `"token"=abc123` + "\nsuffix\n",
+			wantReason:   string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:    []string{`"token"=abc123`, "abc123", "excerpt:"},
+			wantStoreNil: true,
+		},
+		{
+			name:         "structured exact token assignment",
+			content:      "prefix\n" + strings.Repeat("safe line\n", 7000) + `token={"value":"abc123"}` + "\nsuffix\n",
+			wantReason:   string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:    []string{"token", "value", "abc123", "excerpt:"},
+			wantStoreNil: true,
+		},
+		{
+			name:         "dotted token assignment",
+			content:      "prefix\n" + strings.Repeat("safe line\n", 7000) + "github.token=ghp_dot\nsuffix\n",
+			wantReason:   string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:    []string{"github.token", "ghp_dot", "excerpt:"},
+			wantStoreNil: true,
+		},
+		{
+			name:         "quoted spaced token label",
+			content:      "prefix\n" + strings.Repeat("safe line\n", 7000) + `"API Token"={"value":"ghp_secret"}` + "\nsuffix\n",
+			wantReason:   string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:    []string{"API Token", "value", "ghp_secret", "excerpt:"},
 			wantStoreNil: true,
 		},
 		{
