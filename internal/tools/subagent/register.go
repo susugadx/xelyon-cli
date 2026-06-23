@@ -52,6 +52,15 @@ func (t *SpawnAgentTool) Parameters() map[string]interface{} {
 				"enum":        []string{"explore", "edit", "verify"},
 				"description": "Task type: explore (read-only investigation, default), edit (file modifications), verify (run build/test/lint).",
 			},
+			"model": map[string]interface{}{
+				"type":        "string",
+				"description": "Optional sub-agent model override. Omit or use sub_agent.default_model to use the configured/default sub-agent model.",
+			},
+			"reasoning_effort": map[string]interface{}{
+				"type":        "string",
+				"enum":        reasoningEffortSchemaEnum(),
+				"description": "Optional per-agent reasoning effort override: off, low, medium, high, or xhigh.",
+			},
 		},
 		"required":             []string{"message"},
 		"additionalProperties": false,
@@ -138,6 +147,10 @@ func (t *WaitAgentTool) Parameters() map[string]interface{} {
 				"type":        "array",
 				"items":       map[string]interface{}{"type": "string"},
 				"description": "Agent IDs to wait for (from spawn_agent).",
+			},
+			"timeout_ms": map[string]interface{}{
+				"type":        "integer",
+				"description": "Optional wait timeout in milliseconds. Values below 60000 are ignored and wait without a timeout.",
 			},
 		},
 		"required":             []string{"ids"},

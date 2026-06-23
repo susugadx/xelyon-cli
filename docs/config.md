@@ -208,9 +208,9 @@ project_map:
 # CLAUDE.md は互換候補として選択できます
 agent_instructions:
     project:
-        # project-local guidance の読み込みモード（通常は always / off。fallback は legacy 互換）
+        # project-local guidance の読み込みモード（always は AGENTS.md などを読み込み、fallback は deprecated alias として同じ挙動、off は無効）
         mode: always
-        # project-local guidance ファイル候補（既定は AGENTS.md）
+        # project-local guidance ファイル候補（basename は root→cwd / root→入力参照 path の scoped chain、/ を含む path は root 相対 explicit file。既定は AGENTS.md）
         files:
             - AGENTS.md
         # gitignored / untracked guidance を許可
@@ -496,7 +496,7 @@ provider_history_reduction:
 
 `off` は provider-facing history reduction を無効化します。
 
-`dry_run` は削減候補と見込み savings だけを記録します。provider に送る payload は変えず、Responses `previous_response_id` chain もこの機能では無効化しません。
+`dry_run` は削減候補と見込み savings だけを記録します。provider history reduction の projection は provider に送る payload を変えず、Responses `previous_response_id` chain もこの機能では無効化しません。MCP runtime guard はこの projection より前に動く別の履歴保存前 safety guard で、64KiB 超の MCP tool result は `dry_run` / `off` でも bounded placeholder に置き換えます。
 
 `apply` は安全条件を満たした replacement / compaction を provider-facing projection 上だけに適用します。実 replacement が 1 件以上ある request では、古い provider-side response state と payload が食い違わないよう、Responses `previous_response_id` chain をその request では無効化します。
 
@@ -515,7 +515,7 @@ provider_history_reduction:
 
 data-bearing command output / tool result を provider-facing history 上で短い placeholder にするための raw artifact 設定です。artifact は session-local manifest と content-addressed object として保存され、raw history / session / audit / persisted JSONL は削除されません。
 
-`mode` は `off` / `dry_run` / `apply` です。`dry_run` は artifact-backed candidate と savings 見込みだけを記録し、provider payload は変更しません。`apply` は persisted `raw_output_ref`、artifact verify、active context rehydrate transport、threshold、安全分類がすべて成立する場合だけ compact を適用します。
+`mode` は `off` / `dry_run` / `apply` です。`dry_run` は provider history reduction の artifact-backed candidate と savings 見込みだけを記録し、この projection では provider payload を変更しません。`apply` は persisted `raw_output_ref`、artifact verify、active context rehydrate transport、threshold、安全分類がすべて成立する場合だけ compact を適用します。MCP runtime guard の 64KiB 超 result compaction はこの apply gate とは別で、`apply` 以外では recoverable artifact を作らず `full_output_omitted_reason=raw_output_artifacts_dry_run` または `raw_output_artifacts_disabled` の placeholder を履歴保存前に残します。
 
 `root` は raw output artifact store の absolute path です。省略時は `~/.xelyon/history/rawoutputs` を使います。環境変数 `XELYON_RAW_OUTPUT_ARTIFACT_ROOT` が設定されている場合は config より優先されます。relative path と filesystem root は拒否されます。既存 parent directory に symlink が含まれる root も hard error で拒否されるため、移設したい場合は symlink ではなく `root` または env override を使ってください。
 

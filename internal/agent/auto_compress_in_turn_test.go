@@ -43,7 +43,11 @@ func (p *inTurnCompressionProvider) ChatWithTools(ctx context.Context, _ string,
 	if err := p.handleCallContext(ctx, call); err != nil {
 		return "", err
 	}
-	return p.responseForCall(call)
+	response, err := p.responseForCall(call)
+	if err != nil {
+		return "", err
+	}
+	return compressionSummaryResponseForHistory(history, response), nil
 }
 
 func (p *inTurnCompressionProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, _ string, _ *api.ImageData, model string) (string, error) {
@@ -142,6 +146,7 @@ func newInTurnCompressionConfig() *config.Config {
 	cfg.Compression.TokenThreshold = 1
 	cfg.Compression.KeepRecent = 1
 	cfg.Compression.PreferCompactAPI = true
+	cfg.Skills.Router.Activation = config.SkillsRouterActivationOff
 	return cfg
 }
 
@@ -180,10 +185,9 @@ func seedInTurnCompressionOldSession(agent *Agent) {
 
 func setInTurnCompressionResponseContext(agent *Agent, provider *inTurnCompressionProvider, responseID string) {
 	provider.SetResponseID(responseID)
-	agent.session.ResponseID = responseID
-	agent.session.ResponseModel = agent.CurrentModel
-	agent.session.ResponseProviderName = config.CanonicalProviderName(agent.ProviderName)
-	agent.session.ResponseProviderConfigKey = agent.currentProviderConfigKey()
+	agent.refreshProjectPrompt("current request")
+	agent.recordResponseContextForPrompt(agent.normalModeSystemPromptForRequest(context.Background(), "current request", true))
+	agent.syncSavedResponseContextFromProvider()
 }
 
 func TestNormalModeInTurnAutoCompressKeepsCurrentTurnTailBeforeNextModelCall(t *testing.T) {
@@ -224,8 +228,8 @@ func TestNormalModeInTurnAutoCompressKeepsCurrentTurnTailBeforeNextModelCall(t *
 	if len(nextHistory) != 4 {
 		t.Fatalf("next model call history len = %d, want summary + current user/assistant/tool", len(nextHistory))
 	}
-	if nextHistory[0].Role != "system" || !strings.Contains(nextHistory[0].Content, "in-turn summary") {
-		t.Fatalf("next history first message = %#v, want summary system message", nextHistory[0])
+	if nextHistory[0].Role != "assistant" || !strings.Contains(nextHistory[0].Content, "in-turn summary") {
+		t.Fatalf("next history first message = %#v, want assistant continuation data", nextHistory[0])
 	}
 	if strings.Contains(nextHistory[0].Content, "old context") {
 		t.Fatalf("summary message leaked old full context: %q", nextHistory[0].Content)
@@ -393,8 +397,8 @@ func TestChatCoreInTurnAutoCompressPersistsSessionTailAndSkipsPostTurn(t *testin
 	if len(loadedMessages) != 5 {
 		t.Fatalf("len(loaded.ToAPIMessages()) = %d, want summary + current user/assistant/tool/final", len(loadedMessages))
 	}
-	if loadedMessages[0].Role != "system" || !strings.Contains(loadedMessages[0].Content, "in-turn summary") {
-		t.Fatalf("loaded first message = %#v, want compressed summary", loadedMessages[0])
+	if loadedMessages[0].Role != "assistant" || !strings.Contains(loadedMessages[0].Content, "in-turn summary") {
+		t.Fatalf("loaded first message = %#v, want assistant continuation data", loadedMessages[0])
 	}
 	if strings.Contains(loadedMessages[0].Content, "old context") {
 		t.Fatalf("loaded summary leaked original full context: %q", loadedMessages[0].Content)

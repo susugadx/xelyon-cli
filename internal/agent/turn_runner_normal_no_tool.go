@@ -75,6 +75,7 @@ func (h *normalModeNoToolHandler) handlePostMutationFinalChecks(response string)
 		Role:    "user",
 		Content: result.Feedback,
 	})
+	a.queueRuntimeDirective(finalCheckFailureRuntimeDirective)
 	return true, normalModeContinue
 }
 

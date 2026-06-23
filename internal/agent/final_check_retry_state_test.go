@@ -375,6 +375,21 @@ func TestRunNormalMode_FinalChecksNoProgressReturnsControl(t *testing.T) {
 	if provider.callCount != 3 {
 		t.Fatalf("provider.callCount = %d, want 3", provider.callCount)
 	}
+	if len(provider.systemPrompts) < 3 || !strings.Contains(provider.systemPrompts[2], finalCheckFailureRuntimeDirective) {
+		t.Fatalf("third provider system prompt = %q, want final check runtime directive", provider.systemPrompts)
+	}
+	foundFailureData := false
+	for _, msg := range provider.histories[2] {
+		if msg.Role == "user" && strings.Contains(msg.Content, "Final check failed") {
+			foundFailureData = true
+			if strings.Contains(msg.Content, "[SYSTEM") {
+				t.Fatalf("final check failure data should not contain fake system marker: %q", msg.Content)
+			}
+		}
+	}
+	if !foundFailureData {
+		t.Fatalf("third provider history = %#v, want final check failure data", provider.histories[2])
+	}
 	if !strings.Contains(out.String(), "without any task progress") {
 		t.Fatalf("expected no-progress final checks warning, got %q", out.String())
 	}

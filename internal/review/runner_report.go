@@ -42,10 +42,7 @@ func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req Revi
 		ProbeResultOptions: r.probeResultPromptContextOptions(),
 	})
 	r.saveReviewRunTextArtifact("report_prompt.md", reportPrompt, redactor)
-	reportResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseReport,
-		Prompt: reportPrompt,
-	})
+	reportResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseReport, reportPrompt))
 	if err != nil {
 		return reviewreport.ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
 	}
@@ -76,10 +73,7 @@ func (r *ReviewRunner) completeInitialReviewReport(ctx context.Context, req Revi
 		DecodeOrValidationErr: reportErr,
 	})
 	r.saveReviewRunTextArtifact("report_prompt.md", repairPrompt, redactor)
-	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseReport,
-		Prompt: repairPrompt,
-	})
+	repairResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseReport, repairPrompt))
 	if err != nil {
 		return reviewreport.ReviewReport{}, fmt.Errorf("review runner pass2 model: %w", err)
 	}

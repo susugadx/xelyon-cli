@@ -69,7 +69,7 @@ Start investigation now.`, userRequest, allowedTools, checklist, PlanJSONSchemaI
 // when a modification tool is detected during investigation.
 // toolName is the name of the detected modification tool.
 func BuildPlanRequestMessage(toolName string) string {
-	return fmt.Sprintf(`[SYSTEM] You tried to use a modification tool (%s) during the investigation phase.
+	return fmt.Sprintf(`A modification tool (%s) was requested during the investigation phase.
 
 Before using modification tools, you must provide an implementation plan.
 Output your plan as text that includes a single JSON object matching the Plan schema.

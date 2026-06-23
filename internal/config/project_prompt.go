@@ -12,7 +12,8 @@ import (
 
 var referencedPathPattern = regexp.MustCompile("`[^`]+`|\"[^\"]+\"|'[^']+'|[A-Za-z0-9_./\\\\:-]+")
 
-// ProjectPromptSelection は入力に応じて注入する project rules/context の解決結果。
+// ProjectPromptSelection は legacy rules/context の互換表示用解決結果。
+// 通常の SystemPrompt 注入では AGENTS.md などの guidance を使い、この結果は使わない。
 type ProjectPromptSelection struct {
 	Rules    []string
 	Contexts []string
@@ -34,7 +35,7 @@ func ResolveSharedIgnorePatterns(globalCfg *Config, projectCfg *ProjectConfig, e
 	return pathmatch.NormalizePatterns(patterns)
 }
 
-// SelectProjectPromptSelection は入力内容に一致する rules/context だけを解決する。
+// SelectProjectPromptSelection は入力内容に一致する legacy rules/context だけを解決する。
 func SelectProjectPromptSelection(projectCfg *ProjectConfig, input string) ProjectPromptSelection {
 	if projectCfg == nil {
 		return ProjectPromptSelection{}

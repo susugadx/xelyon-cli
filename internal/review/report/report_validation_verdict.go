@@ -32,6 +32,12 @@ func validateCleanVerdictContract(report ReviewReport) error {
 	if len(report.RootCauseGroups) > 0 {
 		return fmt.Errorf("verdict %q requires root_cause_groups to be empty", ReviewVerdictClean)
 	}
+	if len(report.UnverifiedSurfaces) > 0 {
+		return fmt.Errorf("verdict %q requires unverified_surfaces to be empty", ReviewVerdictClean)
+	}
+	if len(report.ResidualRisks) > 0 {
+		return fmt.Errorf("verdict %q requires residual_risks to be empty", ReviewVerdictClean)
+	}
 	return nil
 }
 

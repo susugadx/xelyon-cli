@@ -144,8 +144,9 @@ func (r *planInvestigationRunner) requestResponse() (string, error) {
 }
 
 func (r *planInvestigationRunner) requestResponseForIteration(iteration int) (string, error) {
-	requestCtx, history := r.agent.providerFacingHistoryForRequest(r.agent.requestContext(r.ctx))
 	effectivePrompt := r.agent.planModeSystemPromptForInvestigationRequest(r.ctx, r.taskText, iteration == 0)
+	requestCtx := r.agent.prepareResponseContextForPrompt(r.agent.requestContext(r.ctx), effectivePrompt)
+	requestCtx, history := r.agent.providerFacingHistoryForRequest(requestCtx)
 	response, err := r.agent.CurrentProvider.ChatWithTools(
 		requestCtx,
 		effectivePrompt,
@@ -155,6 +156,7 @@ func (r *planInvestigationRunner) requestResponseForIteration(iteration int) (st
 	if err != nil {
 		return "", fmt.Errorf("API call failed: %w", err)
 	}
+	r.agent.recordResponseContextForPrompt(effectivePrompt)
 	return response, nil
 }
 
@@ -271,6 +273,6 @@ func (r *planInvestigationRunner) shouldAbortToolLoop(tc *tools.ToolCall) bool {
 func (r *planInvestigationRunner) rejectTool(tc *tools.ToolCall) {
 	r.agent.History = append(r.agent.History, api.Message{
 		Role:    "user",
-		Content: fmt.Sprintf("[SYSTEM] Tool '%s' is not allowed in investigation phase. Please only use read-only tools.", tc.Tool),
+		Content: fmt.Sprintf("Tool %q is not allowed in investigation phase. Please only use read-only tools.", tc.Tool),
 	})
 }

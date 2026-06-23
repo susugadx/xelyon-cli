@@ -62,7 +62,7 @@ func recordProviderHistoryRunSkillScriptArtifactCandidate(report *ProjectionRepo
 		report.Kept = append(report.Kept, entry)
 		return true
 	}
-	if rawoutputs.LooksSensitiveContent(content) {
+	if rawoutputs.LooksSensitiveContent(content) || providerHistoryLooksBareSecret(content) {
 		entry.SafetyStatus = "sensitive"
 		entry.KeepReason = string(rawoutputs.ReasonSensitiveArtifactForbidden)
 		entry.FailClosedReason = entry.KeepReason

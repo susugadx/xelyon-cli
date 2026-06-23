@@ -52,6 +52,7 @@ func buildSessionMetadata(session *Session) SessionMetadata {
 		ResponseModel:             session.ResponseModel,
 		ResponseProviderName:      session.ResponseProviderName,
 		ResponseProviderConfigKey: session.ResponseProviderConfigKey,
+		ResponsePromptFingerprint: session.ResponsePromptFingerprint,
 	}
 }
 

@@ -8,17 +8,42 @@ import (
 const (
 	ProjectMapStartMarker = "<!-- PROJECT_MAP_START -->"
 	ProjectMapEndMarker   = "<!-- PROJECT_MAP_END -->"
+
+	projectMapDataStartTag = "<project_map_data>"
+	projectMapDataEndTag   = "</project_map_data>"
 )
 
 var projectMapSectionRe = regexp.MustCompile(`(?s)\n?<!-- PROJECT_MAP_START -->\n?(.*?)\n?<!-- PROJECT_MAP_END -->\n?`)
 
+var projectMapDelimiterReplacer = strings.NewReplacer(
+	ProjectMapStartMarker, "&lt;!-- PROJECT_MAP_START --&gt;",
+	ProjectMapEndMarker, "&lt;!-- PROJECT_MAP_END --&gt;",
+	projectMapDataStartTag, "&lt;project_map_data&gt;",
+	projectMapDataEndTag, "&lt;/project_map_data&gt;",
+)
+
 // BuildProjectMapSection は marker 付き Project Map セクションを構築する。
 func BuildProjectMapSection(section string) string {
-	section = strings.Trim(section, "\n")
-	if strings.TrimSpace(section) == "" {
+	promptSection, ok := BuildProjectMapPromptSection(section)
+	if !ok {
 		return ""
 	}
-	return ProjectMapStartMarker + "\n" + section + "\n" + ProjectMapEndMarker
+	return promptSection.Content()
+}
+
+// BuildProjectMapPromptSection は Project Map を data-only prompt section として構築する。
+func BuildProjectMapPromptSection(section string) (PromptSection, bool) {
+	section = strings.Trim(section, "\n")
+	if strings.TrimSpace(section) == "" {
+		return PromptSection{}, false
+	}
+	section = projectMapDelimiterReplacer.Replace(section)
+	return DynamicText(
+		"xelyon.project_map",
+		AuthorityData,
+		ProjectMapStartMarker+"\n"+projectMapDataStartTag+"\n"+section+"\n"+projectMapDataEndTag+"\n"+ProjectMapEndMarker,
+		map[string]string{"format": "marker_wrapped_data"},
+	), true
 }
 
 // InjectProjectMapSection は既存 Project Map セクションを置換して末尾に注入する。
@@ -42,10 +67,19 @@ func ExtractProjectMapSection(systemPrompt string) string {
 	if len(matches) > 0 {
 		last := matches[len(matches)-1]
 		if len(last) >= 2 {
-			return strings.Trim(last[1], "\n")
+			return unwrapProjectMapDataBlock(last[1])
 		}
 	}
 	return ""
+}
+
+func unwrapProjectMapDataBlock(section string) string {
+	section = strings.Trim(section, "\n")
+	if strings.HasPrefix(section, projectMapDataStartTag) && strings.HasSuffix(section, projectMapDataEndTag) {
+		section = strings.TrimPrefix(section, projectMapDataStartTag)
+		section = strings.TrimSuffix(section, projectMapDataEndTag)
+	}
+	return strings.Trim(section, "\n")
 }
 
 // StripProjectMapSection は Project Map セクションを除去する。

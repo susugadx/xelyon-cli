@@ -171,6 +171,7 @@ xelyon --image screenshot.png --provider kimi "この画面を説明して"
 ## プロジェクト guidance と repo 設定
 
 標準の project guidance は repo 直下の `AGENTS.md` に書きます。`/init` は `AGENTS.md` を作成します。
+subdirectory ごとの追加方針が必要な場合は、その directory にも `AGENTS.md` を置けます。
 
 `xelyon.yaml` は repo-local の XELYON 設定ファイルです。ignore pattern や final checks など、XELYON の実行設定を project ごとに変えたい場合に使います。
 
@@ -183,6 +184,10 @@ xelyon --image screenshot.png --provider kimi "この画面を説明して"
 ### AGENTS.md について
 
 `AGENTS.md` は agent が読む repo guidance です。既存の `CLAUDE.md` / `.claude/CLAUDE.md` を併用したい場合は `/config` の Agent Instructions で選択できます。
+
+`agent_instructions.project.files` にある `AGENTS.md` のような basename entry は、project root から現在の `cwd` まで root → nearest の順で探索されます。入力文に `internal/agent/foo.go` のような既存 repo-relative path が含まれる場合は、その path の directory chain も追加で読みます。後ろに注入される nearest scope の guidance が repository guidance 内で優先されます。
+
+`docs/AGENTS.md` や `.claude/CLAUDE.md` のように slash を含む entry は、scoped search ではなく project root 相対の明示 file として 1 回だけ読みます。
 
 公開 repo に含まれる `AGENTS.md` は、その repo の maintainer や contributor 向けの作業方針を含む場合があります。fork や別環境で使う場合は、内容をそのまま必須ルールとして扱わず、自分の agent 環境や開発フローに合わせて調整してください。個人用の方針は `~/.xelyon/AGENTS.md` などの global guidance に置くこともできます。
 
@@ -219,7 +224,7 @@ final_checks:
 
 > **Note:** `final_checks.commands` を定義すると、AI が `completed_with_changes` の完了候補で自動実行します。省略時は `config.yaml` の final_checks 設定が使われます。旧 `verification` も互換入力として読み取られます。
 
-既存 `xelyon.yaml` の `context` / `rules` / `conditional` は互換のため読み込みますが、新規 project guidance は `AGENTS.md` を推奨します。
+既存 `xelyon.yaml` の `context` / `rules` / `conditional` は load/save 互換として読み取れますが、通常の system prompt には注入しません。新規 project guidance は `AGENTS.md` に書きます。`xelyon.yaml` が存在するだけで `AGENTS.md` 全体が advisory に格下げされることはありません。
 
 ---
 

@@ -14,6 +14,18 @@ End of response.`
 	assertPlanJSONNeedsRetry(t, result)
 }
 
+func TestExtractPlanJSON_TopLevelXelyonPlanV2MissingStepsReturnsRetryCandidate(t *testing.T) {
+	response := `Here is the plan:
+{"schema_version":"xelyon.plan.v2","goal":"Fix parser","acceptance_criteria":[],"findings":[],"constraints":[],"open_questions":[]}
+Done.`
+
+	result := mustExtractPlanJSON(t, response)
+	if result != `{"schema_version":"xelyon.plan.v2","goal":"Fix parser","acceptance_criteria":[],"findings":[],"constraints":[],"open_questions":[]}` {
+		t.Fatalf("ExtractPlanJSON() = %q, want malformed top-level v2 candidate", result)
+	}
+	assertPlanJSONNeedsRetry(t, result)
+}
+
 func TestExtractPlanJSON_V2SchemaInvalidWrapperReturnsRetryCandidate(t *testing.T) {
 	response := `Here is the plan:
 {"plan":{"summary":"Fix","steps":{"id":1,"description":"Do it"}}}

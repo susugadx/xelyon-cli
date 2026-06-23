@@ -23,13 +23,13 @@ type Spec struct {
 var builtinSpecs = []Spec{
 	{
 		Name:        "gather_context",
-		Description: "Primary investigation tool. Pass what code context you need in query; the runtime routes to direct reads, directory listing, auto search, structured impact, diagnostics-aware recommended reads, and bounded compact evidence prefetch. Natural-language searches like A or B in docs/ stay search queries; only exact files, ranges, and directory paths use direct routing. Use this by default unless you need exact low-level control.",
+		Description: "Primary repository investigation tool. Use it to retrieve the files, ranges, symbols, callers, tests, or directory context needed for the next decision. Prefer it when the target is not already available as exact content.",
 		Safety:      SafetyHigh,
 		HelpOrder:   10,
 	},
 	{
 		Name:        "read_file",
-		Description: "Exact-content reader. gather_context remains the default investigation front door. When read_file is visible on apply_patch surfaces, use it only as an edit exact-control override after you already know the exact file or range. On legacy surfaces it remains a low-level expert override. Reads files (1-10). Default detail=auto returns full content when feasible and outline for large whole-file reads. Optional detail: compact for locator targets or explicit path ranges, full, outline. Do not re-read files already returned.",
+		Description: "Read exact content from known files or line ranges. Use when precise text is required for an edit or verification; avoid repeating content already available in the current context.",
 		Safety:      SafetyHigh,
 		HelpOrder:   30,
 	},
@@ -42,7 +42,7 @@ var builtinSpecs = []Spec{
 	},
 	{
 		Name:        "str_replace",
-		Description: "Precise edits to existing files. Copy exact old_str and existing context from actual gather_context, read_file, or search_code output; do not invent old_str. Write new_str as the intended replacement based on that verified context. For multiple edits in the same file, prefer same-file edits=[{old_str,new_str},...] based on actual content. Line-range mode (old_str empty + start_line/end_line) is an advanced fallback only when fresh tool output provides an exact range; do not guess line ranges or use it to avoid evidence.",
+		Description: "Precise edits to existing files. Copy old_str from current gather_context, read_file, or search_code output; do not invent it. Use new_str for the intended replacement. Batch same-file edits with edits=[{old_str,new_str},...] when practical. Line-range mode is an advanced fallback only with fresh exact line output.",
 		Safety:      SafetyMedium,
 		HelpSummary: "Precise same-file replacements from actual tool output",
 		HelpOrder:   100,
@@ -63,13 +63,13 @@ var builtinSpecs = []Spec{
 	},
 	{
 		Name:        "list_dir",
-		Description: "Low-level directory summary tool. gather_context is the default front door for directory investigation and direct routing. list_dir stays hidden on current gather_context-first agent surfaces; when directly exposed, treat it as a low-level/internal override. Returns a compact summary with representative names, counts, and types. Ignores .git, node_modules, vendor by default. Use depth parameter (1-3) for recursive listing.",
+		Description: "Low-level directory summary tool. gather_context is the default for directory investigation. list_dir stays hidden on gather_context-first agent surfaces; when exposed, it returns compact names, counts, and types.",
 		Safety:      SafetyHigh,
 		HelpOrder:   40,
 	},
 	{
 		Name:        "search_code",
-		Description: "Low-level code discovery tool. gather_context remains the default investigation front door. When a legacy surface exposes search_code, keep it as an expert override only when gather_context is clearly insufficient. Uses language-aware routing across symbol-aware resolution, literal search, and regex search. Prefer mode=auto, short symbol queries when possible, and regex only when needed. For related code discovery, comma-separated multi-pattern search is the default. Use one combined query for target + helpers + references/callers + tests instead of serial narrow searches whenever possible. intent=impact is the high-level entrypoint for shared-change impact analysis when you only have one starting symbol, with structured impact for Go, TypeScript .ts/.d.ts, targeted TSX .tsx, and JavaScript .js/.jsx symbols when available; use file_filter=go, *.go, scoped Go **/*.go globs, or direct .go paths for Go, file_filter=ts, *.ts, *.d.ts, or direct .ts/.d.ts paths for TypeScript, file_filter=tsx, *.tsx, or direct .tsx paths for TSX, and file_filter=js, *.js, direct .js paths, file_filter=jsx, *.jsx, or direct .jsx paths for JavaScript. file_filter=typescript and file_filter=javascript remain broad fallback scopes; .mjs/.cjs are not JavaScript structured impact targets. Returns contextual matches and may provide richer definition/reference/test results for symbol-like queries in supported languages. Supports comma-separated patterns for parallel multi-search and file filtering via ripgrep-like built-in language aliases (e.g. go, py, c) or globs (e.g. *_test.go).",
+		Description: "Low-level repository search for exact symbols, literals, regex patterns, references, or impact analysis. Use when gather_context is insufficient or exact search control is needed. Combine related independent patterns when practical.",
 		Safety:      SafetyHigh,
 		HelpOrder:   20,
 	},
@@ -82,7 +82,7 @@ var builtinSpecs = []Spec{
 	},
 	{
 		Name:        "bash",
-		Description: "Execute a shell command. Use for: git operations, npm/pip install, make, go test, go fmt, curl, compilers. Commands like cat/ls/grep auto-approve. Dangerous commands require confirmation.",
+		Description: "Run local commands for build, test, format, lint, git, package tooling, and tasks without a dedicated tool. Runtime policy determines approval or denial. Prefer dedicated repository tools for reading and searching when available, but use shell fallbacks when they are unavailable or insufficient.",
 		Safety:      SafetyLow,
 		HelpSummary: "Execute shell commands for build, test, git, and local tooling",
 		HelpOrder:   130,
@@ -96,14 +96,14 @@ var builtinSpecs = []Spec{
 	},
 	{
 		Name:        "spawn_agent",
-		Description: "Spawn a sub-agent for a well-scoped task. Set task_type to: explore (default, read-only investigation), edit (targeted file modifications), or verify (run build/test/lint). Sub-agents run in isolated context and return only their final report.",
+		Description: "Start a bounded specialist task for exploration, implementation, review, or verification. Provide the objective, relevant scope, constraints, and expected deliverable. The parent agent remains responsible for integration and final decisions.",
 		Safety:      SafetyHigh,
 		HelpSummary: "Spawn a sub-agent for explore/edit/verify tasks",
 		HelpOrder:   140,
 	},
 	{
 		Name:        "wait_agent",
-		Description: "Wait for sub-agents to complete and receive their results.",
+		Description: "Collect results from one or more spawned agents. Respect the configured timeout and concurrency policy.",
 		Safety:      SafetyHigh,
 		HelpSummary: "Wait for sub-agents to complete",
 		HelpOrder:   150,

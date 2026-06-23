@@ -35,6 +35,7 @@ type Session struct {
 	ResponseModel             string          `json:"response_model,omitempty"`
 	ResponseProviderName      string          `json:"response_provider_name,omitempty"`
 	ResponseProviderConfigKey string          `json:"response_provider_config_key,omitempty"`
+	ResponsePromptFingerprint string          `json:"response_prompt_fingerprint,omitempty"`
 	persistedCount            int
 	rewriteRequired           bool
 }
@@ -93,6 +94,7 @@ type SessionMetadata struct {
 	ResponseModel             string    `json:"response_model,omitempty"`
 	ResponseProviderName      string    `json:"response_provider_name,omitempty"`
 	ResponseProviderConfigKey string    `json:"response_provider_config_key,omitempty"`
+	ResponsePromptFingerprint string    `json:"response_prompt_fingerprint,omitempty"`
 }
 
 // NewSession は新しいセッションを作成

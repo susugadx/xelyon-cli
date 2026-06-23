@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
-	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
 // handleTextPlanRecovery は normal mode で no-tool 応答が
@@ -32,20 +31,14 @@ func (h *normalModeNoToolHandler) handleTextPlanRecovery(response string) (bool,
 	if h.state.textPlanRedirectCount > maxTextPlanRedirects {
 		yellow.Fprintf(a.output(), "⚠️  Text plan detected %d times. Forcing direct execution.\n", h.state.textPlanRedirectCount)
 		h.runner.appendAssistantHistoryOnly(response)
-		a.History = append(a.History, api.Message{
-			Role:    "user",
-			Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptStopPlanning),
-		})
+		a.queueRuntimeDirective(a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptStopPlanning))
 		return true, normalModeContinue
 	}
 
 	yellow.Fprintf(a.output(), "⚠️  Text plan detected (%d steps). Execute tools directly instead. (%d/%d)\n",
 		len(steps), h.state.textPlanRedirectCount, maxTextPlanRedirects)
 	h.runner.appendAssistantHistoryOnly(response)
-	a.History = append(a.History, api.Message{
-		Role:    "user",
-		Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptNoTextPlan),
-	})
+	a.queueRuntimeDirective(a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptNoTextPlan))
 	return true, normalModeContinue
 }
 

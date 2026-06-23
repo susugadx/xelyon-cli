@@ -121,11 +121,20 @@ func (r *headlessRunner) requestAssistantResponse(ctx context.Context, iteration
 	}
 
 	effectivePrompt := r.agent.SystemPrompt
+	var runtimeDirectives []string
 	if strings.TrimSpace(r.agent.cfg().SubAgentPrompt) == "" {
-		effectivePrompt = r.agent.normalModeSystemPromptForRequest(reqCtx, r.query, iteration == 0)
+		runtimeDirectives = r.agent.pendingRuntimeDirectives()
+		effectivePrompt = r.agent.normalModeSystemPromptForRequestWithDirectives(reqCtx, r.query, iteration == 0, runtimeDirectives)
 	}
-	requestCtx, history := r.agent.providerFacingHistoryForRequest(r.agent.requestContext(reqCtx))
-	return r.provider.ChatWithTools(requestCtx, effectivePrompt, history, r.model)
+	requestCtx := r.agent.prepareResponseContextForPrompt(r.agent.requestContext(reqCtx), effectivePrompt)
+	requestCtx, history := r.agent.providerFacingHistoryForRequest(requestCtx)
+	response, err := r.provider.ChatWithTools(requestCtx, effectivePrompt, history, r.model)
+	if err != nil {
+		return "", err
+	}
+	r.agent.recordResponseContextForPrompt(effectivePrompt)
+	r.agent.markRuntimeDirectivesDelivered(runtimeDirectives)
+	return response, nil
 }
 
 func (r *headlessRunner) handleAssistantResponse(ctx context.Context, response string) bool {

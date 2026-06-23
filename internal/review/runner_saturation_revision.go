@@ -116,10 +116,7 @@ func (r *ReviewRunner) requestReviewReportRevision(ctx context.Context, input re
 		SaturationCheck:             input.saturationCheck,
 	})
 	r.saveReviewRunTextArtifact("revision_prompt.md", revisionPrompt, input.redactor)
-	resp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseReportRevision,
-		Prompt: revisionPrompt,
-	})
+	resp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseReportRevision, revisionPrompt))
 	if err != nil {
 		return ReviewModelResponse{}, err
 	}
@@ -145,10 +142,7 @@ func (r *ReviewRunner) requestReviewReportRevisionRepair(ctx context.Context, in
 		DecodeOrValidationErr:       decodeOrValidationErr,
 	})
 	r.saveReviewRunTextArtifact("revision_prompt.md", repairPrompt, input.redactor)
-	resp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseReportRevision,
-		Prompt: repairPrompt,
-	})
+	resp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseReportRevision, repairPrompt))
 	if err != nil {
 		return ReviewModelResponse{}, err
 	}

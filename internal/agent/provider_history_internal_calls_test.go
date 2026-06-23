@@ -89,10 +89,7 @@ func TestReviewModelDoesNotUseProviderHistoryReductionRequestProjection(t *testi
 	agent := newReviewAgentForTest(t, provider)
 	staleReport := seedProviderHistoryReductionInternalCallFixture(t, agent)
 
-	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), review.ReviewModelRequest{
-		Phase:  review.ReviewModelPhaseReport,
-		Prompt: "review prompt",
-	}); err != nil {
+	if _, err := (agentReviewModel{agent: agent}).CompleteReview(context.Background(), reviewModelRequestForAgentTest(review.ReviewModelPhaseReport, "review prompt")); err != nil {
 		t.Fatalf("CompleteReview() error = %v", err)
 	}
 

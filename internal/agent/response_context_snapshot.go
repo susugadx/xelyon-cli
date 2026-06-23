@@ -12,6 +12,7 @@ type responseContextSnapshot struct {
 	model             string
 	providerName      string
 	providerConfigKey string
+	promptFingerprint string
 }
 
 func responseContextSnapshotFromSession(session *history.Session) responseContextSnapshot {
@@ -24,6 +25,7 @@ func responseContextSnapshotFromSession(session *history.Session) responseContex
 		model:             strings.TrimSpace(session.ResponseModel),
 		providerName:      strings.TrimSpace(session.ResponseProviderName),
 		providerConfigKey: strings.TrimSpace(session.ResponseProviderConfigKey),
+		promptFingerprint: strings.TrimSpace(session.ResponsePromptFingerprint),
 	}
 
 	if snapshot.model == "" {
@@ -64,15 +66,24 @@ func (snapshot responseContextSnapshot) shouldRestoreForRuntime(currentModel, cu
 	)
 }
 
+func (snapshot responseContextSnapshot) shouldReuseForRuntimePrompt(currentModel, currentProviderName, currentProviderConfigKey, promptFingerprint string) bool {
+	if !snapshot.shouldRestoreForRuntime(currentModel, currentProviderName, currentProviderConfigKey) {
+		return false
+	}
+	promptFingerprint = strings.TrimSpace(promptFingerprint)
+	return promptFingerprint != "" && snapshot.promptFingerprint == promptFingerprint
+}
+
 func (snapshot responseContextSnapshot) applyToSession(session *history.Session) {
 	if session == nil {
 		return
 	}
-	session.ApplyResponseContext(
+	session.ApplyResponseContextWithFingerprint(
 		snapshot.responseID,
 		snapshot.model,
 		config.CanonicalProviderName(snapshot.providerName),
 		config.ActiveProviderConfigKey(snapshot.providerConfigKey),
+		snapshot.promptFingerprint,
 	)
 }
 
@@ -97,6 +108,7 @@ func (a *Agent) clearProviderAndSavedResponseContext() {
 	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
 		ridProvider.SetResponseID("")
 	}
+	a.responseContext = responseContextSnapshot{}
 	clearSavedResponseContext(a.session)
 }
 

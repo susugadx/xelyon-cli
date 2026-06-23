@@ -31,10 +31,10 @@ func (r *Recorder) RecordToolObservation(observation ToolObservation) {
 			state.RecommendedReads.recordFact(fact)
 		}
 		for _, result := range facts.failedTests {
-			state.LastFailedTests.append(result)
+			recordTestResult(state, result)
 		}
 		for _, result := range facts.passedTests {
-			state.LastPassedTests.append(result)
+			recordTestResult(state, result)
 		}
 	})
 }
@@ -90,13 +90,24 @@ func (r *Recorder) RecordTestObservation(observation TestObservation) {
 		return
 	}
 	r.mutate(func(state *RuntimeTaskState) {
-		switch result.status {
-		case "passed":
-			state.LastPassedTests.append(result)
-		case "failed":
-			state.LastFailedTests.append(result)
-		}
+		recordTestResult(state, result)
 	})
+}
+
+func recordTestResult(state *RuntimeTaskState, result TestResult) {
+	if state == nil {
+		return
+	}
+	switch result.status {
+	case "passed":
+		state.LastFailedTests.removeCommand(result.command)
+		state.LastPassedTests.removeCommand(result.command)
+		state.LastPassedTests.append(result)
+	case "failed":
+		state.LastPassedTests.removeCommand(result.command)
+		state.LastFailedTests.removeCommand(result.command)
+		state.LastFailedTests.append(result)
+	}
 }
 
 // SetLastFailedTests は LastFailedTests を指定値で置き換える。

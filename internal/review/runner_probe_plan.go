@@ -17,10 +17,7 @@ func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRe
 	})
 	redactor := newReviewRunnerPromptRedactor(bundle, nil)
 	r.saveReviewRunTextArtifact("probe_plan_prompt.md", planPrompt, redactor)
-	planResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseProbePlan,
-		Prompt: planPrompt,
-	})
+	planResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseProbePlan, planPrompt))
 	if err != nil {
 		return reviewprobeplan.ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
 	}
@@ -39,10 +36,7 @@ func (r *ReviewRunner) completeReviewProbePlan(ctx context.Context, req ReviewRe
 		DecodeOrValidationErr: decodeErr,
 	})
 	r.saveReviewRunTextArtifact("probe_plan_prompt.md", repairPrompt, redactor)
-	repairResp, err := r.model.CompleteReview(ctx, ReviewModelRequest{
-		Phase:  ReviewModelPhaseProbePlan,
-		Prompt: repairPrompt,
-	})
+	repairResp, err := r.model.CompleteReview(ctx, newReviewModelRequest(ReviewModelPhaseProbePlan, repairPrompt))
 	if err != nil {
 		return reviewprobeplan.ReviewProbePlan{}, fmt.Errorf("review runner pass1 model: %w", err)
 	}

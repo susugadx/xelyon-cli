@@ -53,8 +53,8 @@ func TestSyncCurrentDerivedRuntimeState_ProviderDrivenEditMode(t *testing.T) {
 	agent.registry().SetExcludedTools(newToolVisibilityPolicy(EditToolModeApplyPatch, toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).excluded())
 	agent.syncCurrentDerivedRuntimeState()
 
-	if !strings.Contains(agent.SystemPrompt, "### Claude-specific") {
-		t.Fatalf("system prompt should rebuild for current provider, got:\n%s", agent.SystemPrompt)
+	if strings.Contains(agent.SystemPrompt, "## Provider Notes") {
+		t.Fatalf("system prompt should not include provider notes by default, got:\n%s", agent.SystemPrompt)
 	}
 	if !strings.Contains(agent.SystemPrompt, "### Legacy edit tools") {
 		t.Fatalf("provider-driven legacy mode should rebuild legacy guide, got:\n%s", agent.SystemPrompt)

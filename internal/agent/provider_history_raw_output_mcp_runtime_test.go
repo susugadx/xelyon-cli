@@ -238,61 +238,86 @@ func TestTokenBudgetIncludesLatestRuntimeCompactedMCPRawOutputContext(t *testing
 	}
 }
 
-func TestNormalModeRequestKeepsPrivateLookingRuntimeMCPPlaceholderExcerpt(t *testing.T) {
-	agent, provider, _ := newProviderHistoryRawOutputRequestAgent(t)
-	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
-	privateMCPOutput := providerHistoryLargePrivateLookingMCPRuntimeResult()
-	execResult := agent.guardMCPToolExecutionResult(context.Background(), &tools.ToolCall{
-		ID:   "call_mcp_private_runtime",
-		Tool: "mcp_customer_export",
-	}, tools.ExecutionResult{Result: privateMCPOutput})
-	placeholder := execResult.Result
-	if placeholder == privateMCPOutput ||
-		!strings.Contains(placeholder, "full_output_omitted_reason="+providerhistory.MCPSensitiveOrPrivateResultKeepReason+";") ||
-		!strings.Contains(placeholder, "excerpt:") ||
-		!strings.Contains(placeholder, "customer export begins") ||
-		!strings.Contains(placeholder, "customer export tail") ||
-		strings.Contains(placeholder, "raw_output_ref=") {
-		t.Fatalf("runtime private MCP placeholder = %q, want bounded excerpt without raw ref", placeholder)
-	}
-	agent.History = []api.Message{
-		{Role: "user", Content: "inspect private runtime mcp history"},
-		providerHistoryAssistantToolCall("call_mcp_private_runtime", "mcp_customer_export"),
-		providerHistoryToolResult("call_mcp_private_runtime", "mcp_customer_export", placeholder),
-		{Role: "assistant", Content: "private runtime mcp data reviewed"},
-		providerHistoryAssistantToolCall("call_latest", "read_file"),
-		providerHistoryToolResult("call_latest", "read_file", "latest read"),
-		{Role: "assistant", Content: "ready"},
-	}
-	syncProviderHistoryRawOutputRequestSession(agent)
-
-	if err := agent.chatInternal("summarize customer export", nil); err != nil {
-		t.Fatalf("chatInternal() error = %v", err)
+func TestNormalModeRequestOmitsRuntimeMCPResultWithoutRawOutputRef(t *testing.T) {
+	tests := []struct {
+		name       string
+		tool       string
+		output     string
+		wantReason string
+		forbidden  []string
+	}{
+		{
+			name:       "private-looking output",
+			tool:       "mcp_customer_export",
+			output:     providerHistoryLargePrivateLookingMCPRuntimeResult(),
+			wantReason: providerhistory.MCPSensitiveOrPrivateResultKeepReason,
+			forbidden:  []string{"customer export begins", "safe customer email row", "customer export tail", "excerpt:"},
+		},
+		{
+			name: "sensitive output",
+			tool: "mcp_secret_export",
+			output: "prefix\n" +
+				strings.Repeat("safe line\n", 7000) +
+				"api_key=secret-value\nsuffix\n",
+			wantReason: string(rawoutputs.ReasonSensitiveArtifactForbidden),
+			forbidden:  []string{"api_key", "secret-value", "excerpt:"},
+		},
 	}
 
-	projected := provider.capturedHistory[2].Content
-	for _, want := range []string{
-		"[compacted MCP tool result;",
-		"full_output_omitted_reason=" + providerhistory.MCPSensitiveOrPrivateResultKeepReason + ";",
-		"excerpt:",
-		"customer export begins",
-		"customer export tail",
-	} {
-		if !strings.Contains(projected, want) {
-			t.Fatalf("provider MCP placeholder missing %q:\n%s", want, projected)
-		}
-	}
-	if strings.Contains(projected, "raw_output_ref=") {
-		t.Fatalf("provider MCP placeholder included raw ref:\n%s", projected)
-	}
-	if len(provider.capturedActiveContextBlocks) != 0 {
-		t.Fatalf("active context blocks = %#v, want none for non-persisted private-looking MCP result", provider.capturedActiveContextBlocks)
-	}
-	report := agent.Runtime.LastProviderHistoryProjectionReport
-	if report.ReplacedCount != 0 ||
-		report.RawOutputRefCount != 0 ||
-		report.RawOutputContextRefCount != 0 ||
-		report.ResponsesChainDisabled {
-		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want context-free private runtime MCP keep", report)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent, provider, _ := newProviderHistoryRawOutputRequestAgent(t)
+			configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
+			execResult := agent.guardMCPToolExecutionResult(context.Background(), &tools.ToolCall{
+				ID:   "call_mcp_no_ref_runtime",
+				Tool: tt.tool,
+			}, tools.ExecutionResult{Result: tt.output})
+			placeholder := execResult.Result
+			if placeholder == tt.output ||
+				!strings.Contains(placeholder, "[compacted MCP tool result;") ||
+				!strings.Contains(placeholder, "full_output_omitted_reason="+tt.wantReason+";") ||
+				strings.Contains(placeholder, "raw_output_ref=") {
+				t.Fatalf("runtime MCP placeholder = %q, want omitted placeholder without raw ref", placeholder)
+			}
+			for _, forbidden := range tt.forbidden {
+				if strings.Contains(placeholder, forbidden) {
+					t.Fatalf("runtime MCP placeholder leaked %q:\n%s", forbidden, placeholder)
+				}
+			}
+			agent.History = []api.Message{
+				{Role: "user", Content: "inspect omitted runtime mcp history"},
+				providerHistoryAssistantToolCall("call_mcp_no_ref_runtime", tt.tool),
+				providerHistoryToolResult("call_mcp_no_ref_runtime", tt.tool, placeholder),
+				{Role: "assistant", Content: "runtime mcp data reviewed"},
+				providerHistoryAssistantToolCall("call_latest", "read_file"),
+				providerHistoryToolResult("call_latest", "read_file", "latest read"),
+				{Role: "assistant", Content: "ready"},
+			}
+			syncProviderHistoryRawOutputRequestSession(agent)
+
+			if err := agent.chatInternal("summarize omitted runtime mcp", nil); err != nil {
+				t.Fatalf("chatInternal() error = %v", err)
+			}
+
+			projected := provider.capturedHistory[2].Content
+			if projected != placeholder {
+				t.Fatalf("provider MCP result changed:\n got %q\nwant %q", projected, placeholder)
+			}
+			for _, forbidden := range tt.forbidden {
+				if strings.Contains(projected, forbidden) {
+					t.Fatalf("provider MCP result leaked %q:\n%s", forbidden, projected)
+				}
+			}
+			if len(provider.capturedActiveContextBlocks) != 0 {
+				t.Fatalf("active context blocks = %#v, want none for non-persisted MCP result", provider.capturedActiveContextBlocks)
+			}
+			report := agent.Runtime.LastProviderHistoryProjectionReport
+			if report.ReplacedCount != 0 ||
+				report.RawOutputRefCount != 0 ||
+				report.RawOutputContextRefCount != 0 ||
+				report.ResponsesChainDisabled {
+				t.Fatalf("LastProviderHistoryProjectionReport = %#v, want context-free omitted runtime MCP keep", report)
+			}
+		})
 	}
 }

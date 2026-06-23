@@ -6,7 +6,7 @@ func (m *PromptManager) RefreshProjectPrompt(input string) {
 		return
 	}
 
-	bundle := a.loadProjectInstructionBundleCached(false)
+	bundle := a.loadProjectInstructionBundleCachedWithInput(false, input)
 	m.rebuildProjectPromptWithResolvedBundle(input, bundle, true)
 }
 
@@ -33,7 +33,7 @@ func (m *PromptManager) ProjectPromptRefreshDecision(input string) projectPrompt
 	if a.projectMapDirty {
 		return projectPromptRefreshDecision{NeedRefresh: true, Reason: refreshReasonDirtyFlag}
 	}
-	if decision, ok := evaluateProjectInstructionRefresh(a); ok {
+	if decision, ok := evaluateProjectInstructionRefresh(a, input); ok {
 		return decision
 	}
 
@@ -99,11 +99,11 @@ func (s *projectPromptRefreshState) evaluateStateKey() bool {
 	return false
 }
 
-func evaluateProjectInstructionRefresh(agent *Agent) (projectPromptRefreshDecision, bool) {
+func evaluateProjectInstructionRefresh(agent *Agent, input string) (projectPromptRefreshDecision, bool) {
 	if agent == nil || !agent.projectInstructionBundleLoaded {
 		return projectPromptRefreshDecision{}, false
 	}
-	cacheKey := newProjectInstructionBundleCache(agent).currentKey()
+	cacheKey := newProjectInstructionBundleCache(agent).currentKey(input)
 	if cacheKey == "" {
 		return projectPromptRefreshDecision{}, false
 	}

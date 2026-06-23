@@ -18,6 +18,10 @@ func ExtractPlanJSON(response string) string {
 		return jsonStr
 	}
 
+	if jsonStr := findPlanV2JSON(response); jsonStr != "" {
+		return jsonStr
+	}
+
 	if jsonStr := findCodeBlockPlanJSON(response); jsonStr != "" {
 		return jsonStr
 	}
@@ -42,6 +46,10 @@ func findPlanWrapperJSONForNormalModeRecovery(response string) string {
 
 func findLegacyPlanJSON(response string) string {
 	return findScopedPlanJSON(response, planJSONCandidateLegacy)
+}
+
+func findPlanV2JSON(response string) string {
+	return findScopedPlanJSON(response, planJSONCandidateV2)
 }
 
 func findScopedPlanJSON(response string, scope planJSONCandidateScope) string {

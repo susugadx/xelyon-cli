@@ -6,7 +6,7 @@ func TestRetryState_StallsOnRepeatedFailureWithoutChanges(t *testing.T) {
 	state := &RetryState{}
 	result := RunResult{
 		NeedsContinue:      true,
-		Feedback:           "[SYSTEM] Final check failed",
+		Feedback:           "Final check failed",
 		FailureFingerprint: "same failure",
 	}
 	progressFingerprint := "change-a"
@@ -23,7 +23,7 @@ func TestRetryState_ResetsWhenChangedFilesAdvance(t *testing.T) {
 	state := &RetryState{}
 	result := RunResult{
 		NeedsContinue:      true,
-		Feedback:           "[SYSTEM] Final check failed",
+		Feedback:           "Final check failed",
 		FailureFingerprint: "same failure",
 	}
 
@@ -39,7 +39,7 @@ func TestRetryState_DoesNotStallWithoutProgressFingerprint(t *testing.T) {
 	state := &RetryState{}
 	result := RunResult{
 		NeedsContinue:      true,
-		Feedback:           "[SYSTEM] Final check failed",
+		Feedback:           "Final check failed",
 		FailureFingerprint: "same failure",
 	}
 

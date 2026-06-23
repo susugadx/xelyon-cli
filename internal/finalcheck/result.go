@@ -18,14 +18,12 @@ type RunResult struct {
 // BuildFailureResult は失敗した final check command から retry 用 feedback を作る。
 func BuildFailureResult(command string, exitCode int, output string, diffStat string) RunResult {
 	output = TruncateOutput(output)
-	feedback := fmt.Sprintf(`[SYSTEM] Final check failed. Command %q failed (exit code %d):
+	feedback := fmt.Sprintf(`Final check failed. Command %q failed (exit code %d):
 
 %s
 
 [Context] git diff --stat:
-%s
-
-Please fix these errors before declaring completion. Do NOT skip these issues.`, command, exitCode, output, diffStat)
+%s`, command, exitCode, output, diffStat)
 
 	return RunResult{
 		NeedsContinue:      true,

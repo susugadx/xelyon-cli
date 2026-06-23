@@ -21,6 +21,17 @@ Done.`
 	}
 }
 
+func TestExtractPlanJSONForNormalModeRecovery_IgnoresTopLevelV2Malformed(t *testing.T) {
+	response := `{"schema_version":"xelyon.plan.v2","goal":"Fix","acceptance_criteria":[],"findings":[],"constraints":[],"open_questions":[]}`
+
+	if got := ExtractPlanJSON(response); got == "" {
+		t.Fatal("ExtractPlanJSON() should accept malformed top-level v2 for plan-mode retry")
+	}
+	if got := ExtractPlanJSONForNormalModeRecovery(response); got != "" {
+		t.Fatalf("ExtractPlanJSONForNormalModeRecovery() = %q, want empty for top-level v2 malformed", got)
+	}
+}
+
 func TestExtractPlanJSONForNormalModeRecovery_RequiresImplementationStep(t *testing.T) {
 	response := `{"plan":{"summary":"Already done","findings":["Already done"],"evidence":["README.md"],"constraints":["Do not edit"],"steps":[]}}`
 

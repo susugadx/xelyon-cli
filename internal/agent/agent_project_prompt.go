@@ -23,30 +23,40 @@ func loadProjectInstructionBundleForCWDWithError(cfg *config.Config, cwd string)
 	return config.LoadProjectInstructionBundleForDir(cfg, cwd)
 }
 
+func loadProjectInstructionBundleForCWDAndInputPathsWithError(cfg *config.Config, cwd string, inputPaths []string) (*config.ProjectInstructionBundle, error) {
+	return config.LoadProjectInstructionBundleForDirWithInputPaths(cfg, cwd, inputPaths)
+}
+
 func (a *Agent) loadProjectInstructionBundleCached(forceReload bool) *config.ProjectInstructionBundle {
 	bundle, _ := a.loadProjectInstructionBundleCachedWithError(forceReload)
 	return bundle
 }
 
 func (a *Agent) loadProjectInstructionBundleCachedWithError(forceReload bool) (*config.ProjectInstructionBundle, error) {
+	return a.loadProjectInstructionBundleCachedWithInputWithError(forceReload, "")
+}
+
+func (a *Agent) loadProjectInstructionBundleCachedWithInput(forceReload bool, input string) *config.ProjectInstructionBundle {
+	bundle, _ := a.loadProjectInstructionBundleCachedWithInputWithError(forceReload, input)
+	return bundle
+}
+
+func (a *Agent) loadProjectInstructionBundleCachedWithInputWithError(forceReload bool, input string) (*config.ProjectInstructionBundle, error) {
 	if a == nil {
 		return nil, nil
 	}
 	cache := newProjectInstructionBundleCache(a)
-	if decision := cache.decision(forceReload); decision.reuse {
+	if decision := cache.decision(forceReload, input); decision.reuse {
 		return a.projectInstructionBundle, nil
 	} else {
-		bundle, err := loadProjectInstructionBundleForCWDWithError(a.cfg(), a.invocationCWD())
+		inputPaths := projectInstructionInputPathsForAgent(a, input)
+		bundle, err := loadProjectInstructionBundleForCWDAndInputPathsWithError(a.cfg(), a.invocationCWD(), inputPaths)
 		if err != nil {
 			return nil, err
 		}
 		a.projectInstructionBundle = bundle
 		a.projectInstructionBundleLoaded = true
-		if decision.cacheKey != "" {
-			a.projectInstructionBundleKey = decision.cacheKey
-		} else {
-			a.projectInstructionBundleKey = cache.currentKey()
-		}
+		a.projectInstructionBundleKey = cache.currentKey(input)
 		return bundle, nil
 	}
 }
@@ -62,19 +72,12 @@ func (a *Agent) projectInstructionBundleIfLoaded() *config.ProjectInstructionBun
 	return a.projectInstructionBundle
 }
 
-func buildProjectInstructionBlock(bundle *config.ProjectInstructionBundle, input string) string {
+func buildProjectInstructionBlock(bundle *config.ProjectInstructionBundle) string {
 	if bundle == nil {
 		return ""
 	}
 
-	selection := config.ProjectPromptSelection{}
-	if bundle.ProjectConfig != nil {
-		selection = config.SelectProjectPromptSelection(bundle.ProjectConfig, input)
-	}
-
 	return prompt.BuildProjectInstructionBlock(prompt.ProjectInstructionBlockInput{
-		MandatoryRules:  selection.Rules,
-		ProjectContexts: selection.Contexts,
 		ProjectGuidance: toPromptInstructionEntries(bundle.ProjectGuidance),
 		GlobalGuidance:  toPromptInstructionEntries(bundle.GlobalGuidance),
 		Warnings:        bundle.WarningMessages(),
@@ -89,6 +92,8 @@ func toPromptInstructionEntries(files []config.InstructionFile) []prompt.Project
 	for _, file := range files {
 		entries = append(entries, prompt.ProjectInstructionEntry{
 			Label:    file.Label,
+			Scope:    file.RepositoryScope,
+			Source:   file.Label,
 			Content:  file.Content,
 			Strength: string(file.Strength),
 		})
@@ -97,13 +102,13 @@ func toPromptInstructionEntries(files []config.InstructionFile) []prompt.Project
 }
 
 // injectProjectInstructionBundle は bundle を SystemPrompt に注入する。
-func injectProjectInstructionBundle(systemPrompt string, bundle *config.ProjectInstructionBundle, input string) string {
+func injectProjectInstructionBundle(systemPrompt string, bundle *config.ProjectInstructionBundle) string {
 	systemPrompt = prompt.StripProjectConfigSections(systemPrompt)
 	if bundle == nil {
 		return systemPrompt
 	}
 
-	projectBlock := buildProjectInstructionBlock(bundle, input)
+	projectBlock := buildProjectInstructionBlock(bundle)
 	if projectBlock == "" {
 		return systemPrompt
 	}
@@ -220,7 +225,7 @@ func estimateProjectInstructionTokens(bundle *config.ProjectInstructionBundle) i
 	if bundle == nil {
 		return 0
 	}
-	return token.EstimateTokenCount(buildProjectInstructionBlock(bundle, ""))
+	return token.EstimateTokenCount(buildProjectInstructionBlock(bundle))
 }
 
 func (a *Agent) refreshProjectPrompt(input string) {

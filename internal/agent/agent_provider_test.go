@@ -193,8 +193,9 @@ func TestAgent_SwitchProvider_RebuildsSystemPrompt(t *testing.T) {
 
 	err := agent.SwitchProvider("deepseek")
 	assert.NoError(t, err)
-	assert.Contains(t, agent.SystemPrompt, "### DeepSeek-specific")
-	assert.NotContains(t, agent.SystemPrompt, "### Gemini-specific")
+	assert.NotContains(t, agent.SystemPrompt, "## Provider Notes")
+	assert.Contains(t, agent.SystemPrompt, "### Legacy edit tools")
+	assert.NotContains(t, agent.SystemPrompt, "### apply_patch (edit tool)")
 }
 
 func TestAgent_SwitchProvider_ResetsCostUnknownState(t *testing.T) {

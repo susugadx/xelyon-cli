@@ -9,25 +9,26 @@ import (
 
 func TestPlanJSONSchemaInstructions_ContainsFilesContract(t *testing.T) {
 	assertContainsAll(t, "plan schema", PlanJSONSchemaInstructions(), []string{
-		`"plan"`,
-		`"summary"`,
+		"xelyon.plan.v2",
+		`"schema_version"`,
+		`"goal"`,
+		`"acceptance_criteria"`,
 		`"findings"`,
 		`"evidence"`,
 		`"constraints"`,
 		`"steps"`,
-		`"description"`,
-		`"purpose"`,
-		`"tools"`,
+		`"outcome"`,
+		`"reason"`,
 		`"files"`,
 		`"verification"`,
+		`"open_questions"`,
 		"reviewable sentence",
 		"stable facts discovered from the codebase",
 		"files, functions, tests, commands",
-		"constraints, compatibility requirements",
+		"boundaries, compatibility requirements",
 		"normally 2-6 steps",
 		"understandable without the investigation transcript",
-		"review-facing reason",
-		"not test commands",
+		"stable string ID",
 		"implementation-relevant repo-relative files",
 		"focused commands or checks",
 	})
@@ -116,8 +117,11 @@ func TestBuildPlanRequestMessage_ContainsPlanSchemaWithFiles(t *testing.T) {
 
 func TestBuildPlanJSONRetryMessage_ContainsPlanSchemaWithFiles(t *testing.T) {
 	msg := BuildPlanJSONRetryMessage()
-	if !strings.Contains(msg, "Plan JSON を**必ず**") {
+	if !strings.Contains(msg, "Plan JSON retry") {
 		t.Fatalf("expected retry message to contain retry instruction, got %q", msg)
+	}
+	if strings.Contains(msg, "[SYSTEM") {
+		t.Fatalf("retry message should not contain fake system marker, got %q", msg)
 	}
 	assertContainsPlanSchema(t, "retry message", msg)
 }

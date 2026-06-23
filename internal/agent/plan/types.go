@@ -43,11 +43,13 @@ type StepLog struct {
 // Plan は実行計画を表す
 type Plan struct {
 	// 既存フィールド
-	Summary     string     `json:"summary"`
-	Findings    []string   `json:"findings,omitempty"`    // 調査で分かった重要事実
-	Evidence    []string   `json:"evidence,omitempty"`    // 関連ファイル、関数、テスト、根拠
-	Constraints []string   `json:"constraints,omitempty"` // 守るべき制約や避けるべき変更
-	Steps       []PlanStep `json:"steps"`
+	Summary            string     `json:"summary"`
+	AcceptanceCriteria []string   `json:"acceptance_criteria,omitempty"` // 完了条件
+	Findings           []string   `json:"findings,omitempty"`            // 調査で分かった重要事実
+	Evidence           []string   `json:"evidence,omitempty"`            // 関連ファイル、関数、テスト、根拠
+	Constraints        []string   `json:"constraints,omitempty"`         // 守るべき制約や避けるべき変更
+	Steps              []PlanStep `json:"steps"`
+	OpenQuestions      []string   `json:"open_questions,omitempty"` // 未解決質問
 
 	// メタデータ（新規）
 	ID             string          `json:"id,omitempty"`

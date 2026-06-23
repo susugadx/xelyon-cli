@@ -32,9 +32,11 @@ func clonePlanForHandoff(src *Plan) Plan {
 		return Plan{}
 	}
 	dst := *src
+	dst.AcceptanceCriteria = append([]string(nil), src.AcceptanceCriteria...)
 	dst.Findings = append([]string(nil), src.Findings...)
 	dst.Evidence = append([]string(nil), src.Evidence...)
 	dst.Constraints = append([]string(nil), src.Constraints...)
+	dst.OpenQuestions = append([]string(nil), src.OpenQuestions...)
 	dst.Steps = make([]PlanStep, len(src.Steps))
 	for i := range src.Steps {
 		dst.Steps[i] = src.Steps[i]
@@ -69,9 +71,11 @@ func (h *ImplementationHandoff) NormalModeInput() string {
 		b.WriteString(summary)
 		b.WriteString("\n")
 	}
+	writeHandoffListSection(&b, "Acceptance criteria", h.approvedPlan.AcceptanceCriteria)
 	writeHandoffListSection(&b, "Findings", h.approvedPlan.Findings)
 	writeHandoffListSection(&b, "Evidence", h.approvedPlan.Evidence)
 	writeHandoffListSection(&b, "Constraints", h.approvedPlan.Constraints)
+	writeHandoffListSection(&b, "Open questions", h.approvedPlan.OpenQuestions)
 	for idx, step := range h.approvedPlan.Steps {
 		description := strings.TrimSpace(step.Description)
 		if description == "" {

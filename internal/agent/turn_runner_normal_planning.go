@@ -2,7 +2,6 @@ package agent
 
 import (
 	"github.com/susugadx/xelyon-cli/internal/agent/plan"
-	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
@@ -31,9 +30,6 @@ func (h *normalModePlanningHandler) HandlePlanJSONFallback(response string, tool
 		yellow.Fprintln(a.output(), "⚠️  Plan JSON detected but parse failed. Execute tools directly.")
 	}
 	h.runner.appendAssistantHistoryOnly(response)
-	a.History = append(a.History, api.Message{
-		Role:    "user",
-		Content: a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptDirectExecution),
-	})
+	a.queueRuntimeDirective(a.toolVisibilityPolicy(toolSurfacePhaseNormal, toolVisibilityOptions{allowSubAgents: true}).normalModeRecoveryPrompt(normalModeRecoveryPromptDirectExecution))
 	return normalModeContinue, true, nil
 }

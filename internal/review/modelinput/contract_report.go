@@ -146,3 +146,114 @@ Verdict contract:
 		reviewreport.ReviewVerificationBlockedOrInconclusive,
 	)
 }
+
+func reviewReportModelPromptContract() string {
+	return fmt.Sprintf(`Strict JSON contract:
+- The decoder rejects unknown fields. Use only the fields listed here.
+- Top-level object:
+  {
+    "schema_version": %q,
+    "target_kind": %q,
+    "custom_instructions": "optional copy of the request instructions",
+    "generated_at": "RFC3339 timestamp",
+    "overall_verification_status": %q,
+    "verdict": %q,
+    "summary": "short final summary",
+    "suggested_findings": [],
+    "coverage_gaps": [
+      {
+        "surface": "surface-1",
+        "reason": "missing_evidence",
+        "recommended_check": "Focused command or inspection that would close the gap"
+      }
+    ],
+    "probe_summaries": [],
+    "scope_coverage": {
+      "reviewed_impact_surfaces": [
+        {"surface_id": "surface-1", "status": "unverified", "summary": "surface-1 lacks required evidence"}
+      ],
+      "reviewed_candidate_risks": [
+        {"risk_id": "risk-1", "status": "unverified", "summary": "risk-1 lacks required evidence"}
+      ],
+      "new_findings_from_report_pass": []
+    }
+  }
+- "schema_version" must be %q and "target_kind" must be %q. The final artifact is not this DTO; the runner converts it to %q.
+- Required top-level fields are %s. Output every required key even when the array is empty.
+- "verdict" must be one of %q, %q, %q.
+- "overall_verification_status" must be one of %q, %q, %q, %q, %q.
+- suggested_findings is for actionable defects only. Missing verification alone belongs in coverage_gaps, not suggested_findings.
+- suggested_findings[].id must be unique, non-empty, and contain no whitespace. Each suggested finding becomes one root_cause_group with one finding in %q.
+- suggested_findings[].severity must be one of "P0", "P1", "P2", "P3". P0 maps to critical, P1 high, P2 medium, P3 low.
+- suggested_findings[].status must be one of "confirmed", "probable". Use coverage_gaps plus scope_coverage status "unverified" or "residual_risk" when the causal chain is not established.
+- suggested_findings[].confidence must be one of "high", "medium", "low".
+- suggested_findings[].title, affected_behavior, causal_chain, remediation_direction, and evidence_refs are required. Runtime reproduction strengthens confidence but is not required when static proof establishes the causal chain.
+- suggested_findings[].evidence_refs use review_report.v2 evidence refs: {"kind","summary","probe_id","command_index","path","line","snippet","doc_id","snippet_id","url","fetched_at","content_hash"}. "kind" must be one of %s. "probe_command" refs require both "probe_id" and zero-based "command_index". "file", "diff", and "rule_file" refs require "path". Paths must be canonical repo-relative evidence paths.
+- "external_doc" refs require "doc_id", "snippet_id", "url", "fetched_at", and snippet "content_hash" copied from a fetched external_docs snippet in Evidence Markdown. Raw web search results are discovery-only and must not be cited as evidence refs. fetched external_doc snippets are citation-capable evidence, but are not automatically official documentation or confirmed external specs. source_credibility and the cited snippet content must both support that claim, and external_support.level/official_confirmation must allow confirmed official status.
+%s
+- coverage_gaps is separate from findings. Each entry must have "surface", "reason", and "recommended_check"; "reason" must be one of "environment_blocked", "missing_evidence", "not_exercised".
+- Each coverage_gaps[].surface must match scope_coverage.reviewed_impact_surfaces[].surface_id, and that impact surface status must be "unverified" or "residual_risk". Do not create a coverage gap for a "checked" or "finding" impact surface.
+- Candidate-risk-only uncertainty belongs in scope_coverage.reviewed_candidate_risks[].status, not coverage_gaps[].surface.
+- Scope coverage is required. It must classify every ID from the Decoded Probe Plan exactly once: "reviewed_impact_surfaces" must contain each "impact_surfaces[].id" as "surface_id", and "reviewed_candidate_risks" must contain each "candidate_risks[].id" as "risk_id". Unknown or duplicate IDs are invalid after conversion.
+- Impact surface scope status must be one of %s. Candidate risk scope status must be one of %s.
+- Candidate risks must be classified as "finding", "dismissed", "residual_risk", or "unverified". Use "finding_ids" to connect scope coverage entries to suggested_findings[].id when a Pass1 risk becomes a finding.
+- A "clean" verdict is allowed only when suggested_findings is empty, every impact surface status is %q, every candidate risk status is %q, and coverage_gaps is empty.
+- A "clean" verdict is invalid when any supplied trusted probe summary status is %q, %q, %q, or %q, or when "mutated_worktree" is true.
+- Probe summaries must preserve the supplied "Probe Summaries For Report Schema" entries with the same count, same order, and same "probe_id" values. Do not invent probe IDs. Probe summary modes must be one of %q, %q, %q. Probe and command statuses must be one of %q, %q, %q, %q, %q.
+`,
+		reviewreport.ReviewReportModelSchemaVersionV2,
+		domain.TargetCurrentChanges,
+		reviewreport.ReviewVerificationBlockedOrInconclusive,
+		reviewreport.ReviewVerdictBlocked,
+		reviewreport.ReviewReportModelSchemaVersionV2,
+		domain.TargetCurrentChanges,
+		reviewreport.ReviewReportSchemaVersionV2,
+		quoteAndJoinSortedReviewPromptValues(reviewReportModelRequiredFields()),
+		reviewreport.ReviewVerdictClean,
+		reviewreport.ReviewVerdictHasFindings,
+		reviewreport.ReviewVerdictBlocked,
+		reviewreport.ReviewVerificationVerified,
+		reviewreport.ReviewVerificationPartiallyVerified,
+		reviewreport.ReviewVerificationUnverified,
+		reviewreport.ReviewVerificationNotApplicable,
+		reviewreport.ReviewVerificationBlockedOrInconclusive,
+		reviewreport.ReviewReportSchemaVersionV2,
+		quoteAndJoinSortedReviewPromptValues(reviewReportEvidenceKindPromptValues()),
+		reviewExternalSupportPromptGuardrails(),
+		quoteAndJoinSortedReviewPromptValues(reviewReportImpactSurfaceStatusPromptValues()),
+		quoteAndJoinSortedReviewPromptValues(reviewReportCandidateRiskStatusPromptValues()),
+		reviewreport.ReviewReportImpactSurfaceChecked,
+		reviewreport.ReviewReportCandidateRiskDismissed,
+		domain.ReviewProbeFailed,
+		domain.ReviewProbeBlocked,
+		domain.ReviewProbeTimedOut,
+		domain.ReviewProbeMutatedWorktree,
+		domain.ReviewProbeHostReadOnly,
+		domain.ReviewProbeScratchOnly,
+		domain.ReviewProbeRepoSandbox,
+		domain.ReviewProbePassed,
+		domain.ReviewProbeFailed,
+		domain.ReviewProbeBlocked,
+		domain.ReviewProbeTimedOut,
+		domain.ReviewProbeMutatedWorktree,
+	)
+}
+
+func reviewReportEvidenceKindPromptValues() []string {
+	return reviewreport.KnownReviewEvidenceKinds()
+}
+
+func reviewReportModelRequiredFields() []string {
+	return []string{
+		"schema_version",
+		"target_kind",
+		"generated_at",
+		"overall_verification_status",
+		"verdict",
+		"summary",
+		"suggested_findings",
+		"coverage_gaps",
+		"probe_summaries",
+		"scope_coverage",
+	}
+}

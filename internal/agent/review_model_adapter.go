@@ -25,6 +25,9 @@ type agentReviewModel struct {
 
 func (m agentReviewModel) CompleteReview(ctx context.Context, req review.ReviewModelRequest) (review.ReviewModelResponse, error) {
 	a := m.agent
+	if strings.TrimSpace(req.SystemPrompt) == "" {
+		return review.ReviewModelResponse{}, fmt.Errorf("review model %s: system prompt is empty", req.Phase)
+	}
 	target, err := a.currentReviewModelTarget()
 	if err != nil {
 		return review.ReviewModelResponse{}, fmt.Errorf("review model %s: %w", req.Phase, err)
@@ -35,7 +38,7 @@ func (m agentReviewModel) CompleteReview(ctx context.Context, req review.ReviewM
 
 	content, err := target.provider.ChatWithTools(
 		a.reviewModelRequestContext(ctx),
-		"",
+		req.SystemPrompt,
 		reviewModelPromptHistory(req.Prompt),
 		target.model,
 	)

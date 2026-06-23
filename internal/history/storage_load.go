@@ -31,6 +31,7 @@ func (st *Storage) Load(sessionID string) (*Session, error) {
 		ResponseModel:             meta.ResponseModel,
 		ResponseProviderName:      meta.ResponseProviderName,
 		ResponseProviderConfigKey: meta.ResponseProviderConfigKey,
+		ResponsePromptFingerprint: meta.ResponsePromptFingerprint,
 	}
 	restoreLoadedResponseContext(meta, session)
 

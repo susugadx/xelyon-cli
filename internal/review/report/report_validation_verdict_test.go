@@ -33,6 +33,30 @@ func TestValidateReviewReportVerdictContract(t *testing.T) {
 			},
 		},
 		{
+			name: "clean with unverified surfaces is invalid",
+			report: func() ReviewReport {
+				report := newCleanReportForValidationTest(ReviewVerificationPartiallyVerified)
+				report.UnverifiedSurfaces = []ReviewSurfaceCoverage{
+					{SurfaceID: "surface-1", Summary: "surface-1 was not checked"},
+				}
+				return report
+			},
+			wantErr:     true,
+			errContains: "unverified_surfaces",
+		},
+		{
+			name: "clean with residual risks is invalid",
+			report: func() ReviewReport {
+				report := newCleanReportForValidationTest(ReviewVerificationPartiallyVerified)
+				report.ResidualRisks = []ReviewResidualRisk{
+					{Summary: "A residual risk remains unverified."},
+				}
+				return report
+			},
+			wantErr:     true,
+			errContains: "residual_risks",
+		},
+		{
 			name: "clean with overall unverified is invalid",
 			report: func() ReviewReport {
 				return newCleanReportForValidationTest(ReviewVerificationUnverified)

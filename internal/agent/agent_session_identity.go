@@ -81,12 +81,7 @@ func (a *Agent) syncSavedResponseContextFromProvider() {
 		return
 	}
 
-	responseContextSnapshotFromRuntime(
-		a.CurrentModel,
-		a.ProviderName,
-		a.currentProviderConfigKey(),
-		ridProvider.GetResponseID(),
-	).applyToSession(a.session)
+	a.responseContextSnapshotForCurrentProvider(ridProvider).applyToSession(a.session)
 }
 
 func (a *Agent) invalidateSavedResponseContextForCurrentRuntime() {
@@ -108,6 +103,7 @@ func (a *Agent) invalidateSavedResponseContextForCurrentRuntime() {
 		a.currentProviderConfigKey(),
 	) {
 		clearSavedResponseContext(a.session)
+		a.responseContext = responseContextSnapshot{}
 	}
 }
 
@@ -121,6 +117,7 @@ func (a *Agent) restoreSessionResponseIDForCurrentContext() {
 			ridProvider.SetResponseID("")
 		}
 		clearSavedResponseContext(a.session)
+		a.responseContext = responseContextSnapshot{}
 		return
 	}
 
@@ -136,10 +133,12 @@ func (a *Agent) restoreSessionResponseIDForCurrentContext() {
 		a.currentProviderConfigKey(),
 	) {
 		ridProvider.SetResponseID("")
+		a.responseContext = responseContextSnapshot{}
 		return
 	}
 
 	snapshot.applyToProvider(ridProvider)
+	a.responseContext = snapshot
 }
 
 func (a *Agent) applyLoadedSession(session *history.Session) {

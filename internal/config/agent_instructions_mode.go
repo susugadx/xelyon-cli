@@ -3,7 +3,9 @@ package config
 import "strings"
 
 const (
-	AgentInstructionProjectModeOff      = "off"
+	AgentInstructionProjectModeOff = "off"
+	// AgentInstructionProjectModeFallback は互換用に受け付ける deprecated alias。
+	// AGENTS-first 方針では always と同じく project guidance を読み込む。
 	AgentInstructionProjectModeFallback = "fallback"
 	AgentInstructionProjectModeAlways   = "always"
 )

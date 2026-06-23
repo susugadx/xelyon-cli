@@ -382,6 +382,9 @@ func TestRefreshProjectPrompt_ClearsProjectMapStateWhenProjectRootDisappears(t *
 	if !strings.Contains(agent.SystemPrompt, "## Project Map") {
 		t.Fatalf("expected initial prompt to include project map:\n%s", agent.SystemPrompt)
 	}
+	if !strings.Contains(agent.SystemPrompt, "<project_map_data>") {
+		t.Fatalf("expected initial prompt to include project map data wrapper:\n%s", agent.SystemPrompt)
+	}
 
 	if err := os.Remove(filepath.Join(root, "xelyon.yaml")); err != nil {
 		t.Fatal(err)
@@ -392,6 +395,9 @@ func TestRefreshProjectPrompt_ClearsProjectMapStateWhenProjectRootDisappears(t *
 
 	if strings.Contains(agent.SystemPrompt, "## Project Map") {
 		t.Fatalf("expected prompt project map to be stripped after root disappears:\n%s", agent.SystemPrompt)
+	}
+	if strings.Contains(agent.SystemPrompt, "<project_map_data>") {
+		t.Fatalf("expected prompt project map data wrapper to be stripped after root disappears:\n%s", agent.SystemPrompt)
 	}
 	if agent.projectMap != nil {
 		t.Fatal("expected stale runtime project map to be cleared")
@@ -451,6 +457,9 @@ func TestRefreshProjectPromptIfDirty_ClearsProjectMapStateWhenProjectMapDisabled
 
 	if strings.Contains(agent.SystemPrompt, "## Project Map") {
 		t.Fatalf("expected prompt project map to be stripped after project map is disabled:\n%s", agent.SystemPrompt)
+	}
+	if strings.Contains(agent.SystemPrompt, "<project_map_data>") {
+		t.Fatalf("expected prompt project map data wrapper to be stripped after project map is disabled:\n%s", agent.SystemPrompt)
 	}
 	if agent.projectMap != nil || agent.projectMapRootPath != "" || agent.projectMapStateKey != "" {
 		t.Fatalf("expected disabled project map to clear runtime state, root=%q state=%q map=%v", agent.projectMapRootPath, agent.projectMapStateKey, agent.projectMap)

@@ -1,43 +1,35 @@
 package prompt
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/llmcatalog"
-	promptfragments "github.com/susugadx/xelyon-cli/internal/prompt/fragments"
 )
 
-// providerPrefixes はプロバイダー別のシステムプロンプトプレフィックス
-// Workflow Rules の直前に挿入し、プロバイダー固有ノートのみ含む
-// 共通ルールは system.go に一元化されている
-var providerPrefixes = map[string]string{
-	"gemini": "## Provider Notes\n" +
+// providerPrefixes は evidence-backed なプロバイダー固有ノートだけを保持する。
+// 未検証の model 癖や一般 workflow は prompt に戻さず、adapter/test contract 側で固定する。
+var providerPrefixes = map[string]string{}
+
+var legacyGeneratedProviderNotesSections = []string{
+	"## Provider Notes\n" +
 		"### Gemini-specific\n" +
-		"- Tool calls must be raw JSON, not markdown code blocks\n" +
-		"- Edit the original file directly; do not create derivative temp files\n" +
-		"- " + promptfragments.NoBashSubstituteSentence() + "\n",
-	"deepseek": "## Provider Notes\n" +
+		"- Emit native tool calls directly; do not serialize tool calls inside markdown code blocks",
+	"## Provider Notes\n" +
 		"### DeepSeek-specific\n" +
-		"- When function calling is enabled, use tool calls for file operations instead of plain-text descriptions\n" +
-		"- Fix errors completely; do not leave TODO-style excuses such as \"for brevity\" or \"due to time constraints\"\n" +
-		"- After a file edit changes imports, remove any newly unused imports before moving on\n" +
-		"- After an investigation read, either edit or gather more context; do not echo file contents back to the user\n" +
-		"- You are already in the project root directory; do not prefix commands with `cd /path &&`\n",
-	"groq": "## Provider Notes\n" +
+		"- When function calling is enabled, use native tool calls instead of plain-text tool-call descriptions",
+	"## Provider Notes\n" +
 		"### Groq-specific\n" +
-		"- Tool calls must be raw JSON, not markdown code blocks or XML wrappers\n",
-	"openai": "## Provider Notes\n" +
-		"### OpenAI-specific\n" +
-		"- For edits containing mixed Japanese, JSON, or backticks, split the change into smaller precise chunks to avoid byte corruption\n",
-	"claude": "## Provider Notes\n" +
+		"- Emit native tool calls directly; do not serialize tool calls inside markdown code blocks or XML wrappers",
+	"## Provider Notes\n" +
 		"### Claude-specific\n" +
-		"- " + promptfragments.DedicatedToolUsageSentence() + "\n" +
-		"- You are already in the project root directory; do not prefix commands with `cd /path &&`\n",
-	"openrouter": "",
-	"ollama":     "",
+		"- Use dedicated repository tools for code investigation and edits when they are available",
+	"## Provider Notes\n" +
+		"### OpenAI-specific\n" +
+		"- For edits containing mixed Japanese, JSON, or backticks, split the change into smaller precise chunks to avoid byte corruption",
 }
 
 // GetProviderPrefix はプロバイダー名に応じたプレフィックスを返す
@@ -68,6 +60,13 @@ const (
 
 var providerNotesBlockRe = regexp.MustCompile(`(?s)\n?<!-- PROVIDER_NOTES_START:[^>]+ -->.*?<!-- PROVIDER_NOTES_END -->\n?`)
 var legacyGeneratedProviderNotesSectionSet = buildLegacyGeneratedProviderNotesSectionSet()
+var legacyGeneratedProviderNotesSectionHashes = map[string]struct{}{
+	"13a4dfa9d5cda6ad451291234db2b3b200166029559f0b299b6851d070f32576": {},
+	"7aaca9f76ba592db058be4ab9a2c679a09a871ca607851d6882eaa79ca012f04": {},
+	"967efc64584fe70b3bac24b05851cde1b0a009e6d7fe4456afed7c39e5515f66": {},
+	"7e7c30daf93caed4c783c5b22f1d3be9c06dc919a528c087efe2a939c55a0357": {},
+	"aded122e0fdd545116d5936cac04494becbba6de388f8ab373818c84d047ba19": {},
+}
 
 // BuildProviderSystemPromptWithConfig は明示指定した設定を使ってプロバイダー別ノートを挿入する。
 // シグネチャは呼び出し元との互換性のため model, cfg を維持する。
@@ -135,9 +134,9 @@ func stripLegacyProviderNotesSections(base string) string {
 }
 
 func buildLegacyGeneratedProviderNotesSectionSet() map[string]struct{} {
-	sections := make(map[string]struct{}, len(providerPrefixes))
-	for _, prefix := range providerPrefixes {
-		normalized := normalizeProviderNotesSection(prefix)
+	sections := make(map[string]struct{}, len(legacyGeneratedProviderNotesSections))
+	for _, section := range legacyGeneratedProviderNotesSections {
+		normalized := normalizeProviderNotesSection(section)
 		if normalized == "" {
 			continue
 		}
@@ -152,6 +151,10 @@ func isLegacyGeneratedProviderNotesSection(section string) bool {
 		return false
 	}
 	_, ok := legacyGeneratedProviderNotesSectionSet[normalized]
+	if ok {
+		return true
+	}
+	_, ok = legacyGeneratedProviderNotesSectionHashes[hashProviderNotesSection(normalized)]
 	return ok
 }
 
@@ -167,4 +170,9 @@ func normalizeProviderNotesSection(section string) string {
 		lines[i] = strings.TrimRight(lines[i], " \t")
 	}
 	return strings.Join(lines, "\n")
+}
+
+func hashProviderNotesSection(section string) string {
+	sum := sha256.Sum256([]byte(section))
+	return fmt.Sprintf("%x", sum)
 }

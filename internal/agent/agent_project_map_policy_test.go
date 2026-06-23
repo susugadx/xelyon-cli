@@ -173,6 +173,26 @@ func TestExtractProjectMapFocusPaths_CwdRelativePathSurvivesNestedRootSession(t 
 	}
 }
 
+func TestExtractProjectMapFocusPaths_DotSlashMissingCWDPathDoesNotUseRootRelativeFile(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "work")
+	if err := os.MkdirAll(filepath.Join(root, "pkg"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cwd, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "pkg", "foo.go"), []byte("package pkg\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := extractProjectMapFocusPaths(cwd, root, "./pkg/foo.go を見て", projectMapFocusMaxPaths)
+
+	if got != nil {
+		t.Fatalf("extractProjectMapFocusPaths() = %v, want nil for missing explicit cwd-relative path", got)
+	}
+}
+
 func TestExtractProjectMapFocusPaths_WindowsRelativePathIsIncluded(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "internal", "agent", "compress.go")

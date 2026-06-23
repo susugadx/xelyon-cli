@@ -19,7 +19,7 @@ func TestBuildLoopAbortHistoryMessage_FCTrigger(t *testing.T) {
 	if msg.ToolCallID != "call1" {
 		t.Fatalf("ToolCallID = %q, want call1", msg.ToolCallID)
 	}
-	want := "[SYSTEM] Tool loop detected: read_file was called 3 times. Stopping to prevent infinite loop."
+	want := "Tool loop detected: read_file was called 3 times. Execution stopped to prevent an infinite loop."
 	if msg.Content != want {
 		t.Fatalf("Content = %q, want %q", msg.Content, want)
 	}
@@ -34,7 +34,7 @@ func TestBuildLoopAbortHistoryMessage_TextTrigger(t *testing.T) {
 	if msg.Role != "user" {
 		t.Fatalf("Role = %q, want user", msg.Role)
 	}
-	want := "[SYSTEM WARNING] The same tool call was repeated 4 times. Please try a different approach or ask the user for clarification."
+	want := "Tool loop detected: the same tool call was repeated 4 times. Try a different approach or ask the user for clarification."
 	if msg.Content != want {
 		t.Fatalf("Content = %q, want %q", msg.Content, want)
 	}
@@ -52,7 +52,7 @@ func TestBuildLoopAbortHistoryMessage_FCSubsequent(t *testing.T) {
 	if msg.ToolCallID != "call2" {
 		t.Fatalf("ToolCallID = %q, want call2", msg.ToolCallID)
 	}
-	if msg.Content != "[SYSTEM] Skipped due to tool loop detection." {
+	if msg.Content != "Skipped because a previous tool call in this batch triggered loop detection." {
 		t.Fatalf("Content = %q, want skipped message", msg.Content)
 	}
 }

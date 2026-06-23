@@ -8,7 +8,7 @@ import (
 	agentskills "github.com/susugadx/xelyon-cli/internal/skills"
 )
 
-func TestRefreshProjectPrompt_ReappliesProviderWrapperWhenMissing(t *testing.T) {
+func TestRefreshProjectPrompt_DoesNotAddProviderWrapperWhenDefaultEmpty(t *testing.T) {
 	withTempWorkdir(t)
 	t.Setenv("HOME", t.TempDir())
 
@@ -19,10 +19,10 @@ func TestRefreshProjectPrompt_ReappliesProviderWrapperWhenMissing(t *testing.T) 
 	cfg := newProjectMapDisabledConfig()
 	agent := &Agent{
 		Runtime:         NewAgentRuntimeWithConfig(cfg),
-		CurrentProvider: &MockProvider{name: "openai"},
-		ProviderName:    "openai",
-		CurrentModel:    "gpt-5.4",
-		SystemPrompt:    prompt.GetSystemPromptForProviderWithConfig("openai", "gpt-5.4", cfg),
+		CurrentProvider: &MockProvider{name: "gemini"},
+		ProviderName:    "gemini",
+		CurrentModel:    "gemini-3.1-pro-preview-customtools",
+		SystemPrompt:    prompt.GetSystemPromptForProviderWithConfig("gemini", "gemini-3.1-pro-preview-customtools", cfg),
 	}
 	if strings.Contains(agent.SystemPrompt, "## Provider Notes") {
 		t.Fatalf("test setup should start from unwrapped prompt:\n%s", agent.SystemPrompt)
@@ -30,15 +30,12 @@ func TestRefreshProjectPrompt_ReappliesProviderWrapperWhenMissing(t *testing.T) 
 
 	agent.refreshProjectPrompt("")
 
-	if !strings.Contains(agent.SystemPrompt, "## Provider Notes") {
-		t.Fatalf("refresh should preserve or reapply provider wrapper:\n%s", agent.SystemPrompt)
-	}
-	if !strings.Contains(agent.SystemPrompt, "### OpenAI-specific") {
-		t.Fatalf("refresh should keep openai provider notes:\n%s", agent.SystemPrompt)
+	if strings.Contains(agent.SystemPrompt, "## Provider Notes") {
+		t.Fatalf("refresh should not add provider notes by default:\n%s", agent.SystemPrompt)
 	}
 }
 
-func TestRefreshProjectPrompt_DoesNotDuplicateProviderWrapper(t *testing.T) {
+func TestRefreshProjectPrompt_StripsStaleProviderWrapperWhenDefaultEmpty(t *testing.T) {
 	withTempWorkdir(t)
 	t.Setenv("HOME", t.TempDir())
 
@@ -47,20 +44,25 @@ func TestRefreshProjectPrompt_DoesNotDuplicateProviderWrapper(t *testing.T) {
 	loadSkillCatalogForAgent = func(_ string) agentskills.SkillCatalog { return agentskills.SkillCatalog{} }
 
 	cfg := newProjectMapDisabledConfig()
-	base := prompt.GetSystemPromptForProviderWithConfig("openai", "gpt-5.4", cfg)
-	wrapped := prompt.BuildProviderSystemPromptWithConfig(base, "openai", "gpt-5.4", cfg)
+	base := prompt.GetSystemPromptForProviderWithConfig("gemini", "gemini-3.1-pro-preview-customtools", cfg)
+	staleWrapped := "<!-- PROVIDER_NOTES_START:gemini -->\n" +
+		"## Provider Notes\n" +
+		"### Gemini-specific\n" +
+		"- Emit native tool calls directly; do not serialize tool calls inside markdown code blocks\n" +
+		"<!-- PROVIDER_NOTES_END -->\n\n" +
+		base
 
 	agent := &Agent{
 		Runtime:         NewAgentRuntimeWithConfig(cfg),
-		CurrentProvider: &MockProvider{name: "openai"},
-		ProviderName:    "openai",
-		CurrentModel:    "gpt-5.4",
-		SystemPrompt:    wrapped,
+		CurrentProvider: &MockProvider{name: "gemini"},
+		ProviderName:    "gemini",
+		CurrentModel:    "gemini-3.1-pro-preview-customtools",
+		SystemPrompt:    staleWrapped,
 	}
 
 	agent.refreshProjectPrompt("")
 
-	if strings.Count(agent.SystemPrompt, "## Provider Notes") != 1 {
-		t.Fatalf("refresh should not duplicate provider notes:\n%s", agent.SystemPrompt)
+	if strings.Contains(agent.SystemPrompt, "## Provider Notes") {
+		t.Fatalf("refresh should strip stale provider notes when default is empty:\n%s", agent.SystemPrompt)
 	}
 }

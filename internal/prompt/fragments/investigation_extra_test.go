@@ -33,8 +33,8 @@ func TestInvestigationSharedLinesAndFallbackLabels(t *testing.T) {
 	if !strings.Contains(LowLevelOverridesWhenExposedLine(), "low-level expert overrides") {
 		t.Fatalf("LowLevelOverridesWhenExposedLine() missing override guidance")
 	}
-	if !strings.Contains(DedicatedToolUsageSentence(), "gather_context first") {
-		t.Fatalf("DedicatedToolUsageSentence() missing gather_context-first guidance")
+	if !strings.Contains(DedicatedToolUsageSentence(), "dedicated investigation tools first") {
+		t.Fatalf("DedicatedToolUsageSentence() missing dedicated-tool guidance")
 	}
 	if !strings.Contains(NoBashSubstituteSentence(), "do not use bash as a substitute") {
 		t.Fatalf("NoBashSubstituteSentence() missing bash restriction")

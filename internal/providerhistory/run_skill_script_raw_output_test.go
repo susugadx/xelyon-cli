@@ -148,6 +148,15 @@ func TestProjectKeepsSensitiveRunSkillScriptArgsOrOutputOutOfRawOutputArtifacts(
 			output:     strings.Repeat("Authorization: Bearer secret-value\nskill-script-output\n", 240),
 			wantStatus: "sensitive_body",
 		},
+		{
+			name: "bare colon secret output",
+			args: map[string]string{
+				"skill":  "coverage-audit",
+				"script": "scripts/report.sh",
+			},
+			output:     strings.Repeat("token: ghp_secret\nskill-script-output\n", 240),
+			wantStatus: "sensitive_body",
+		},
 	}
 
 	for _, tt := range tests {

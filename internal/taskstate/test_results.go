@@ -34,6 +34,13 @@ func (g *LastFailedTests) append(result TestResult) {
 	g.results = capTestResults(g.results, maxFailedTestResults)
 }
 
+func (g *LastFailedTests) removeCommand(command string) {
+	if g == nil {
+		return
+	}
+	g.results = removeTestResultsByCommand(g.results, command)
+}
+
 // LastPassedTests は最後に成功したテスト結果を保持する。
 type LastPassedTests struct {
 	results []TestResult
@@ -66,6 +73,13 @@ func (g *LastPassedTests) append(result TestResult) {
 	}
 	g.results = append(g.results, result)
 	g.results = capTestResults(g.results, maxPassedTestResults)
+}
+
+func (g *LastPassedTests) removeCommand(command string) {
+	if g == nil {
+		return
+	}
+	g.results = removeTestResultsByCommand(g.results, command)
 }
 
 // TestResult はテスト実行結果の最小 fact。
@@ -119,6 +133,25 @@ func (r TestResult) Excerpt() string {
 // Status はテスト状態を返す。
 func (r TestResult) Status() string {
 	return r.status
+}
+
+func removeTestResultsByCommand(results []TestResult, command string) []TestResult {
+	command = normalizeTestResultCommand(command)
+	if command == "" {
+		return results
+	}
+	out := results[:0]
+	for _, result := range results {
+		if normalizeTestResultCommand(result.command) == command {
+			continue
+		}
+		out = append(out, result)
+	}
+	return out
+}
+
+func normalizeTestResultCommand(command string) string {
+	return FormatSnapshotExcerpt(command, 0)
 }
 
 func cloneTestResults(results []TestResult) []TestResult {

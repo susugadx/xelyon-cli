@@ -16,8 +16,15 @@ func (a *Agent) guardMCPToolExecutionResult(ctx context.Context, toolCall *tools
 	if !shouldCompactMCPToolResult(toolCall, execResult.Result) {
 		return execResult
 	}
-	ref, reason := a.createMCPRuntimeRawOutputArtifact(ctx, toolCall, execResult.Result)
-	execResult.Result = buildMCPRuntimeResultPlaceholder(ref, reason, execResult.Result)
+	ref, omittedReason := a.createMCPRuntimeRawOutputArtifact(ctx, toolCall, execResult.Result)
+	if strings.TrimSpace(ref.RefID) == "" {
+		if strings.TrimSpace(omittedReason) == "" {
+			omittedReason = "raw_output_ref_missing"
+		}
+		execResult.Result = buildMCPRuntimeResultPlaceholder(ref, omittedReason, execResult.Result)
+		return execResult
+	}
+	execResult.Result = buildMCPRuntimeResultPlaceholder(ref, "", execResult.Result)
 	return execResult
 }
 

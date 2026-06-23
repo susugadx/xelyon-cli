@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -18,6 +19,7 @@ type compressionTestProvider struct {
 	chatCalls                    int
 	capturedChatModel            string
 	capturedChatHistory          []api.Message
+	capturedChatSystemPrompt     string
 	capturedChatActiveContext    int
 	capturedChatResponseID       string
 	capturedChatUpdateMode       string
@@ -51,9 +53,10 @@ func (m *compressionTestProvider) IsFunctionCallingEnabled() bool {
 	return false
 }
 
-func (m *compressionTestProvider) ChatWithTools(ctx context.Context, _ string, history []api.Message, model string) (string, error) {
+func (m *compressionTestProvider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
 	m.chatCalls++
 	m.capturedChatModel = model
+	m.capturedChatSystemPrompt = systemPrompt
 	m.capturedChatHistory = append([]api.Message(nil), history...)
 	m.capturedChatActiveContext = len(api.ActiveContextBlocksFromContext(ctx))
 	m.capturedChatResponseID = m.responseID
@@ -62,9 +65,9 @@ func (m *compressionTestProvider) ChatWithTools(ctx context.Context, _ string, h
 		return "", m.chatErr
 	}
 	if m.summary != "" {
-		return m.summary, nil
+		return compressionSummaryResponseForHistory(history, m.summary), nil
 	}
-	return "summary", nil
+	return compressionSummaryResponseForHistory(history, "summary"), nil
 }
 
 func (m *compressionTestProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, _ string, _ *api.ImageData, _ string) (string, error) {
@@ -128,6 +131,45 @@ func newCompressionTestAgent(t *testing.T, provider *compressionTestProvider, mo
 	agent := NewAgentWithRuntime(model, provider, false, runtime)
 	t.Cleanup(agent.Cleanup)
 	return agent, &out
+}
+
+func compressionSummaryContinuationJSON(summary string) string {
+	trimmed := strings.TrimSpace(summary)
+	if strings.HasPrefix(trimmed, "{") {
+		return summary
+	}
+	payload := map[string]any{
+		"schema_version":            "xelyon.continuation.v1",
+		"goal":                      summary,
+		"acceptance_criteria":       []string{},
+		"explicit_constraints":      []string{},
+		"material_assumptions":      []string{},
+		"decisions":                 []map[string]any{},
+		"files_changed":             []map[string]any{},
+		"verification":              []map[string]any{},
+		"open_work":                 []string{},
+		"blockers":                  []string{},
+		"do_not_repeat":             []string{},
+		"relevant_instruction_refs": []string{},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
+}
+
+func compressionSummaryResponseForHistory(history []api.Message, response string) string {
+	if isCompressionSummaryRequest(history) {
+		return compressionSummaryContinuationJSON(response)
+	}
+	return response
+}
+
+func isCompressionSummaryRequest(history []api.Message) bool {
+	return len(history) == 1 &&
+		history[0].Role == "user" &&
+		strings.Contains(history[0].Content, "xelyon.continuation.v1")
 }
 
 func oversizedCompressionHistory() []api.Message {

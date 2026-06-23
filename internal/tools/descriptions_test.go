@@ -53,107 +53,94 @@ func TestToolDescription_UsesToolMetaSourceOfTruth(t *testing.T) {
 
 func TestToolDescriptions_GatherContextIsPrimaryInvestigationTool(t *testing.T) {
 	desc := mustToolDescription(t, "gather_context")
-	if !strings.Contains(desc, "Primary investigation tool") {
+	if !strings.Contains(desc, "Primary repository investigation tool") {
 		t.Error("gather_context description should mark it as the primary investigation tool")
 	}
-	if !strings.Contains(desc, "structured impact") {
-		t.Error("gather_context description should mention structured impact routing")
+	if !strings.Contains(desc, "files, ranges, symbols, callers, tests, or directory context") {
+		t.Error("gather_context description should summarize the repository context it can retrieve")
 	}
-	if !strings.Contains(desc, "bounded compact evidence prefetch") {
-		t.Error("gather_context description should mention compact evidence prefetch")
-	}
-	if !strings.Contains(desc, "Natural-language searches like A or B in docs/ stay search queries") {
-		t.Error("gather_context description should describe natural-language search routing")
+	if !strings.Contains(desc, "Prefer it when the target is not already available as exact content") {
+		t.Error("gather_context description should keep the default investigation positioning")
 	}
 }
 
 func TestToolDescriptions_ListDirMentionsCompactSummaryAndOverrideUsage(t *testing.T) {
 	desc := mustToolDescription(t, "list_dir")
-	if !strings.Contains(desc, "gather_context is the default front door") {
-		t.Error("list_dir description should mention gather_context as the directory front door")
+	if !strings.Contains(desc, "gather_context is the default for directory investigation") {
+		t.Error("list_dir description should mention gather_context as the directory investigation default")
 	}
-	if !strings.Contains(desc, "stays hidden on current gather_context-first agent surfaces") {
+	if !strings.Contains(desc, "stays hidden on gather_context-first agent surfaces") {
 		t.Error("list_dir description should describe its hidden-by-default agent surface")
 	}
-	if !strings.Contains(desc, "compact summary") {
-		t.Error("list_dir description should mention compact summary output")
+	if !strings.Contains(desc, "compact names, counts, and types") {
+		t.Error("list_dir description should mention compact directory output")
 	}
 }
 
 func TestToolDescriptions_ReadFileAndSearchCodeDescribeLowLevelUsage(t *testing.T) {
 	readFileDesc := mustToolDescription(t, "read_file")
 	searchCodeDesc := mustToolDescription(t, "search_code")
-	if !strings.Contains(readFileDesc, "gather_context remains the default investigation front door") {
-		t.Error("read_file description should keep gather_context as the default front door")
+	if !strings.Contains(readFileDesc, "Read exact content from known files or line ranges") {
+		t.Error("read_file description should describe exact-content reads")
 	}
-	if !strings.Contains(readFileDesc, "edit exact-control override") {
-		t.Error("read_file description should describe the apply_patch exact-control contract")
+	if !strings.Contains(readFileDesc, "avoid repeating content already available") {
+		t.Error("read_file description should discourage rereading returned content")
 	}
-	if !strings.Contains(readFileDesc, "legacy surfaces it remains a low-level expert override") {
-		t.Error("read_file description should describe the legacy override contract")
+	if !strings.Contains(searchCodeDesc, "Low-level repository search") {
+		t.Error("search_code description should position it as low-level repository search")
 	}
-	if !strings.Contains(readFileDesc, "Default detail=auto returns full content when feasible") {
-		t.Error("read_file description should describe the default auto behavior")
+	if !strings.Contains(searchCodeDesc, "exact symbols, literals, regex patterns, references, or impact analysis") {
+		t.Error("search_code description should summarize its exact-search scope")
 	}
-	if !strings.Contains(readFileDesc, "compact for locator targets or explicit path ranges") {
-		t.Error("read_file description should restrict compact to supported reads")
+	if !strings.Contains(searchCodeDesc, "Use when gather_context is insufficient or exact search control is needed") {
+		t.Error("search_code description should keep the low-level override positioning")
 	}
-	if !strings.Contains(readFileDesc, "Do not re-read files already returned") {
-		t.Error("read_file description should discourage rereading returned files")
+	if !strings.Contains(searchCodeDesc, "Combine related independent patterns when practical") {
+		t.Error("search_code description should keep compact multi-pattern guidance")
 	}
-	if !strings.Contains(searchCodeDesc, "Low-level code discovery tool") {
-		t.Error("search_code description should position it as low-level")
+	for _, forbidden := range []string{
+		"file_filter=go",
+		"file_filter=typescript",
+		"ripgrep-like built-in language aliases",
+		".mjs/.cjs",
+		"targeted TSX",
+	} {
+		if strings.Contains(searchCodeDesc, forbidden) {
+			t.Errorf("search_code description should not keep long parameter encyclopaedia %q", forbidden)
+		}
 	}
-	if !strings.Contains(searchCodeDesc, "gather_context remains the default investigation front door") {
-		t.Error("search_code description should keep gather_context as the default front door")
+}
+
+func TestToolDescriptions_BashDoesNotAdvertiseAutoApprovedInvestigation(t *testing.T) {
+	desc := mustToolDescription(t, "bash")
+	for _, want := range []string{
+		"Run local commands for build, test, format, lint, git, package tooling",
+		"Runtime policy determines approval or denial",
+		"Prefer dedicated repository tools for reading and searching",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Fatalf("bash description missing %q:\n%s", want, desc)
+		}
 	}
-	if !strings.Contains(searchCodeDesc, "When a legacy surface exposes search_code") {
-		t.Error("search_code description should describe the legacy exposure contract")
-	}
-	if !strings.Contains(searchCodeDesc, "comma-separated patterns for parallel multi-search") {
-		t.Error("search_code description should mention comma-separated parallel multi-search")
-	}
-	if !strings.Contains(searchCodeDesc, "Prefer mode=auto") {
-		t.Error("search_code description should recommend mode=auto")
-	}
-	if !strings.Contains(searchCodeDesc, "intent=impact") {
-		t.Error("search_code description should mention intent=impact")
-	}
-	if !strings.Contains(searchCodeDesc, "targeted TSX .tsx, and JavaScript .js/.jsx symbols") {
-		t.Error("search_code description should mention targeted TSX and JavaScript structured impact")
-	}
-	if !strings.Contains(searchCodeDesc, "file_filter=go, *.go, scoped Go **/*.go globs, or direct .go paths for Go") {
-		t.Error("search_code description should mention the targeted Go structured impact filters")
-	}
-	if !strings.Contains(searchCodeDesc, "file_filter=typescript and file_filter=javascript remain broad fallback scopes") {
-		t.Error("search_code description should preserve the broad TypeScript and JavaScript fallback contracts")
-	}
-	if !strings.Contains(searchCodeDesc, "file_filter=js, *.js, direct .js paths, file_filter=jsx, *.jsx, or direct .jsx paths for JavaScript") {
-		t.Error("search_code description should mention targeted JavaScript structured impact filters")
-	}
-	if !strings.Contains(searchCodeDesc, ".mjs/.cjs are not JavaScript structured impact targets") {
-		t.Error("search_code description should mention unsupported JavaScript structured impact extensions")
-	}
-	if !strings.Contains(searchCodeDesc, "ripgrep-like built-in language aliases") {
-		t.Error("search_code description should mention the shared built-in file filter contract")
-	}
-	if strings.Contains(searchCodeDesc, "For Go symbols") {
-		t.Error("search_code description should not be Go-specific")
+	for _, forbidden := range []string{
+		"cat/ls/grep auto-approve",
+		"Dangerous commands require confirmation",
+	} {
+		if strings.Contains(desc, forbidden) {
+			t.Fatalf("bash description should not expose approval policy fragment %q:\n%s", forbidden, desc)
+		}
 	}
 }
 
 func TestToolDescriptions_StrReplaceEvidenceFirstContract(t *testing.T) {
 	desc := mustToolDescription(t, "str_replace")
 	for _, want := range []string{
-		"Copy exact old_str and existing context",
-		"actual gather_context, read_file, or search_code output",
-		"do not invent old_str",
-		"Write new_str as the intended replacement based on that verified context",
-		"same-file edits=[{old_str,new_str},...]",
+		"Copy old_str from current gather_context, read_file, or search_code output",
+		"do not invent it",
+		"Use new_str for the intended replacement",
+		"Batch same-file edits with edits=[{old_str,new_str},...]",
 		"advanced fallback",
-		"fresh tool output provides an exact range",
-		"do not guess line ranges",
-		"avoid evidence",
+		"fresh exact line output",
 	} {
 		if !strings.Contains(desc, want) {
 			t.Fatalf("str_replace description missing %q:\n%s", want, desc)

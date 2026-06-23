@@ -10,8 +10,11 @@ func TestBuildFailureResult_FeedbackAndFingerprint(t *testing.T) {
 	if !result.NeedsContinue {
 		t.Fatal("NeedsContinue = false, want true")
 	}
-	if !strings.Contains(result.Feedback, "[SYSTEM] Final check failed") {
-		t.Fatalf("Feedback missing system marker: %q", result.Feedback)
+	if !strings.Contains(result.Feedback, "Final check failed") {
+		t.Fatalf("Feedback missing failure header: %q", result.Feedback)
+	}
+	if strings.Contains(result.Feedback, "[SYSTEM") {
+		t.Fatalf("Feedback should be data-only without fake system marker: %q", result.Feedback)
 	}
 	if !strings.Contains(result.Feedback, "exit code 2") {
 		t.Fatalf("Feedback missing exit code: %q", result.Feedback)

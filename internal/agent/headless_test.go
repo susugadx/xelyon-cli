@@ -619,6 +619,9 @@ func TestRunHeadlessWithConfig_ProjectMapAddsQueryFocusOverlay(t *testing.T) {
 	if !strings.Contains(provider.systemPrompt, "## Project Map") {
 		t.Fatalf("expected stable project map section in headless prompt:\n%s", provider.systemPrompt)
 	}
+	if !strings.Contains(provider.systemPrompt, "<project_map_data>") {
+		t.Fatalf("expected project map data wrapper in headless prompt:\n%s", provider.systemPrompt)
+	}
 	if !strings.Contains(provider.systemPrompt, "Focus files for current task:") {
 		t.Fatalf("expected focus overlay in headless prompt:\n%s", provider.systemPrompt)
 	}

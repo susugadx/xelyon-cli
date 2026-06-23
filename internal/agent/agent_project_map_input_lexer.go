@@ -14,6 +14,7 @@ var (
 	projectMapInputPathPatterns     = []*regexp.Regexp{
 		projectMapQuotedPathPattern,
 		regexp.MustCompile(`\b([A-Za-z]:[\\/][^\s"'` + "`" + `]+)\b`),
+		regexp.MustCompile(`(?:^|[^\w.])(\.[\\/](?:[\w.-]+[\\/])*[\w./\\-]*)`),
 		regexp.MustCompile(`\b((?:[\w.-]+[\\/])+[\w./\\-]*)\b`),
 		projectMapQuotedFilenamePattern,
 		regexp.MustCompile(`\b((?:[\w.-]+/)*[\w.-]+\.[a-zA-Z0-9]{1,10})\b`),

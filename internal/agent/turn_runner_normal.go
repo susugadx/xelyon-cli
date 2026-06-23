@@ -7,7 +7,6 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/finalcheck"
-	promptnormal "github.com/susugadx/xelyon-cli/internal/prompt/normal"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/turnsupport"
@@ -40,18 +39,21 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 	if iteration == 0 {
 		r.promptManager().RefreshProjectPromptIfDirty(input)
 	}
-	effectivePrompt := a.normalModeSystemPromptForRequest(r.ctx, input, iteration == 0)
+	runtimeDirectives := a.pendingRuntimeDirectives()
+	effectivePrompt := a.normalModeSystemPromptForRequestWithDirectives(r.ctx, input, iteration == 0, runtimeDirectives)
 
-	requestCtx := a.requestContext(r.ctx)
+	requestCtx := a.prepareResponseContextForPrompt(a.requestContext(r.ctx), effectivePrompt)
 	if iteration == 0 && image != nil {
 		requestCtx, history := a.providerFacingHistoryExcludingLatestMessageForRequest(requestCtx)
 		response, err := a.CurrentProvider.ChatWithImage(
-			requestCtx, effectivePrompt, history, input+promptnormal.NormalModePrompt, image, a.CurrentModel,
+			requestCtx, effectivePrompt, history, input, image, a.CurrentModel,
 		)
 		if err != nil {
 			a.ui().StopSpinner()
 			return "", fmt.Errorf("API call failed: %w", err)
 		}
+		a.recordResponseContextForPrompt(effectivePrompt)
+		a.markRuntimeDirectivesDelivered(runtimeDirectives)
 		return response, nil
 	}
 
@@ -69,6 +71,8 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 		a.ui().StopSpinner()
 		return "", fmt.Errorf("API call failed: %w", err)
 	}
+	a.recordResponseContextForPrompt(effectivePrompt)
+	a.markRuntimeDirectivesDelivered(runtimeDirectives)
 	return response, nil
 }
 

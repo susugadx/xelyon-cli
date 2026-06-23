@@ -70,6 +70,7 @@ func reviewProbePlanPromptContract() string {
 - Scope analysis order: first enumerate material "impact_surfaces"; then derive "candidate_risks" for material risks from those surfaces; then create probes only for evidence-backed risks or unverified material surfaces.
 - Consider changed files, callers, tests, related search hits, related tests/context files, CLI, TUI, config, validator, prompt contract, JSON schema, sandbox, timeout, path validation, error handling, persistence, and compatibility as material surfaces when the evidence makes them relevant.
 - Generic impact candidates in Evidence Markdown are review leads, not proof of impact. Do not report findings solely because a candidate exists, but do not ignore them when deciding "impact_surfaces".
+- Missing nearby tests or missing execution evidence is a coverage gap candidate, not proof of a defect. Unless static evidence already establishes a behavior defect, plan a bounded probe or classify the scope as unverified or residual.
 - If generic impact candidates cannot be verified from current evidence, classify the relevant surface/risk as unverified or residual, or plan a bounded probe. Absence of generic impact candidates is not proof of no impact.
 - Impact surface IDs and risk IDs must be unique, non-empty canonical IDs using only ASCII letters, digits, hyphen, or underscore. Risk "surface_ids" must reference existing impact surface IDs.
 - Impact surface "summary" and "reason" must be non-empty. Candidate risk "summary" and "verification_strategy" must be non-empty.

@@ -150,3 +150,184 @@ func TestRecorder_TestObservationCapsExcerptAndExitCode(t *testing.T) {
 		t.Fatalf("passed cap/order = %#v", passed)
 	}
 }
+
+func TestRecorder_RecordTestObservationKeepsLatestStatusPerCommand(t *testing.T) {
+	t.Run("fail then pass", func(t *testing.T) {
+		store := NewStoreWithRoot(t.TempDir())
+		recorder := store.Recorder()
+		recorder.RecordTestObservation(TestObservation{
+			Command:  "go test ./internal/prompt",
+			ExitCode: 1,
+			Status:   "failed",
+			Output:   "FAIL",
+		})
+		recorder.RecordTestObservation(TestObservation{
+			Command:  "go test ./internal/prompt",
+			ExitCode: 0,
+			Status:   "passed",
+			Output:   "ok",
+		})
+
+		snapshot := store.Snapshot()
+		if got := snapshot.LastFailedTests.Results(); len(got) != 0 {
+			t.Fatalf("LastFailedTests = %#v, want stale failure removed", got)
+		}
+		passed := snapshot.LastPassedTests.Results()
+		if len(passed) != 1 || passed[0].Command() != "go test ./internal/prompt" || passed[0].Status() != "passed" {
+			t.Fatalf("LastPassedTests = %#v, want latest passed command", passed)
+		}
+	})
+
+	t.Run("pass then fail", func(t *testing.T) {
+		store := NewStoreWithRoot(t.TempDir())
+		recorder := store.Recorder()
+		recorder.RecordTestObservation(TestObservation{
+			Command:  "go test ./internal/prompt",
+			ExitCode: 0,
+			Status:   "passed",
+			Output:   "ok",
+		})
+		recorder.RecordTestObservation(TestObservation{
+			Command:  "go test ./internal/prompt",
+			ExitCode: 1,
+			Status:   "failed",
+			Output:   "FAIL",
+		})
+
+		snapshot := store.Snapshot()
+		if got := snapshot.LastPassedTests.Results(); len(got) != 0 {
+			t.Fatalf("LastPassedTests = %#v, want stale pass removed", got)
+		}
+		failed := snapshot.LastFailedTests.Results()
+		if len(failed) != 1 || failed[0].Command() != "go test ./internal/prompt" || failed[0].Status() != "failed" {
+			t.Fatalf("LastFailedTests = %#v, want latest failed command", failed)
+		}
+	})
+
+	t.Run("normalized multi-line command", func(t *testing.T) {
+		store := NewStoreWithRoot(t.TempDir())
+		recorder := store.Recorder()
+		recorder.RecordTestObservation(TestObservation{
+			Command:  "go test ./internal/prompt\n-run TestMerge",
+			ExitCode: 0,
+			Status:   "passed",
+			Output:   "ok",
+		})
+		recorder.RecordTestObservation(TestObservation{
+			Command:  "go test ./internal/prompt -run TestMerge",
+			ExitCode: 1,
+			Status:   "failed",
+			Output:   "FAIL",
+		})
+
+		snapshot := store.Snapshot()
+		if got := snapshot.LastPassedTests.Results(); len(got) != 0 {
+			t.Fatalf("LastPassedTests = %#v, want normalized stale pass removed", got)
+		}
+		failed := snapshot.LastFailedTests.Results()
+		if len(failed) != 1 || failed[0].Command() != "go test ./internal/prompt -run TestMerge" {
+			t.Fatalf("LastFailedTests = %#v, want normalized latest failed command", failed)
+		}
+	})
+
+	t.Run("repeated failed keeps latest", func(t *testing.T) {
+		store := NewStoreWithRoot(t.TempDir())
+		recorder := store.Recorder()
+		recorder.RecordTestObservation(TestObservation{
+			Command:  "go test ./internal/prompt",
+			ExitCode: 1,
+			Status:   "failed",
+			Output:   "old failure",
+		})
+		recorder.RecordTestObservation(TestObservation{
+			Command:  "go test ./internal/prompt",
+			ExitCode: 2,
+			Status:   "failed",
+			Output:   "new failure",
+		})
+
+		snapshot := store.Snapshot()
+		failed := snapshot.LastFailedTests.Results()
+		if len(failed) != 1 ||
+			failed[0].Command() != "go test ./internal/prompt" ||
+			failed[0].ExitCode() != 2 ||
+			failed[0].Output() != "new failure" {
+			t.Fatalf("LastFailedTests = %#v, want latest repeated failure", failed)
+		}
+	})
+
+	t.Run("repeated passed keeps latest", func(t *testing.T) {
+		store := NewStoreWithRoot(t.TempDir())
+		recorder := store.Recorder()
+		recorder.RecordTestObservation(TestObservation{
+			Command:  "go test ./internal/prompt",
+			ExitCode: 0,
+			Status:   "passed",
+			Output:   "old pass",
+		})
+		recorder.RecordTestObservation(TestObservation{
+			Command:  "go test ./internal/prompt",
+			ExitCode: 0,
+			Status:   "passed",
+			Output:   "new pass",
+		})
+
+		snapshot := store.Snapshot()
+		passed := snapshot.LastPassedTests.Results()
+		if len(passed) != 1 ||
+			passed[0].Command() != "go test ./internal/prompt" ||
+			passed[0].Output() != "new pass" {
+			t.Fatalf("LastPassedTests = %#v, want latest repeated pass", passed)
+		}
+	})
+}
+
+func TestRecorder_RecordToolObservationKeepsLatestTestStatusPerCommand(t *testing.T) {
+	store := NewStoreWithRoot(t.TempDir())
+	recorder := store.Recorder()
+	recorder.RecordToolObservation(ToolObservation{
+		ToolName: "bash",
+		Args:     map[string]string{"command": "go test ./internal/taskstate"},
+		Result:   "ok\tgithub.com/susugadx/xelyon-cli/internal/taskstate\t0.01s",
+	})
+	recorder.RecordToolObservation(ToolObservation{
+		ToolName: "bash",
+		Args:     map[string]string{"command": "go test ./internal/taskstate"},
+		Result:   "Error: exit status 1\nOutput: FAIL",
+		Error:    true,
+	})
+
+	snapshot := store.Snapshot()
+	if got := snapshot.LastPassedTests.Results(); len(got) != 0 {
+		t.Fatalf("LastPassedTests = %#v, want stale bash pass removed", got)
+	}
+	failed := snapshot.LastFailedTests.Results()
+	if len(failed) != 1 || failed[0].Command() != "go test ./internal/taskstate" || failed[0].ExitCode() != 1 {
+		t.Fatalf("LastFailedTests = %#v, want latest bash failure", failed)
+	}
+}
+
+func TestRecorder_RecordToolObservationKeepsLatestRepeatedTestStatus(t *testing.T) {
+	store := NewStoreWithRoot(t.TempDir())
+	recorder := store.Recorder()
+	recorder.RecordToolObservation(ToolObservation{
+		ToolName: "bash",
+		Args:     map[string]string{"command": "go test ./internal/taskstate"},
+		Result:   "Error: exit status 1\nOutput: old failure",
+		Error:    true,
+	})
+	recorder.RecordToolObservation(ToolObservation{
+		ToolName: "bash",
+		Args:     map[string]string{"command": "go test ./internal/taskstate"},
+		Result:   "Error: exit status 2\nOutput: new failure",
+		Error:    true,
+	})
+
+	failed := store.Snapshot().LastFailedTests.Results()
+	if len(failed) != 1 ||
+		failed[0].Command() != "go test ./internal/taskstate" ||
+		failed[0].ExitCode() != 2 ||
+		!strings.Contains(failed[0].Output(), "new failure") {
+		t.Fatalf("LastFailedTests = %#v, want latest repeated bash failure", failed)
+	}
+}

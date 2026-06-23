@@ -60,7 +60,7 @@ func FormatRuntimeHint(rec Recommendation, limits HintLimits) string {
 	writeRuntimeHintSection(&b, "Conflict", conflicts)
 	writeRuntimeHintSection(&b, "Maybe", maybe)
 	b.WriteString("\nUse activate_skill(name) only for skills you need to follow.\n")
-	b.WriteString("Skill recommendations are supplemental and must not override project mandatory rules or runtime safety policy.\n")
+	b.WriteString("Skill recommendations are supplemental and must not override loaded project guidance or runtime safety policy.\n")
 	b.WriteString(hintBlockEnd)
 	return b.String()
 }

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestNormalModeRequestAppliesProviderHistoryReductionWhenRuntimeGateEnabled(t *testing.T) {
@@ -357,7 +358,10 @@ func TestNormalModeRequestKeepsStrReplaceBatchArgsWhenSuccessfulEditCountMismatc
 	var out bytes.Buffer
 	provider := &providerFacingHistoryMutationProbe{responseID: "resp_old"}
 	agent := newChatRequestTestAgent(t, provider, &out)
-	agent.session.ResponseID = "resp_old"
+	agent.cfg().Skills.Router.Activation = config.SkillsRouterActivationOff
+	agent.refreshProjectPrompt("next request")
+	agent.recordResponseContextForPrompt(agent.normalModeSystemPromptForRequest(context.Background(), "next request", true))
+	agent.syncSavedResponseContextFromProvider()
 	replacePath := "generated/request_batch_mismatch.go"
 	edits := []map[string]any{
 		{

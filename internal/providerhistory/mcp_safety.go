@@ -1,15 +1,10 @@
 package providerhistory
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/rawoutputs"
 )
-
-const mcpBareSecretKeyPattern = `password|passwd|secret|api[_-]?key|api\s+key|authorization|auth[_-]?token|access[_-]?token|refresh[_-]?token|id[_-]?token|session[_-]?token|client[_-]?secret|private[_-]?key|jwt|token`
-
-var mcpBareSecretPattern = regexp.MustCompile(`(?i)["']?\b(` + mcpBareSecretKeyPattern + `)\b["']?\s*[:=]\s*["']?(bearer\s+)?[^\s"'\]\}),;]+`)
 
 const (
 	// MCPSensitiveOrPrivateResultKeepReason は private-looking MCP result を artifact 化しない理由。
@@ -18,7 +13,7 @@ const (
 
 // MCPRawOutputArtifactOmitReason は MCP tool result を normal raw output store に保存しない理由を返す。
 func MCPRawOutputArtifactOmitReason(content string) string {
-	if rawoutputs.LooksSensitiveContent(content) || providerHistoryMCPLooksBareSecret(content) {
+	if rawoutputs.LooksSensitiveContent(content) || providerHistoryLooksBareSecret(content) {
 		return string(rawoutputs.ReasonSensitiveArtifactForbidden)
 	}
 	if providerHistoryMCPLooksPrivate(content) {
@@ -30,7 +25,7 @@ func MCPRawOutputArtifactOmitReason(content string) string {
 // MCPRawOutputArtifactOmitReasonAllowsRuntimeExcerpt は artifact 化しない MCP result でも runtime placeholder に bounded excerpt を残せるかを返す。
 func MCPRawOutputArtifactOmitReasonAllowsRuntimeExcerpt(reason string) bool {
 	switch strings.TrimSpace(reason) {
-	case string(rawoutputs.ReasonSensitiveArtifactForbidden):
+	case string(rawoutputs.ReasonSensitiveArtifactForbidden), MCPSensitiveOrPrivateResultKeepReason:
 		return false
 	default:
 		return true
@@ -51,8 +46,4 @@ func providerHistoryMCPLooksPrivate(content string) bool {
 		}
 	}
 	return false
-}
-
-func providerHistoryMCPLooksBareSecret(content string) bool {
-	return mcpBareSecretPattern.MatchString(content)
 }

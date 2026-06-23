@@ -182,8 +182,17 @@ func renderSnapshotOmittedLine(b *strings.Builder, omitted int) {
 	}
 }
 
+// FormatSnapshotExcerpt は snapshot renderer と同じ単一行・rune-safe 制限で excerpt を整形する。
+func FormatSnapshotExcerpt(value string, runeLimit int) string {
+	value = snapshotSingleLine(value)
+	if runeLimit <= 0 {
+		return value
+	}
+	return truncateSnapshotRunes(value, runeLimit)
+}
+
 func quoteSnapshotText(value string, runeLimit int) string {
-	return strconv.Quote(truncateSnapshotRunes(snapshotSingleLine(value), runeLimit))
+	return strconv.Quote(FormatSnapshotExcerpt(value, runeLimit))
 }
 
 func snapshotSingleLine(value string) string {

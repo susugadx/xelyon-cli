@@ -299,8 +299,11 @@ func TestHandleNormalModeNoToolResponse_TextPlanFirstRedirect(t *testing.T) {
 		t.Fatalf("textPlanRedirectCount = %d, want 1", state.textPlanRedirectCount)
 	}
 	last := agent.History[len(agent.History)-1]
-	if last.Role != "user" || !strings.Contains(last.Content, "Do NOT output plans as numbered text") {
-		t.Fatalf("expected first redirect system feedback, got %#v", last)
+	if last.Role != "assistant" || last.Content != response {
+		t.Fatalf("expected assistant response only in history, got %#v", last)
+	}
+	if len(agent.runtimeDirectives) != 1 || !strings.Contains(agent.runtimeDirectives[0], "do not respond with another numbered text plan") {
+		t.Fatalf("expected first redirect runtime directive, got %#v", agent.runtimeDirectives)
 	}
 }
 
@@ -327,8 +330,73 @@ func TestHandleNormalModeNoToolResponse_TextPlanForcesDirectExecution(t *testing
 		t.Fatalf("textPlanRedirectCount = %d, want %d", state.textPlanRedirectCount, maxTextPlanRedirects+1)
 	}
 	last := agent.History[len(agent.History)-1]
-	if last.Role != "user" || !strings.Contains(last.Content, "STOP planning. Pick the FIRST change") {
-		t.Fatalf("expected forced execution system feedback, got %#v", last)
+	if last.Role != "assistant" || last.Content != response {
+		t.Fatalf("expected assistant response only in history, got %#v", last)
+	}
+	if len(agent.runtimeDirectives) != 1 || !strings.Contains(agent.runtimeDirectives[0], "previous response was still a text plan") {
+		t.Fatalf("expected forced execution runtime directive, got %#v", agent.runtimeDirectives)
+	}
+}
+
+func TestHandleStrReplaceErrors_QueuesRuntimeDirectiveWithoutFakeSystemMessage(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	cfg.LoopDetection.Threshold = 2
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	toolCall := &tools.ToolCall{ID: "call_replace", Tool: "str_replace"}
+	result := "Error: old_str not found in file.go"
+
+	if handled := agent.handleStrReplaceErrors(toolCall, result); handled {
+		t.Fatal("first str_replace failure should not trigger loop handling")
+	}
+	if handled := agent.handleStrReplaceErrors(toolCall, result); !handled {
+		t.Fatal("second str_replace failure should trigger loop handling")
+	}
+	if len(agent.History) != 1 || agent.History[0].Role != "tool" || agent.History[0].ToolCallID != "call_replace" {
+		t.Fatalf("history = %#v, want one tool result data message", agent.History)
+	}
+	if strings.Contains(agent.History[0].Content, "[SYSTEM") {
+		t.Fatalf("str_replace failure data should not contain fake system marker: %q", agent.History[0].Content)
+	}
+	if len(agent.runtimeDirectives) != 1 || agent.runtimeDirectives[0] != strReplaceLoopRuntimeDirective {
+		t.Fatalf("runtime directives = %#v, want str_replace loop directive", agent.runtimeDirectives)
+	}
+	prompt := agent.normalModeSystemPromptForRequest(context.Background(), "retry edit", false)
+	if !strings.Contains(prompt, strReplaceLoopRuntimeDirective) {
+		t.Fatalf("system prompt = %q, want str_replace loop runtime directive", prompt)
+	}
+	if len(agent.runtimeDirectives) != 1 || agent.runtimeDirectives[0] != strReplaceLoopRuntimeDirective {
+		t.Fatalf("runtime directives should stay pending until provider delivery succeeds, got %#v", agent.runtimeDirectives)
+	}
+}
+
+func TestNormalModeSystemPromptPreservesStrippedAskPolicy(t *testing.T) {
+	disableColors(t)
+
+	var out bytes.Buffer
+	cfg := newProjectMapDisabledConfig()
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+
+	prompt := agent.normalModeSystemPromptForRequest(context.Background(), "implement the change", false)
+	for _, want := range []string{
+		"Do not use ambiguity as a reason to stop when a reasonable reversible default exists.",
+		"Ask only when a choice is consequential, irreversible, externally visible, costly, permission-sensitive, or impossible to infer responsibly",
+		"do not ask for preferences that repo evidence can resolve",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("normal-mode provider prompt missing ask policy %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"ask_user_question",
+		"If uncertain: proceed with a stated assumption when the choice is local and reversible",
+		"Use tools proactively: verify before modifying",
+	} {
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("normal-mode provider prompt kept planning-only or stale wording %q", forbidden)
+		}
 	}
 }
 

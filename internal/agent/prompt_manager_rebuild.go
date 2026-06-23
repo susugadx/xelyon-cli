@@ -5,7 +5,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/config"
-	promptplan "github.com/susugadx/xelyon-cli/internal/prompt/plan"
+	"github.com/susugadx/xelyon-cli/internal/prompt"
 )
 
 func (m *PromptManager) RebuildSystemPromptForCurrentProvider() {
@@ -21,7 +21,7 @@ func (m *PromptManager) InitializeProjectInstructions(opts projectInstructionApp
 	if a == nil {
 		return nil
 	}
-	bundle, err := a.loadProjectInstructionBundleCachedWithError(true)
+	bundle, err := a.loadProjectInstructionBundleCachedWithInputWithError(true, opts.projectMapInput)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func (m *PromptManager) applyDynamicPromptSections(req systemPromptRebuildReques
 		return
 	}
 	if bundle != nil {
-		m.InjectProjectInstructions(bundle, req.input)
+		m.InjectProjectInstructions(bundle)
 	}
 	if req.injectProjectMap {
 		injectProjectMap(a, req.input)
@@ -88,9 +88,9 @@ func (m *PromptManager) resolveBundleForRebuild(req systemPromptRebuildRequest) 
 	case systemPromptBundleResolveGiven:
 		return req.bundle
 	case systemPromptBundleResolveForced:
-		return a.loadProjectInstructionBundleCached(true)
+		return a.loadProjectInstructionBundleCachedWithInput(true, req.input)
 	default:
-		return a.loadProjectInstructionBundleCached(false)
+		return a.loadProjectInstructionBundleCachedWithInput(false, req.input)
 	}
 }
 
@@ -100,14 +100,26 @@ func (m *PromptManager) buildBaseSystemPromptForCurrentProvider() string {
 		return ""
 	}
 
-	planningPrompt := promptplan.BuildPlanningPrompt()
+	planningSection, hasPlanningSection := prompt.BuildPlanningPromptSection()
+	planningPrompt := ""
+	if hasPlanningSection {
+		planningPrompt = planningSection.Content()
+	}
 	hadPlanPrompt := strings.Contains(a.SystemPrompt, planningPrompt)
 	systemPrompt := m.buildStaticPrompt(promptStaticBuildInput{
 		invocationCWD: a.invocationCWD(),
 	})
 
-	if hadPlanPrompt {
-		systemPrompt += api.SystemPromptCacheBoundary + planningPrompt
+	if hadPlanPrompt && hasPlanningSection {
+		effective, err := prompt.NewEffectivePrompt(
+			prompt.StaticText("xelyon.system.static", prompt.AuthorityConstitution, systemPrompt),
+			planningSection,
+		)
+		if err == nil {
+			systemPrompt = effective.Compose(api.SystemPromptCacheBoundary)
+		} else {
+			systemPrompt += api.SystemPromptCacheBoundary + planningPrompt
+		}
 	}
 
 	return systemPrompt
@@ -124,12 +136,12 @@ func (m *PromptManager) rebuildProjectPromptWithResolvedBundle(input string, bun
 }
 
 // InjectProjectInstructions は現在の SystemPrompt に project instructions を注入する。
-func (m *PromptManager) InjectProjectInstructions(bundle *config.ProjectInstructionBundle, input string) {
+func (m *PromptManager) InjectProjectInstructions(bundle *config.ProjectInstructionBundle) {
 	a := m.agent
 	if a == nil {
 		return
 	}
-	a.SystemPrompt = injectProjectInstructionBundle(a.SystemPrompt, bundle, input)
+	a.SystemPrompt = injectProjectInstructionBundle(a.SystemPrompt, bundle)
 }
 
 // StripProjectMapSection は SystemPrompt から project map セクションを除去する。

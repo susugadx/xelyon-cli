@@ -10,9 +10,11 @@ func FormatPlan(plan *Plan) string {
 	var sb strings.Builder
 	sb.WriteString("Plan:\n")
 
+	writePlanValues(&sb, "Acceptance criteria", plan.AcceptanceCriteria)
 	writePlanValues(&sb, "Findings", plan.Findings)
 	writePlanValues(&sb, "Evidence", plan.Evidence)
 	writePlanValues(&sb, "Constraints", plan.Constraints)
+	writePlanValues(&sb, "Open questions", plan.OpenQuestions)
 
 	for _, step := range plan.Steps {
 		fmt.Fprintf(&sb, "  %d. %s\n", step.ID, step.Description)

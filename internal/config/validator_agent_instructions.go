@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 func validateAgentInstructionIssues(cfg *Config) []ValidationIssue {
@@ -16,6 +17,16 @@ func validateAgentInstructionIssues(cfg *Config) []ValidationIssue {
 			Field:      "agent_instructions.project.mode",
 			Value:      cfg.AgentInstructions.Project.Mode,
 			Message:    fmt.Sprintf("無効な値です (有効: %s / %s / %s)", AgentInstructionProjectModeOff, AgentInstructionProjectModeFallback, AgentInstructionProjectModeAlways),
+			Suggestion: AgentInstructionProjectModeAlways,
+			Severity:   ValidationSeverityWarning,
+			CanAutoFix: true,
+			FixedValue: AgentInstructionProjectModeAlways,
+		})
+	} else if strings.ToLower(strings.TrimSpace(cfg.AgentInstructions.Project.Mode)) == AgentInstructionProjectModeFallback {
+		issues = append(issues, ValidationIssue{
+			Field:      "agent_instructions.project.mode",
+			Value:      cfg.AgentInstructions.Project.Mode,
+			Message:    "fallback は deprecated alias です。AGENTS.md などの project guidance を読み込むため、明示的に always へ移行してください",
 			Suggestion: AgentInstructionProjectModeAlways,
 			Severity:   ValidationSeverityWarning,
 			CanAutoFix: true,

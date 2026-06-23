@@ -2,7 +2,7 @@ package history
 
 import "strings"
 
-const responseContextMetadataVersion = 1
+const responseContextMetadataVersion = 2
 
 func (s *Session) ClearResponseContext() {
 	if s == nil {
@@ -13,9 +13,15 @@ func (s *Session) ClearResponseContext() {
 	s.ResponseModel = ""
 	s.ResponseProviderName = ""
 	s.ResponseProviderConfigKey = ""
+	s.ResponsePromptFingerprint = ""
 }
 
 func (s *Session) ApplyResponseContext(responseID, responseModel, responseProviderName, responseProviderConfigKey string) {
+	s.ApplyResponseContextWithFingerprint(responseID, responseModel, responseProviderName, responseProviderConfigKey, "")
+}
+
+// ApplyResponseContextWithFingerprint は Responses API 継続 state と prompt fingerprint を保存する。
+func (s *Session) ApplyResponseContextWithFingerprint(responseID, responseModel, responseProviderName, responseProviderConfigKey, responsePromptFingerprint string) {
 	if s == nil {
 		return
 	}
@@ -41,6 +47,8 @@ func (s *Session) ApplyResponseContext(responseID, responseModel, responseProvid
 	if s.ResponseProviderConfigKey == "" {
 		s.ResponseProviderConfigKey = s.ProviderConfigKey
 	}
+
+	s.ResponsePromptFingerprint = strings.TrimSpace(responsePromptFingerprint)
 }
 
 func clearSavedResponseContext(session *Session) {

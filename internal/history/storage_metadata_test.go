@@ -105,6 +105,40 @@ func TestStorage_SaveMetadata_MultibyteTruncation(t *testing.T) {
 	}
 }
 
+func TestStorage_SaveMetadata_ResponsePromptFingerprint(t *testing.T) {
+	tmpDir := t.TempDir()
+	os.Setenv("HOME", tmpDir)
+	defer os.Unsetenv("HOME")
+
+	storage, err := NewStorage()
+	if err != nil {
+		t.Fatalf("NewStorage failed: %v", err)
+	}
+
+	session := NewSession("gpt-5")
+	session.ApplyResponseContextWithFingerprint("resp_123", "gpt-5", "openai", "openai", "fingerprint-1")
+	if err := storage.Save(session); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	metaPath := storage.metadataPath(session.ID)
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatalf("Failed to read metadata file: %v", err)
+	}
+
+	var meta SessionMetadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		t.Fatalf("Failed to unmarshal metadata: %v", err)
+	}
+	if meta.ResponseContextVersion != responseContextMetadataVersion {
+		t.Fatalf("ResponseContextVersion = %d, want %d", meta.ResponseContextVersion, responseContextMetadataVersion)
+	}
+	if meta.ResponsePromptFingerprint != "fingerprint-1" {
+		t.Fatalf("ResponsePromptFingerprint = %q, want fingerprint-1", meta.ResponsePromptFingerprint)
+	}
+}
+
 func TestStorage_SessionPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	storage := &Storage{

@@ -9,10 +9,12 @@ import (
 
 func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 	display := buildPlanReviewDisplay(&plan.Plan{
-		Summary:     "Ship a reviewable plan",
-		Findings:    []string{"plan_request.go owns approval handoff"},
-		Evidence:    []string{"internal/agent/plan_request.go: handleInvestigationResult"},
-		Constraints: []string{"Do not carry raw investigation history"},
+		Summary:            "Ship a reviewable plan",
+		AcceptanceCriteria: []string{"approval display shows v2 fields"},
+		Findings:           []string{"plan_request.go owns approval handoff"},
+		Evidence:           []string{"internal/agent/plan_request.go: handleInvestigationResult"},
+		Constraints:        []string{"Do not carry raw investigation history"},
+		OpenQuestions:      []string{"Should no-step plans stay in plan mode?"},
 		Steps: []plan.PlanStep{{
 			ID:          1,
 			Description: "Update plan review UI",
@@ -29,6 +31,8 @@ func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 	for _, want := range []string{
 		"Implementation Plan Review",
 		"Ship a reviewable plan",
+		"完了条件",
+		"approval display shows v2 fields",
 		"検証予定",
 		"調査結果",
 		"plan_request.go owns approval handoff",
@@ -36,6 +40,8 @@ func TestBuildPlanReviewDisplay_IncludesParsedPlanFiles(t *testing.T) {
 		"internal/agent/plan_request.go: handleInvestigationResult",
 		"制約",
 		"Do not carry raw investigation history",
+		"未解決質問",
+		"Should no-step plans stay in plan mode?",
 		"Update plan review UI",
 		"目的: Make the approval screen readable",
 		"触るファイル: internal/agent/plan_request.go, internal/agent/plan_request_test.go",
@@ -94,11 +100,13 @@ func TestBuildPlanReviewDisplay_IncludesPlanVerificationSummary(t *testing.T) {
 
 func TestBuildPlanNoImplementationDisplay_IncludesHandoffDetails(t *testing.T) {
 	display := buildPlanNoImplementationDisplay(&plan.Plan{
-		Summary:     "No implementation is required",
-		Findings:    []string{"The existing command already handles this"},
-		Evidence:    []string{"internal/agent/plan_request.go: handleInvestigationResult"},
-		Constraints: []string{"Do not change CLI output"},
-		Steps:       []plan.PlanStep{},
+		Summary:            "No implementation is required",
+		AcceptanceCriteria: []string{"No code changes are needed"},
+		Findings:           []string{"The existing command already handles this"},
+		Evidence:           []string{"internal/agent/plan_request.go: handleInvestigationResult"},
+		Constraints:        []string{"Do not change CLI output"},
+		OpenQuestions:      []string{"Confirm with requester before implementation"},
+		Steps:              []plan.PlanStep{},
 	})
 	if display == nil {
 		t.Fatal("display = nil, want no-implementation details")
@@ -108,12 +116,16 @@ func TestBuildPlanNoImplementationDisplay_IncludesHandoffDetails(t *testing.T) {
 	for _, want := range []string{
 		"Investigation Result",
 		"No implementation is required",
+		"完了条件",
+		"No code changes are needed",
 		"調査結果",
 		"The existing command already handles this",
 		"根拠",
 		"internal/agent/plan_request.go: handleInvestigationResult",
 		"制約",
 		"Do not change CLI output",
+		"未解決質問",
+		"Confirm with requester before implementation",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered no-implementation display = %q, want fragment %q", rendered, want)
@@ -121,6 +133,29 @@ func TestBuildPlanNoImplementationDisplay_IncludesHandoffDetails(t *testing.T) {
 	}
 	if strings.Contains(rendered, "ステップ") {
 		t.Fatalf("rendered no-implementation display = %q, should not render step sections", rendered)
+	}
+}
+
+func TestBuildPlanNoImplementationDisplay_IncludesCriteriaOnlyDetails(t *testing.T) {
+	display := buildPlanNoImplementationDisplay(&plan.Plan{
+		AcceptanceCriteria: []string{"Confirm that no implementation is required"},
+		OpenQuestions:      []string{"Should this remain read-only?"},
+		Steps:              []plan.PlanStep{},
+	})
+	if display == nil {
+		t.Fatal("display = nil, want criteria/questions-only details")
+	}
+
+	rendered := display.Render()
+	for _, want := range []string{
+		"完了条件",
+		"Confirm that no implementation is required",
+		"未解決質問",
+		"Should this remain read-only?",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered no-implementation display = %q, want fragment %q", rendered, want)
+		}
 	}
 }
 

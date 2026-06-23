@@ -244,6 +244,12 @@ func TestRuntimeHintLimitsOmitWeakMaybeCandidates(t *testing.T) {
 	if !strings.Contains(hint, "p1") || !strings.Contains(hint, "p2") || !strings.Contains(hint, "s1") {
 		t.Fatalf("hint missing high/medium candidates:\n%s", hint)
 	}
+	if !strings.Contains(hint, "loaded project guidance") {
+		t.Fatalf("hint should describe project guidance precedence:\n%s", hint)
+	}
+	if strings.Contains(hint, "project mandatory rules") {
+		t.Fatalf("hint should not use stale mandatory project rules wording:\n%s", hint)
+	}
 	if strings.Contains(hint, "m1") || strings.Contains(hint, "Maybe:") {
 		t.Fatalf("hint should omit maybe candidates by default:\n%s", hint)
 	}

@@ -7,6 +7,22 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
+var supportedReasoningEffortValues = []string{"off", "low", "medium", "high", "xhigh"}
+
+func reasoningEffortSchemaEnum() []string {
+	return append([]string(nil), supportedReasoningEffortValues...)
+}
+
+func isSupportedReasoningEffort(effort string) bool {
+	effort = normalizeReasoningEffort(effort)
+	for _, supported := range supportedReasoningEffortValues {
+		if effort == supported {
+			return true
+		}
+	}
+	return false
+}
+
 func applySubAgentReasoningEffort(cfg *config.Config, taskType, reasoningEffort string) error {
 	effort := strings.TrimSpace(reasoningEffort)
 	if effort == "" {
@@ -19,17 +35,17 @@ func applySubAgentReasoningEffort(cfg *config.Config, taskType, reasoningEffort 
 }
 
 func applyReasoningEffort(cfg *config.Config, effort string) error {
-	switch normalizeReasoningEffort(effort) {
-	case "", "off":
+	normalized := normalizeReasoningEffort(effort)
+	if normalized == "" || normalized == "off" {
 		cfg.Thinking.Enabled = false
 		return nil
-	case "low", "medium", "high", "xhigh":
-		cfg.Thinking.Enabled = true
-		cfg.Thinking.Level = normalizeReasoningEffort(effort)
-		return nil
-	default:
+	}
+	if !isSupportedReasoningEffort(normalized) {
 		return fmt.Errorf("invalid reasoning_effort: %s", effort)
 	}
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = normalized
+	return nil
 }
 
 func normalizeReasoningEffort(effort string) string {

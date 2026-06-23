@@ -172,7 +172,7 @@ func (a *Agent) shouldAbortToolLoopWithResponse(response string, current, last *
 				// Function Calling 形式: role="tool" で tool_call_id 付き
 				a.History = append(a.History, api.Message{
 					Role:       "tool",
-					Content:    fmt.Sprintf("[SYSTEM] Tool loop detected: %s was called %d times. Stopping to prevent infinite loop.", current.Tool, threshold),
+					Content:    fmt.Sprintf("Tool loop detected: %s was called %d times. Execution stopped to prevent an infinite loop.", current.Tool, threshold),
 					ToolCallID: current.ID,
 					ToolName:   current.Tool,
 				})
@@ -180,7 +180,7 @@ func (a *Agent) shouldAbortToolLoopWithResponse(response string, current, last *
 				// テキストベース: role="user" で送信
 				a.History = append(a.History, api.Message{
 					Role:    "user",
-					Content: fmt.Sprintf("[SYSTEM WARNING] The same tool call was repeated %d times. Please try a different approach or ask the user for clarification.", threshold),
+					Content: fmt.Sprintf("Tool loop detected: the same tool call was repeated %d times. Try a different approach or ask the user for clarification.", threshold),
 				})
 			}
 			return true
@@ -260,23 +260,12 @@ func (a *Agent) handleStrReplaceErrors(toolCall *tools.ToolCall, result string) 
 			_, _ = fmt.Fprintln(out, "   4. Try delete_lines + insert_before/insert_after for line-based edits")
 			_, _ = fmt.Fprintln(out)
 
-			// AIに警告を送信
+			// 失敗結果の data は履歴へ残し、再試行方針は次 request の runtime directive に置く。
 			content := toolruntime.FormatTextToolResultContent(toolCall.Tool, result)
 			if keepToolResultHistory(toolCall) {
 				a.History = append(a.History, toolruntime.BuildToolResultMessage(toolCall, content, content))
 			}
-			a.History = append(a.History, api.Message{
-				Role: "user",
-				Content: `[SYSTEM WARNING] str_replace has failed multiple times. The old_str pattern was not found in the file.
-
-Suggested next steps:
-1. Use gather_context to inspect the target file or symbol
-2. Use read_file/search_code only if you need exact low-level control
-3. Ask the user for clarification
-4. Try a different approach (delete_lines + insert_before/insert_after)
-
-IMPORTANT: Do NOT retry str_replace with the same or similar old_str pattern. Take a different approach.`,
-			})
+			a.queueRuntimeDirective(strReplaceLoopRuntimeDirective)
 			a.strReplaceErrorCount = 0 // リセット
 			_, _ = fmt.Fprintln(a.output())
 			return true

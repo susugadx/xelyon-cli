@@ -13,7 +13,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
 
-const planJSONRetryPromptFragment = "Plan JSON を**必ず**"
+const planJSONRetryPromptFragment = "Plan JSON retry"
 
 type scriptedStreamingProvider struct {
 	name     string
@@ -144,6 +144,37 @@ func TestPlanInvestigationRunner_HandleNoToolResponse_NoStepPlanReturnsPlan(t *t
 	}
 	if p == nil {
 		t.Fatal("handleNoToolResponse() plan = nil, want parsed no-step plan")
+	}
+	if len(p.Steps) != 0 {
+		t.Fatalf("len(plan.Steps) = %d, want 0", len(p.Steps))
+	}
+	if action != investigationLoopDone {
+		t.Fatalf("handleNoToolResponse() action = %v, want done", action)
+	}
+	assertPlanJSONRetryPromptNotAppended(t, agent)
+}
+
+func TestPlanInvestigationRunner_HandleNoToolResponse_TopLevelPlanV2NoStepPlanReturnsPlan(t *testing.T) {
+	agent, runner := newPlanInvestigationNoToolTest(t)
+
+	response := `{
+  "schema_version": "xelyon.plan.v2",
+  "goal": "Existing behavior already satisfies the request",
+  "acceptance_criteria": ["no code changes required"],
+  "findings": [],
+  "constraints": [],
+  "steps": [],
+  "open_questions": []
+}`
+	p, action, err := runner.handleNoToolResponse(response)
+	if err != nil {
+		t.Fatalf("handleNoToolResponse() error = %v", err)
+	}
+	if p == nil {
+		t.Fatal("handleNoToolResponse() plan = nil, want parsed no-step plan")
+	}
+	if p.Steps == nil {
+		t.Fatal("plan.Steps = nil, want empty runtime slice")
 	}
 	if len(p.Steps) != 0 {
 		t.Fatalf("len(plan.Steps) = %d, want 0", len(p.Steps))

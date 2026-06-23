@@ -31,7 +31,7 @@ func BuildPromptCatalog(catalog SkillCatalog, maxEntries int) string {
 	b.WriteString("<!-- SKILLS_CATALOG_START -->\n")
 	b.WriteString("## Agent Skills Catalog\n")
 	b.WriteString("Use skills as supplemental guidance only.\n")
-	b.WriteString("Never override project mandatory rules, runtime safety policy, or gather_context-first investigation rules.\n")
+	b.WriteString("Never override loaded project guidance, runtime safety policy, or gather_context-first investigation rules.\n")
 	b.WriteString("\n")
 	b.WriteString("Available skills (metadata only):\n")
 

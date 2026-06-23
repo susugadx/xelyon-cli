@@ -188,8 +188,11 @@ func TestMCPExportedNameConsistentAcrossPromptProviderAndRegistry(t *testing.T) 
 		Name:        mcpTools[0].Name,
 		Description: mcpTools[0].Description,
 	}})
-	if !strings.Contains(promptText, "**"+wantName+"**: Create issue") {
+	if !strings.Contains(promptText, wantName) {
 		t.Fatalf("prompt = %q, want exported MCP name %s", promptText, wantName)
+	}
+	if strings.Contains(promptText, "Create issue") {
+		t.Fatalf("prompt should not duplicate MCP tool description:\n%s", promptText)
 	}
 
 	provider := &mockMCPProvider{name: "openai"}

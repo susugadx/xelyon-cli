@@ -7,8 +7,7 @@ import (
 )
 
 type projectInstructionBundleCacheDecision struct {
-	reuse    bool
-	cacheKey string
+	reuse bool
 }
 
 type projectInstructionBundleCache struct {
@@ -19,19 +18,18 @@ func newProjectInstructionBundleCache(agent *Agent) projectInstructionBundleCach
 	return projectInstructionBundleCache{agent: agent}
 }
 
-func (c projectInstructionBundleCache) decision(forceReload bool) projectInstructionBundleCacheDecision {
+func (c projectInstructionBundleCache) decision(forceReload bool, input string) projectInstructionBundleCacheDecision {
 	a := c.agent
 	if a == nil || forceReload || !a.projectInstructionBundleLoaded {
 		return projectInstructionBundleCacheDecision{}
 	}
-	cacheKey := c.currentKey()
+	cacheKey := c.currentKey(input)
 	return projectInstructionBundleCacheDecision{
-		reuse:    cacheKey == a.projectInstructionBundleKey,
-		cacheKey: cacheKey,
+		reuse: cacheKey == a.projectInstructionBundleKey,
 	}
 }
 
-func (c projectInstructionBundleCache) currentKey() string {
+func (c projectInstructionBundleCache) currentKey(input string) string {
 	a := c.agent
 	if a == nil {
 		return ""
@@ -40,7 +38,8 @@ func (c projectInstructionBundleCache) currentKey() string {
 	if cwd == "" {
 		return ""
 	}
-	return config.ComputeProjectInstructionBundleFingerprintForDir(a.cfg(), cwd, a.projectInstructionBundle)
+	inputPaths := projectInstructionInputPathsForAgent(a, input)
+	return config.ComputeProjectInstructionBundleFingerprintForDirWithInputPaths(a.cfg(), cwd, inputPaths, a.projectInstructionBundle)
 }
 
 func (c projectInstructionBundleCache) invalidate() {

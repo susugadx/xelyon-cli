@@ -110,14 +110,14 @@ func BuildLoopAbortHistoryMessage(tc *tools.ToolCall, idx, loopTriggerIdx, thres
 		if tc.ID != "" {
 			return api.Message{
 				Role:       "tool",
-				Content:    fmt.Sprintf("[SYSTEM] Tool loop detected: %s was called %d times. Stopping to prevent infinite loop.", tc.Tool, threshold),
+				Content:    fmt.Sprintf("Tool loop detected: %s was called %d times. Execution stopped to prevent an infinite loop.", tc.Tool, threshold),
 				ToolCallID: tc.ID,
 				ToolName:   tc.Tool,
 			}, true
 		}
 		return api.Message{
 			Role:    "user",
-			Content: fmt.Sprintf("[SYSTEM WARNING] The same tool call was repeated %d times. Please try a different approach or ask the user for clarification.", threshold),
+			Content: fmt.Sprintf("Tool loop detected: the same tool call was repeated %d times. Try a different approach or ask the user for clarification.", threshold),
 		}, true
 	}
 
@@ -126,7 +126,7 @@ func BuildLoopAbortHistoryMessage(tc *tools.ToolCall, idx, loopTriggerIdx, thres
 	}
 	return api.Message{
 		Role:       "tool",
-		Content:    "[SYSTEM] Skipped due to tool loop detection.",
+		Content:    "Skipped because a previous tool call in this batch triggered loop detection.",
 		ToolCallID: tc.ID,
 		ToolName:   tc.Tool,
 	}, true

@@ -16,6 +16,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/history"
 	"github.com/susugadx/xelyon-cli/internal/review"
 	reviewdomain "github.com/susugadx/xelyon-cli/internal/review/domain"
+	reviewmodelinput "github.com/susugadx/xelyon-cli/internal/review/modelinput"
 	reviewprobeplan "github.com/susugadx/xelyon-cli/internal/review/probeplan"
 	reviewreport "github.com/susugadx/xelyon-cli/internal/review/report"
 )
@@ -231,6 +232,7 @@ func TestAgentRunReviewSavesArtifactsWhenEnvEnabled(t *testing.T) {
 	runDir := filepath.Join(runsRoot, entries[0].Name())
 	for _, name := range []string{
 		"evidence.md",
+		"review_system_prompt.md",
 		"probe_plan_prompt.md",
 		"probe_plan_raw.json",
 		"probe_plan_final.json",
@@ -253,14 +255,12 @@ func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *tes
 	t.Chdir(repo)
 
 	var prompts []string
+	var systemPrompts []string
 	var toolUseDisabled []bool
 	var toolCounts []int
 	var updateModes []string
 	provider := &scriptedChatProvider{name: "openai"}
 	provider.chatWithToolsFn = func(call int, ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
-		if systemPrompt != "" {
-			t.Fatalf("systemPrompt = %q, want empty", systemPrompt)
-		}
 		if model != "review-model" {
 			t.Fatalf("model = %q, want review-model", model)
 		}
@@ -268,6 +268,7 @@ func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *tes
 			t.Fatalf("history = %#v, want single review prompt", history)
 		}
 		prompts = append(prompts, history[0].Content)
+		systemPrompts = append(systemPrompts, systemPrompt)
 		toolUseDisabled = append(toolUseDisabled, api.IsToolUseDisabled(ctx))
 		toolCounts = append(toolCounts, len(api.ToolDefinitionsFromContext(ctx)))
 		updateModes = append(updateModes, api.AssistantUpdateModeFromContext(ctx))
@@ -308,6 +309,15 @@ func TestAgentRunReviewRepairsInvalidModelJSONAndPreservesReviewIsolation(t *tes
 	}
 	if len(prompts) != 5 {
 		t.Fatalf("captured prompts = %d, want 5", len(prompts))
+	}
+	if len(systemPrompts) != 5 {
+		t.Fatalf("captured system prompts = %d, want 5", len(systemPrompts))
+	}
+	wantSystemPrompt := reviewmodelinput.BuildReviewSystemPrompt()
+	for i, systemPrompt := range systemPrompts {
+		if systemPrompt != wantSystemPrompt {
+			t.Fatalf("system prompt %d = %q, want reviewer constitution", i, systemPrompt)
+		}
 	}
 	for _, want := range []string{"Probe Plan JSON Repair", "{not-json"} {
 		if !strings.Contains(prompts[1], want) {

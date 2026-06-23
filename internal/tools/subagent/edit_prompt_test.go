@@ -20,11 +20,14 @@ func TestEditPromptBase_UsesSharedInvestigationBlock(t *testing.T) {
 	if !strings.Contains(editPromptBase, strings.TrimPrefix(promptfragments.SharedChangeGatherContextLine("If the affected surface is not already clear from the Project Map, known files, or orchestrator-provided scope, do this before narrower follow-up investigation."), "- ")) {
 		t.Fatal("editPromptBase should embed shared-change guidance")
 	}
-	if strings.Contains(editPromptBase, "search_code: code discovery tool") || strings.Contains(editPromptBase, "read_file: low-level exact-content reader") {
+	if strings.Contains(editPromptBase, "search_code: low-level exact-search tool") || strings.Contains(editPromptBase, "read_file: low-level exact-content override") {
 		t.Fatal("default editPromptBase should not advertise legacy low-level investigation tools")
 	}
-	if !strings.Contains(editPromptBase, "read_file: exact-content reader for edit/apply_patch exact-control override") {
+	if !strings.Contains(editPromptBase, "read_file: exact-content override for known files or ranges when edit/apply_patch needs precise context") {
 		t.Fatal("default editPromptBase should keep read_file exact-control guidance aligned with visible tools")
+	}
+	if !strings.Contains(editPromptBase, promptfragments.ProjectMapDataBoundaryLine()) {
+		t.Fatal("editPromptBase should define Project Map as data, not instructions")
 	}
 }
 
@@ -49,7 +52,19 @@ func TestEditPromptForEditTool_Legacy(t *testing.T) {
 	if !strings.Contains(prompt, promptfragments.LegacyStrReplaceContextSourceLine()) {
 		t.Error("legacy mode should allow gather_context as exact edit provenance")
 	}
-	if !strings.Contains(prompt, "search_code: code discovery tool") || !strings.Contains(prompt, "read_file: low-level exact-content reader") {
+	if !strings.Contains(prompt, "search_code: low-level exact-search tool") || !strings.Contains(prompt, "read_file: low-level exact-content override") {
 		t.Error("legacy mode should keep low-level investigation override guidance")
+	}
+}
+
+func TestEditPrompt_StillRestrictsEditsToParentScope(t *testing.T) {
+	for _, want := range []string{
+		"Make ONLY the changes explicitly requested",
+		"Do not touch files not mentioned in the task",
+		"If the orchestrator already specified the impact surface or target files, do not re-investigate broadly",
+	} {
+		if !strings.Contains(editPromptBase, want) {
+			t.Fatalf("editPromptBase should keep parent-scope restriction %q", want)
+		}
 	}
 }

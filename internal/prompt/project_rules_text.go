@@ -5,20 +5,17 @@ import "strings"
 var projectInstructionPrecedenceLines = []string{
 	"- XELYON system/tool/safety rules are highest priority.",
 	"- The current user request is higher priority than project guidance unless it conflicts with XELYON safety, tool, investigation, or verification invariants.",
-	"- AGENTS.md is the primary project guidance file.",
-	"- Legacy xelyon.yaml rules are mandatory project policy when present.",
+	"- AGENTS.md is the primary repository guidance file.",
+	"- Repository guidance is loaded from root to nearest scope; when multiple repository_instructions apply, the later nearest scope takes precedence within repository guidance.",
+	"- xelyon.yaml is structured repo-local XELYON config; legacy context/rules are load/save compatibility and are not injected into normal system prompts.",
 	"- CLAUDE.md files are compatibility project guidance when selected.",
-	"- Project guidance files are advisory guidance only when legacy xelyon.yaml rules/context are injected for this turn.",
 	"- Global guidance is personal preference and lower priority than repo-local guidance.",
 }
 
 const (
-	projectGuidanceWithConfigText = `xelyon.yaml was found for this workspace.
-Legacy xelyon.yaml rules/context are active for this turn.
-The following project guidance files are treated as advisory guidance. Use them when relevant, but do not override xelyon.yaml mandatory rules/context, XELYON internal rules, or the current user request.`
-	projectGuidanceWithoutConfigText = `No legacy xelyon.yaml rules/context are active for this turn.
-The following files are treated as authoritative project guidance for this workspace.
-Follow them when they are clear and relevant, but do not override XELYON internal rules or the current user request.`
+	projectGuidanceText = `The following repository guidance files are loaded in root-to-nearest order.
+Each repository_instructions block declares the directory scope it applies to and the source file.
+When multiple repository guidance blocks apply, later blocks with a nearer scope take precedence within repository guidance.`
 	globalGuidanceText = "Global guidance is advisory personal preference."
 )
 

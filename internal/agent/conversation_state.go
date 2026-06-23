@@ -23,12 +23,14 @@ func (a *Agent) restoreSessionConversation(session *history.Session) {
 	if session == nil {
 		a.History = nil
 		a.RestoreCompactedState(nil)
+		a.responseContext = responseContextSnapshot{}
 		a.restoreProviderResponseID("")
 		return
 	}
 
 	a.History = session.ToAPIMessages()
 	a.RestoreCompactedState(session)
+	a.responseContext = responseContextSnapshotFromSession(session)
 	a.restoreProviderResponseID(session.ResponseID)
 }
 
@@ -40,6 +42,7 @@ func (a *Agent) resetConversationState() error {
 	a.History = nil
 	a.lastOutputs = nil
 	a.RestoreCompactedState(nil)
+	a.responseContext = responseContextSnapshot{}
 	a.restoreProviderResponseID("")
 	a.resetProviderFacingTaskLedger()
 
@@ -253,6 +256,9 @@ func (a *Agent) restoreProviderResponseID(responseID string) {
 	}
 	if !a.responsesPersistResponseIDEnabled() {
 		responseID = ""
+	}
+	if strings.TrimSpace(responseID) == "" {
+		a.responseContext = responseContextSnapshot{}
 	}
 	if ridProvider, ok := a.CurrentProvider.(ResponseIDCapable); ok {
 		ridProvider.SetResponseID(strings.TrimSpace(responseID))

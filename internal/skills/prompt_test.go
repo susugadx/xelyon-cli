@@ -18,6 +18,12 @@ func TestBuildPromptCatalog_MetadataOnly(t *testing.T) {
 	if !strings.Contains(got, "activate_skill(name)") {
 		t.Fatalf("prompt catalog should instruct activate_skill(name):\n%s", got)
 	}
+	if !strings.Contains(got, "Never override loaded project guidance") {
+		t.Fatalf("prompt catalog should describe project guidance precedence:\n%s", got)
+	}
+	if strings.Contains(got, "project mandatory rules") {
+		t.Fatalf("prompt catalog should not use stale mandatory project rules wording:\n%s", got)
+	}
 	if strings.Contains(got, "# body one") || strings.Contains(got, "# body two") {
 		t.Fatalf("prompt catalog should not include SKILL.md body:\n%s", got)
 	}

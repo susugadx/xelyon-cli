@@ -54,6 +54,9 @@ func TestInjectProjectMap_AppendsProjectManifestAndKeepsFullRuntimeMap(t *testin
 	if !strings.Contains(agent.SystemPrompt, "## Project Map") {
 		t.Fatalf("expected Project Map in system prompt, got: %s", agent.SystemPrompt)
 	}
+	if !strings.Contains(agent.SystemPrompt, "<project_map_data>") {
+		t.Fatalf("expected Project Map data wrapper in system prompt, got: %s", agent.SystemPrompt)
+	}
 	if !strings.Contains(agent.SystemPrompt, "Top-level files:") {
 		t.Fatalf("expected manifest-style project map in system prompt, got: %s", agent.SystemPrompt)
 	}

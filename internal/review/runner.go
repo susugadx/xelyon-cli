@@ -118,6 +118,7 @@ func (r *ReviewRunner) Run(ctx context.Context, req ReviewRequest) (reviewreport
 	evidenceMarkdown := reviewmodelinput.RenderReviewEvidenceMarkdown(bundle)
 	evidenceRedactor := newReviewRunnerPromptRedactor(bundle, nil)
 	r.saveReviewRunTextArtifact("evidence.md", evidenceMarkdown, evidenceRedactor)
+	r.saveReviewRunTextArtifact("review_system_prompt.md", buildReviewModelSystemPrompt(), evidenceRedactor)
 	if bundle.WebSearchEvidence.Enabled {
 		r.saveReviewRunJSONArtifact("web_search_evidence.json", bundle.WebSearchEvidence, evidenceRedactor)
 	}

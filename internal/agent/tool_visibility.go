@@ -62,11 +62,11 @@ func (p toolVisibilityPolicy) normalModeRecoveryPrompt(kind normalModeRecoveryPr
 	toolExamples := p.normalModeRecoveryToolExamples()
 	switch kind {
 	case normalModeRecoveryPromptStopPlanning:
-		return "[SYSTEM] STOP planning. Pick the FIRST change and execute it NOW using the appropriate visible tools (" + toolExamples + ", etc). One tool call, no explanation."
+		return "Normal mode recovery: the previous response was still a text plan. If there is enough evidence, execute the next required change with visible tools (" + toolExamples + ", etc). If evidence is missing, gather the needed context first."
 	case normalModeRecoveryPromptNoTextPlan:
-		return "[SYSTEM] Do NOT output plans as numbered text. Execute the required changes directly using visible tools (" + toolExamples + ", etc)."
+		return "Normal mode recovery: do not respond with another numbered text plan. Use visible tools (" + toolExamples + ", etc) when the evidence is sufficient, or gather missing context first."
 	default:
-		return "[SYSTEM] You are in NORMAL MODE. Do NOT output JSON directly. Execute the required changes directly using visible tools (" + toolExamples + ", etc)."
+		return "Normal mode recovery: do not output Plan JSON in normal mode. If there is enough evidence, execute the required changes with visible tools (" + toolExamples + ", etc). If evidence is missing, gather the needed context first."
 	}
 }
 

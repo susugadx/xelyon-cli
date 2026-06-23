@@ -3,6 +3,7 @@ package subagent
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -80,8 +81,8 @@ func TestSpawnAgentToolParameters(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected properties map, got %T", params["properties"])
 	}
-	if len(properties) != 2 {
-		t.Fatalf("len(properties) = %d, want 2", len(properties))
+	if len(properties) != 4 {
+		t.Fatalf("len(properties) = %d, want 4", len(properties))
 	}
 	if _, ok := properties["message"]; !ok {
 		t.Fatal("message parameter is missing")
@@ -89,12 +90,43 @@ func TestSpawnAgentToolParameters(t *testing.T) {
 	if _, ok := properties["task_type"]; !ok {
 		t.Fatal("task_type parameter is missing")
 	}
-	// model, reasoning_effort はスキーマに含めない（LLMに送るトークン削減）
-	if _, ok := properties["model"]; ok {
-		t.Fatal("model parameter should not be in schema")
+	if _, ok := properties["model"]; !ok {
+		t.Fatal("model parameter is missing")
 	}
-	if _, ok := properties["reasoning_effort"]; ok {
-		t.Fatal("reasoning_effort parameter should not be in schema")
+	if _, ok := properties["reasoning_effort"]; !ok {
+		t.Fatal("reasoning_effort parameter is missing")
+	}
+	reasoningEffort, ok := properties["reasoning_effort"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("reasoning_effort schema = %T, want map[string]interface{}", properties["reasoning_effort"])
+	}
+	if got, want := reasoningEffort["enum"], []string{"off", "low", "medium", "high", "xhigh"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("reasoning_effort enum = %#v, want %#v", got, want)
+	}
+	if got := params["additionalProperties"]; got != false {
+		t.Fatalf("additionalProperties = %#v, want false", got)
+	}
+}
+
+func TestReasoningEffortSchemaEnumMatchesRuntime(t *testing.T) {
+	for _, effort := range []string{"off", "low", "medium", "high", "xhigh"} {
+		cfg := config.DefaultConfig()
+		if err := applyReasoningEffort(cfg, effort); err != nil {
+			t.Fatalf("applyReasoningEffort(%q) error = %v", effort, err)
+		}
+		if effort == "off" {
+			if cfg.Thinking.Enabled {
+				t.Fatalf("applyReasoningEffort(%q) enabled thinking, want disabled", effort)
+			}
+			continue
+		}
+		if !cfg.Thinking.Enabled || cfg.Thinking.Level != effort {
+			t.Fatalf("applyReasoningEffort(%q) thinking = enabled:%t level:%q", effort, cfg.Thinking.Enabled, cfg.Thinking.Level)
+		}
+	}
+
+	if err := applyReasoningEffort(config.DefaultConfig(), "highest"); err == nil {
+		t.Fatal("applyReasoningEffort(highest) error = nil, want invalid reasoning_effort error")
 	}
 }
 
@@ -242,15 +274,17 @@ func TestWaitAgentToolParameters(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected properties map, got %T", params["properties"])
 	}
-	if len(properties) != 1 {
-		t.Fatalf("len(properties) = %d, want 1", len(properties))
+	if len(properties) != 2 {
+		t.Fatalf("len(properties) = %d, want 2", len(properties))
 	}
 	if _, ok := properties["ids"]; !ok {
 		t.Fatal("ids parameter is missing")
 	}
-	// timeout_ms はスキーマに含めない（LLMに送るトークン削減）
-	if _, ok := properties["timeout_ms"]; ok {
-		t.Fatal("timeout_ms parameter should not be in schema")
+	if _, ok := properties["timeout_ms"]; !ok {
+		t.Fatal("timeout_ms parameter is missing")
+	}
+	if got := params["additionalProperties"]; got != false {
+		t.Fatalf("additionalProperties = %#v, want false", got)
 	}
 }
 

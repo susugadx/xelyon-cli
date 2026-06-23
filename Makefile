@@ -1,6 +1,6 @@
 # XELYON CLI Makefile
 
-.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke deepseek-doctor-smoke gemini-doctor-smoke claude-doctor-smoke groq-doctor-smoke openrouter-doctor-smoke kimi-doctor-smoke ollama-doctor-smoke doctor-smoke-matrix kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
+.PHONY: build test fmt lint gen-config gen-docs gen-registry gen-help gen-all clean check verify-fast ci-check ci-check-full e2e azure-smoke azure-doctor-smoke openai-doctor-smoke deepseek-doctor-smoke gemini-doctor-smoke claude-doctor-smoke groq-doctor-smoke openrouter-doctor-smoke kimi-doctor-smoke ollama-doctor-smoke doctor-smoke-matrix kimi-smoke kimi-tool-smoke kimi-image-smoke kimi-web-search-smoke bedrock-smoke bedrock-doctor-smoke bedrock-smoke-matrix bedrock-smoke-probe release-check ci-verify-deps ci-check-fmt ci-check-tidy ci-build ci-check-binary-size ci-lint ci-test ci-check-coverage release-test
 
 CI_BINARY := xelyon
 CI_COVERAGE_FILE := coverage.txt
@@ -69,6 +69,15 @@ clean:
 
 # 全てのチェック
 check: fmt test lint
+
+# 実装中の軽量共通チェック（テストは touched package ごとに別途実行）
+verify-fast:
+	@$(MAKE) --no-print-directory ci-check-fmt
+	@$(MAKE) --no-print-directory ci-check-tidy
+	@$(MAKE) --no-print-directory ci-build
+	@$(MAKE) --no-print-directory ci-lint
+	@rm -f $(CI_BINARY)
+	@echo "✅ Fast verification checks passed!"
 
 # CI の依存関係整合性チェック
 ci-verify-deps:

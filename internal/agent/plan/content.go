@@ -6,7 +6,7 @@ func hasPlanContent(p Plan) bool {
 	if strings.TrimSpace(p.Summary) != "" {
 		return true
 	}
-	if hasNonEmptyPlanValues(p.Findings, p.Evidence, p.Constraints) {
+	if hasNonEmptyPlanValues(p.AcceptanceCriteria, p.Findings, p.Evidence, p.Constraints, p.OpenQuestions) {
 		return true
 	}
 	for _, step := range p.Steps {

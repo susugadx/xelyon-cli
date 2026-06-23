@@ -61,7 +61,7 @@ func loadPlanAutoCompressionMessages(t *testing.T, agent *Agent) []api.Message {
 func assertPlanAutoCompressionSummary(t *testing.T, msg api.Message, context string) {
 	t.Helper()
 
-	if msg.Role != "system" || !strings.Contains(msg.Content, planAutoCompressionSummary) {
+	if msg.Role != "assistant" || !strings.Contains(msg.Content, planAutoCompressionSummary) {
 		t.Fatalf("%s first message = %#v, want compressed pre-plan summary", context, msg)
 	}
 	if strings.Contains(msg.Content, "old context") {
@@ -286,7 +286,7 @@ func TestPlanModeChatOnceSkipsInTurnAutoCompression(t *testing.T) {
 	if len(loadedMessages) != 6 {
 		t.Fatalf("len(loaded.ToAPIMessages()) = %d, want old history + original user + assistant/tool/final", len(loadedMessages))
 	}
-	if loadedMessages[0].Role == "system" && strings.Contains(loadedMessages[0].Content, planAutoCompressionSummary) {
+	if loadedMessages[0].Role == "assistant" && strings.Contains(loadedMessages[0].Content, planAutoCompressionSummary) {
 		t.Fatalf("loaded history was compressed during one-shot plan mode: %#v", loadedMessages[0])
 	}
 	if !strings.Contains(loadedMessages[0].Content, "old context user") {

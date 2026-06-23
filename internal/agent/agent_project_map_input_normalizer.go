@@ -6,10 +6,16 @@ import (
 
 func cleanProjectMapInputPathCandidate(candidate string) string {
 	candidate = strings.TrimSpace(candidate)
-	candidate = strings.Trim(candidate, ".,:;!?()[]{}<>")
-	candidate = strings.Trim(candidate, "\"'`")
+	candidate = strings.TrimLeft(candidate, ",:;!?()[]{}<>\"'`")
 	candidate = strings.ReplaceAll(candidate, "\\", "/")
+	if strings.HasSuffix(candidate, "/...") {
+		return ""
+	}
+	candidate = strings.TrimRight(candidate, ".,:;!?()[]{}<>\"'`")
 	if candidate == "" {
+		return ""
+	}
+	if candidate == "." || candidate == "./" || candidate == "/" {
 		return ""
 	}
 	if strings.HasPrefix(candidate, "http://") || strings.HasPrefix(candidate, "https://") {
