@@ -26,9 +26,9 @@ Goal の完了条件は、v1 の stable contract が実装・テスト・docs �
 - [x] Phase 0/1: contract foundation、`schema_version`、`input` metadata、`--prompt-file`、stdin 入力、Headless docs 最小更新を実装した。
   - Commit: `42265919 headless CI 入力契約を追加`
   - Verification: focused headless tests、`git diff --check`、`make verify-fast`、`make ci-check`
-- [ ] Phase 2-A: `failure_reason`、`exit_policy`、`recommended_exit_code` と `--exit-code-policy legacy|ci` を追加する。
-  - Next recommended tranche.
+- [x] Phase 2-A: `failure_reason`、`exit_policy`、`recommended_exit_code` と `--exit-code-policy legacy|ci` を追加した。
   - Scope: 既存 error path の分類と exit-code mapping の土台まで。`--fail-on-tool-error` は Phase 2-B に分ける。
+  - Verification: focused headless / exit policy tests、`git diff --check`
 - [ ] Phase 2-B: `--fail-on-tool-error` を追加し、strict mode だけ tool failure を headless failure に昇格する。
 - [ ] Phase 3: `summary.changed_files`、`summary.commands`、`summary.final_checks` を source-of-truth 経由で追加する。
 - [ ] Phase 4: `--read-only` / `--dry-run` no-mutation safety mode を追加する。

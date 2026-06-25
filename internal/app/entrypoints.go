@@ -17,11 +17,18 @@ type HeadlessInput = agent.HeadlessInput
 // HeadlessInputSource は headless prompt の入力元を表す。
 type HeadlessInputSource = agent.HeadlessInputSource
 
+// HeadlessExitPolicy は headless JSON の推奨 exit code policy を表す。
+type HeadlessExitPolicy = agent.HeadlessExitPolicy
+
 const (
 	// HeadlessSchemaVersion は headless JSON contract の schema version。
 	HeadlessSchemaVersion = agent.HeadlessSchemaVersion
 	// HeadlessStatusError は headless JSON の失敗 status。
 	HeadlessStatusError = agent.HeadlessStatusError
+	// HeadlessExitPolicyLegacy は既存互換の non-zero error code policy。
+	HeadlessExitPolicyLegacy = agent.HeadlessExitPolicyLegacy
+	// HeadlessExitPolicyCI は CI 向けの詳細 exit code policy。
+	HeadlessExitPolicyCI = agent.HeadlessExitPolicyCI
 	// HeadlessErrorTypeConfig は CLI/config/input validation 系の headless error type。
 	HeadlessErrorTypeConfig = agent.HeadlessErrorTypeConfig
 	// HeadlessInputSourceArgs は positional args 由来の prompt input source。
@@ -37,9 +44,24 @@ func NewHeadlessInput(source HeadlessInputSource, promptFile string, byteCount i
 	return agent.NewHeadlessInput(source, promptFile, byteCount)
 }
 
+// ParseHeadlessExitPolicy は CLI flag 値を HeadlessExitPolicy に変換する。
+func ParseHeadlessExitPolicy(value string) (HeadlessExitPolicy, error) {
+	return agent.ParseHeadlessExitPolicy(value)
+}
+
+// ApplyHeadlessExitPolicy は HeadlessResult に exit policy と推奨 exit code を反映する。
+func ApplyHeadlessExitPolicy(result *HeadlessResult, policy HeadlessExitPolicy) (*HeadlessResult, error) {
+	return agent.ApplyHeadlessExitPolicy(result, policy)
+}
+
 // NewHeadlessConfigErrorResult は config/input validation 用の headless JSON error を作る。
 func NewHeadlessConfigErrorResult(provider, model, message string) *HeadlessResult {
 	return agent.NewErrorResult(provider, model, agent.HeadlessErrorTypeConfig, message, 0)
+}
+
+// NewHeadlessUsageErrorResult は CLI 入力 validation 用の headless JSON error を作る。
+func NewHeadlessUsageErrorResult(provider, model, message string) *HeadlessResult {
+	return agent.NewUsageErrorResult(provider, model, message, 0)
 }
 
 // NewHeadlessProviderSetupRequiredResult は provider setup 未完了の headless JSON error を作る。

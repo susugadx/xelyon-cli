@@ -18,21 +18,22 @@ import (
 )
 
 var (
-	resume        bool
-	once          bool
-	interactive   bool
-	quiet         bool
-	providerFlag  string
-	modelFlag     string
-	autoApprove   bool
-	loopThreshold int
-	diffLines     int
-	outputFormat  string
-	headless      bool
-	noUpdateCheck bool
-	imageFlag     string
-	promptFile    string
-	legacyNoTUI   bool
+	resume         bool
+	once           bool
+	interactive    bool
+	quiet          bool
+	providerFlag   string
+	modelFlag      string
+	autoApprove    bool
+	loopThreshold  int
+	diffLines      int
+	outputFormat   string
+	headless       bool
+	exitCodePolicy string
+	noUpdateCheck  bool
+	imageFlag      string
+	promptFile     string
+	legacyNoTUI    bool
 
 	runLegacyInteractive           = app.RunLegacyInteractiveWithConfig
 	runLegacyInteractiveWithResume = app.RunLegacyInteractiveWithResumeWithConfig
@@ -74,17 +75,22 @@ Examples:
   xelyon -p deepseek -m deepseek-chat             # Short flags`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resolvedOutputFormat, err := resolveOutputFormat(outputFormat, headless)
+			resolvedExitPolicy, err := app.ParseHeadlessExitPolicy(exitCodePolicy)
 			if err != nil {
 				return err
 			}
 
+			resolvedOutputFormat, err := resolveOutputFormat(outputFormat, headless)
+			if err != nil {
+				return commandErrorForExitPolicy(err, resolvedExitPolicy, 2)
+			}
+
 			mode, err := resolveExecutionMode(args, resolvedOutputFormat)
 			if err != nil {
-				return err
+				return commandErrorForExitPolicy(err, resolvedExitPolicy, 2)
 			}
 			if headlessPromptFileFlagChanged(cmd) && mode != executionModeHeadless {
-				return fmt.Errorf("--prompt-file can only be used with --headless or --output-format json")
+				return commandErrorForExitPolicy(fmt.Errorf("--prompt-file can only be used with --headless or --output-format json"), resolvedExitPolicy, 2)
 			}
 
 			// バージョンチェック（--no-update-check または JSON 出力でない場合）
@@ -103,8 +109,8 @@ Examples:
 			case executionModeHeadless:
 				promptInput, err := resolveHeadlessPromptInput(cmd, args)
 				if err != nil {
-					result := app.NewHeadlessConfigErrorResult("", "", err.Error()).WithInput(promptInput.input)
-					return writeHeadlessResult(cmd, result)
+					result := app.NewHeadlessUsageErrorResult("", "", err.Error()).WithInput(promptInput.input)
+					return writeHeadlessResult(cmd, result, resolvedExitPolicy)
 				}
 				runtime, err := loadRuntimeSelectionForMode(cmd, mode)
 				if err != nil {
@@ -112,7 +118,7 @@ Examples:
 					if errors.As(err, &setupErr) {
 						result := app.NewHeadlessProviderSetupRequiredResult(setupErr.provider, setupErr.model, setupErr.message).
 							WithInput(promptInput.input)
-						return writeHeadlessResult(cmd, result)
+						return writeHeadlessResult(cmd, result, resolvedExitPolicy)
 					}
 					return err
 				}
@@ -121,7 +127,7 @@ Examples:
 					result = app.NewHeadlessConfigErrorResult(runtime.provider.Name(), runtime.model, "headless run returned nil result")
 				}
 				result.WithInput(promptInput.input)
-				return writeHeadlessResult(cmd, result)
+				return writeHeadlessResult(cmd, result, resolvedExitPolicy)
 			case executionModeOnce:
 				runtime, err := loadRuntimeSelectionForMode(cmd, mode)
 				if err != nil {
@@ -181,6 +187,32 @@ func (e *headlessProviderSetupRequiredError) Error() string {
 	return e.message
 }
 
+type commandExitCodeError struct {
+	message string
+	code    int
+}
+
+func (e *commandExitCodeError) Error() string {
+	return e.message
+}
+
+func (e *commandExitCodeError) ExitCode() int {
+	return e.code
+}
+
+func commandErrorForExitPolicy(err error, policy app.HeadlessExitPolicy, code int) error {
+	if err == nil {
+		return nil
+	}
+	if policy != app.HeadlessExitPolicyCI {
+		return err
+	}
+	return &commandExitCodeError{
+		message: err.Error(),
+		code:    code,
+	}
+}
+
 func resolveProviderForExecutionMode(cmd *cobra.Command, providerName string, mode executionMode, model string) (api.Provider, error) {
 	if executionModeIsInteractive(mode) {
 		return resolveInteractiveProvider(providerName)
@@ -199,7 +231,11 @@ func resolveProviderForExecutionMode(cmd *cobra.Command, providerName string, mo
 	return nil, err
 }
 
-func writeHeadlessResult(cmd *cobra.Command, result *app.HeadlessResult) error {
+func writeHeadlessResult(cmd *cobra.Command, result *app.HeadlessResult, policy app.HeadlessExitPolicy) error {
+	result, err := app.ApplyHeadlessExitPolicy(result, policy)
+	if err != nil {
+		return err
+	}
 	jsonOutput, err := result.ToJSON()
 	if err != nil {
 		return err
@@ -209,7 +245,10 @@ func writeHeadlessResult(cmd *cobra.Command, result *app.HeadlessResult) error {
 		if cmd != nil {
 			cmd.SilenceUsage = true
 		}
-		return fmt.Errorf("headless execution failed")
+		return &commandExitCodeError{
+			message: "headless execution failed",
+			code:    result.RecommendedExitCode,
+		}
 	}
 	return nil
 }
@@ -217,6 +256,9 @@ func writeHeadlessResult(cmd *cobra.Command, result *app.HeadlessResult) error {
 func configureRootCommand(rootCmd *cobra.Command) {
 	// バージョン表示のカスタマイズ
 	rootCmd.SetVersionTemplate(version.GetFullVersion() + "\n")
+	rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		return commandErrorForExitPolicy(err, exitPolicyForFlagParseError(), 2)
+	})
 
 	// プロバイダー/モデル指定フラグ
 	providerHelp := fmt.Sprintf("Specify LLM provider (%s)", strings.Join(config.GetDisplayProviders(), ", "))
@@ -239,6 +281,7 @@ func configureRootCommand(rootCmd *cobra.Command) {
 	// 新規: --output-format/--headless フラグ
 	rootCmd.Flags().StringVar(&outputFormat, "output-format", "text", "Output format: text or json")
 	rootCmd.Flags().BoolVar(&headless, "headless", false, "Run in headless mode (JSON output, no UI)")
+	rootCmd.Flags().StringVar(&exitCodePolicy, "exit-code-policy", string(app.HeadlessExitPolicyLegacy), "Exit code policy: legacy or ci")
 	rootCmd.Flags().StringVar(&promptFile, "prompt-file", "", "Read headless prompt from file path or '-' for stdin")
 
 	// 新規: --no-update-check フラグ
@@ -259,6 +302,64 @@ func configureRootCommand(rootCmd *cobra.Command) {
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(exitCodeForError(err))
 	}
+}
+
+type exitCodeCarrier interface {
+	ExitCode() int
+}
+
+func exitCodeForError(err error) int {
+	var exitErr exitCodeCarrier
+	if errors.As(err, &exitErr) {
+		if code := exitErr.ExitCode(); code > 0 {
+			return code
+		}
+	}
+	return 1
+}
+
+func exitPolicyForFlagParseError() app.HeadlessExitPolicy {
+	if policy, ok := parseRawExitCodePolicy(os.Args[1:]); ok {
+		return policy
+	}
+	policy, err := app.ParseHeadlessExitPolicy(exitCodePolicy)
+	if err != nil {
+		return app.HeadlessExitPolicyLegacy
+	}
+	return policy
+}
+
+func parseRawExitCodePolicy(args []string) (app.HeadlessExitPolicy, bool) {
+	var policy app.HeadlessExitPolicy
+	found := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if arg == "--exit-code-policy" {
+			if i+1 >= len(args) {
+				return app.HeadlessExitPolicyLegacy, false
+			}
+			parsed, err := app.ParseHeadlessExitPolicy(args[i+1])
+			if err != nil {
+				return app.HeadlessExitPolicyLegacy, false
+			}
+			policy = parsed
+			found = true
+			i++
+			continue
+		}
+		if strings.HasPrefix(arg, "--exit-code-policy=") {
+			parsed, err := app.ParseHeadlessExitPolicy(strings.TrimPrefix(arg, "--exit-code-policy="))
+			if err != nil {
+				return app.HeadlessExitPolicyLegacy, false
+			}
+			policy = parsed
+			found = true
+		}
+	}
+	return policy, found
 }

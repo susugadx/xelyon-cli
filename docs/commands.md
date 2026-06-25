@@ -999,7 +999,7 @@ env value、raw args、server error detail、tool schema body、description 全�
 
 対話なしでJSON形式で結果を出力します。他のツールやスクリプトから呼び出す際に便利です。
 Gemini native web search の `usageMetadata` は通常の token usage として `tokens` / `cost` に含まれます。Kimi `$web_search` を使った場合、既存の `cost` は token cost + web search call fee の合計を維持し、`web_search` object に `calls`、`fee_estimate`、`result_tokens` を分けて出します。検索結果 tokens は次 request の `prompt_tokens` に含まれる前提の表示用観測値で、headless JSON の token totals には再加算しません。
-API error、cancel、tool loop limit 到達時は `status: "error"` と `error.type` を出力し、CLI は non-zero exit code を返します。
+API error、cancel、tool loop limit 到達時は `status: "error"` と `error.type` を出力し、CLI は non-zero exit code を返します。`error.type` は既存互換の分類で、CI 向け分類は `failure_reason` に出ます。成功時は `failure_reason` を省略し、`recommended_exit_code` は `0` です。既定の `exit_policy` は `legacy` で、error は従来どおり exit code `1` です。CI で詳細 code が必要な場合は `--exit-code-policy ci` を指定します。
 
 ```bash
 # JSON出力
@@ -1023,6 +1023,8 @@ cat prompt.md | xelyon --headless --prompt-file -
     "source": "args",
     "bytes": 42
   },
+  "exit_policy": "legacy",
+  "recommended_exit_code": 0,
   "duration_ms": 1234,
   "timestamp": "2026-05-25T12:00:00+09:00",
   "cost": 0.00012
@@ -1032,10 +1034,10 @@ cat prompt.md | xelyon --headless --prompt-file -
 xelyon --headless "バグを修正して" | jq -r '.response'
 
 # CI/CDパイプラインで使用
-xelyon --output-format json "テストを実行して" | jq -e '.status == "success"'
+xelyon --output-format json --exit-code-policy ci "テストを実行して" | jq -e '.status == "success"'
 ```
 
-`input.source` は `args`、`prompt_file`、`stdin` のいずれかです。`--prompt-file prompt.md` の場合は `input.prompt_file` に指定 path が入り、prompt 本文は JSON には出ません。prompt file と stdin は 1 MiB まで読み込み、空入力、directory、存在しない file、query 引数との併用は `status: "error"` / `error.type: "config_error"` になります。
+`input.source` は `args`、`prompt_file`、`stdin` のいずれかです。`--prompt-file prompt.md` の場合は `input.prompt_file` に指定 path が入り、prompt 本文は JSON には出ません。prompt file と stdin は 1 MiB まで読み込み、空入力、directory、存在しない file、query 引数との併用は `status: "error"` / `error.type: "config_error"` / `failure_reason: "usage_error"` になります。`--exit-code-policy ci` では、usage error は `recommended_exit_code: 2`、provider setup required は `3`、API error は `6`、cancelled は `7` です。tool loop limit と unknown error は `1` のままです。
 
 ### 対話的確認モード
 

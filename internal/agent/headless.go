@@ -46,20 +46,23 @@ type HeadlessInput struct {
 
 // HeadlessResult はHeadlessモードの実行結果
 type HeadlessResult struct {
-	SchemaVersion      string           `json:"schema_version"`                // headless JSON schema version
-	Status             string           `json:"status"`                        // HeadlessStatusSuccess or HeadlessStatusError
-	Provider           string           `json:"provider"`                      // LLMプロバイダー名
-	Model              string           `json:"model"`                         // モデル名
-	Response           string           `json:"response"`                      // AIの最終回答
-	Input              *HeadlessInput   `json:"input,omitempty"`               // prompt input metadata
-	ToolCalls          []ToolCallResult `json:"tool_calls,omitempty"`          // 実行されたツール呼び出し
-	Tokens             *TokenUsage      `json:"tokens,omitempty"`              // トークン使用量
-	WebSearch          *WebSearchUsage  `json:"web_search,omitempty"`          // ネイティブ Web 検索の固定料金観測
-	DurationMs         int64            `json:"duration_ms"`                   // 実行時間（ミリ秒）
-	Timestamp          string           `json:"timestamp"`                     // タイムスタンプ（RFC3339）
-	Error              *ErrorInfo       `json:"error,omitempty"`               // エラー情報
-	Cost               float64          `json:"cost"`                          // 推定コスト（USD）
-	PricingUnavailable bool             `json:"pricing_unavailable,omitempty"` // 既知の料金表がない場合 true
+	SchemaVersion       string                `json:"schema_version"`                // headless JSON schema version
+	Status              string                `json:"status"`                        // HeadlessStatusSuccess or HeadlessStatusError
+	Provider            string                `json:"provider"`                      // LLMプロバイダー名
+	Model               string                `json:"model"`                         // モデル名
+	Response            string                `json:"response"`                      // AIの最終回答
+	Input               *HeadlessInput        `json:"input,omitempty"`               // prompt input metadata
+	FailureReason       HeadlessFailureReason `json:"failure_reason,omitempty"`      // CI 向け失敗分類
+	ExitPolicy          HeadlessExitPolicy    `json:"exit_policy"`                   // exit code policy
+	RecommendedExitCode int                   `json:"recommended_exit_code"`         // 推奨 process exit code
+	ToolCalls           []ToolCallResult      `json:"tool_calls,omitempty"`          // 実行されたツール呼び出し
+	Tokens              *TokenUsage           `json:"tokens,omitempty"`              // トークン使用量
+	WebSearch           *WebSearchUsage       `json:"web_search,omitempty"`          // ネイティブ Web 検索の固定料金観測
+	DurationMs          int64                 `json:"duration_ms"`                   // 実行時間（ミリ秒）
+	Timestamp           string                `json:"timestamp"`                     // タイムスタンプ（RFC3339）
+	Error               *ErrorInfo            `json:"error,omitempty"`               // エラー情報
+	Cost                float64               `json:"cost"`                          // 推定コスト（USD）
+	PricingUnavailable  bool                  `json:"pricing_unavailable,omitempty"` // 既知の料金表がない場合 true
 }
 
 // ToolCallResult は個別のツール呼び出し結果
@@ -119,7 +122,10 @@ func (r *HeadlessResult) WithInput(input HeadlessInput) *HeadlessResult {
 
 // ToJSON は HeadlessResult を JSON 文字列に変換
 func (r *HeadlessResult) ToJSON() (string, error) {
-	normalized := r.normalizedForJSON()
+	normalized, err := r.normalizedForJSON()
+	if err != nil {
+		return "", err
+	}
 	bytes, err := json.MarshalIndent(normalized, "", "  ")
 	if err != nil {
 		return "", err
@@ -127,20 +133,27 @@ func (r *HeadlessResult) ToJSON() (string, error) {
 	return string(bytes), nil
 }
 
-func (r *HeadlessResult) normalizedForJSON() HeadlessResult {
+func (r *HeadlessResult) normalizedForJSON() (HeadlessResult, error) {
 	if r == nil {
-		return HeadlessResult{SchemaVersion: HeadlessSchemaVersion}
+		result := HeadlessResult{SchemaVersion: HeadlessSchemaVersion}
+		result.setExitPolicy(HeadlessExitPolicyLegacy)
+		return result, nil
 	}
 	normalized := *r
 	if normalized.SchemaVersion == "" {
 		normalized.SchemaVersion = HeadlessSchemaVersion
 	}
-	return normalized
+	policy, err := ParseHeadlessExitPolicy(string(normalized.ExitPolicy))
+	if err != nil {
+		return HeadlessResult{}, err
+	}
+	normalized.setExitPolicy(policy)
+	return normalized, nil
 }
 
 // NewSuccessResult は成功結果を生成
 func NewSuccessResult(provider, model, response string, toolCalls []ToolCallResult, durationMs int64) *HeadlessResult {
-	return &HeadlessResult{
+	result := &HeadlessResult{
 		SchemaVersion: HeadlessSchemaVersion,
 		Status:        HeadlessStatusSuccess,
 		Provider:      provider,
@@ -149,12 +162,15 @@ func NewSuccessResult(provider, model, response string, toolCalls []ToolCallResu
 		ToolCalls:     toolCalls,
 		DurationMs:    durationMs,
 		Timestamp:     time.Now().Format(time.RFC3339),
+		ExitPolicy:    HeadlessExitPolicyLegacy,
 	}
+	result.RecommendedExitCode = RecommendedHeadlessExitCode(result.Status, result.FailureReason, result.ExitPolicy)
+	return result
 }
 
 // NewErrorResult はエラー結果を生成
 func NewErrorResult(provider, model string, errType, errMsg string, durationMs int64) *HeadlessResult {
-	return &HeadlessResult{
+	result := &HeadlessResult{
 		SchemaVersion: HeadlessSchemaVersion,
 		Status:        HeadlessStatusError,
 		Provider:      provider,
@@ -166,7 +182,32 @@ func NewErrorResult(provider, model string, errType, errMsg string, durationMs i
 			Type:    errType,
 			Message: errMsg,
 		},
+		ExitPolicy: HeadlessExitPolicyLegacy,
 	}
+	result.FailureReason = result.normalizedFailureReason()
+	result.RecommendedExitCode = RecommendedHeadlessExitCode(result.Status, result.FailureReason, result.ExitPolicy)
+	return result
+}
+
+// NewUsageErrorResult は CLI 入力 validation 用の headless JSON error を生成する。
+func NewUsageErrorResult(provider, model, errMsg string, durationMs int64) *HeadlessResult {
+	result := NewErrorResult(provider, model, HeadlessErrorTypeConfig, errMsg, durationMs)
+	result.FailureReason = HeadlessFailureReasonUsageError
+	result.RecommendedExitCode = RecommendedHeadlessExitCode(result.Status, result.FailureReason, result.ExitPolicy)
+	return result
+}
+
+// ApplyHeadlessExitPolicy は HeadlessResult に exit policy と推奨 exit code を反映する。
+func ApplyHeadlessExitPolicy(result *HeadlessResult, policy HeadlessExitPolicy) (*HeadlessResult, error) {
+	normalizedPolicy, err := ParseHeadlessExitPolicy(string(policy))
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		result = &HeadlessResult{SchemaVersion: HeadlessSchemaVersion}
+	}
+	result.setExitPolicy(normalizedPolicy)
+	return result, nil
 }
 
 // NewToolLoopLimitResult は headless tool loop limit 到達時の結果を生成する。

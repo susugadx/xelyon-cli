@@ -278,4 +278,13 @@ func requireHeadlessConfigError(t *testing.T, parsed agent.HeadlessResult, stder
 	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeConfig {
 		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeConfig)
 	}
+	if parsed.FailureReason != agent.HeadlessFailureReasonUsageError {
+		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonUsageError)
+	}
+	if parsed.ExitPolicy != agent.HeadlessExitPolicyLegacy {
+		t.Fatalf("exit_policy = %q, want %q", parsed.ExitPolicy, agent.HeadlessExitPolicyLegacy)
+	}
+	if parsed.RecommendedExitCode != 1 {
+		t.Fatalf("recommended_exit_code = %d, want 1", parsed.RecommendedExitCode)
+	}
 }

@@ -63,6 +63,7 @@ func resetRootFlagsForTest() {
 	diffLines = -1
 	outputFormat = "text"
 	headless = false
+	exitCodePolicy = string(agent.HeadlessExitPolicyLegacy)
 	noUpdateCheck = false
 	imageFlag = ""
 	promptFile = ""
@@ -925,6 +926,15 @@ func TestRootCommand_HeadlessMissingProviderCredentialPrintsJSONSetupError(t *te
 	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeProviderSetupRequired {
 		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeProviderSetupRequired)
 	}
+	if parsed.FailureReason != agent.HeadlessFailureReasonProviderSetupRequired {
+		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonProviderSetupRequired)
+	}
+	if parsed.ExitPolicy != agent.HeadlessExitPolicyLegacy {
+		t.Fatalf("exit_policy = %q, want %q", parsed.ExitPolicy, agent.HeadlessExitPolicyLegacy)
+	}
+	if parsed.RecommendedExitCode != 1 {
+		t.Fatalf("recommended_exit_code = %d, want 1", parsed.RecommendedExitCode)
+	}
 	for _, fragment := range []string{"OPENAI_API_KEY", "xelyon setup"} {
 		if !strings.Contains(parsed.Error.Message, fragment) {
 			t.Fatalf("setup JSON error missing %q:\n%s", fragment, parsed.Error.Message)
@@ -1148,6 +1158,15 @@ func TestRootCommand_HeadlessErrorReturnsErrorAfterPrintingJSON(t *testing.T) {
 	}
 	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeToolLoopLimit {
 		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeToolLoopLimit)
+	}
+	if parsed.FailureReason != agent.HeadlessFailureReasonToolLoopLimit {
+		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonToolLoopLimit)
+	}
+	if parsed.ExitPolicy != agent.HeadlessExitPolicyLegacy {
+		t.Fatalf("exit_policy = %q, want %q", parsed.ExitPolicy, agent.HeadlessExitPolicyLegacy)
+	}
+	if parsed.RecommendedExitCode != 1 {
+		t.Fatalf("recommended_exit_code = %d, want 1", parsed.RecommendedExitCode)
 	}
 }
 
