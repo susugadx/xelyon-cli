@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,6 +31,7 @@ var (
 	headless      bool
 	noUpdateCheck bool
 	imageFlag     string
+	promptFile    string
 	legacyNoTUI   bool
 
 	runLegacyInteractive           = app.RunLegacyInteractiveWithConfig
@@ -82,6 +83,9 @@ Examples:
 			if err != nil {
 				return err
 			}
+			if headlessPromptFileFlagChanged(cmd) && mode != executionModeHeadless {
+				return fmt.Errorf("--prompt-file can only be used with --headless or --output-format json")
+			}
 
 			// バージョンチェック（--no-update-check または JSON 出力でない場合）
 			if !noUpdateCheck && resolvedOutputFormat != outputFormatJSON {
@@ -97,21 +101,27 @@ Examples:
 
 			switch mode {
 			case executionModeHeadless:
+				promptInput, err := resolveHeadlessPromptInput(cmd, args)
+				if err != nil {
+					result := app.NewHeadlessConfigErrorResult("", "", err.Error()).WithInput(promptInput.input)
+					return writeHeadlessResult(cmd, result)
+				}
 				runtime, err := loadRuntimeSelectionForMode(cmd, mode)
 				if err != nil {
+					var setupErr *headlessProviderSetupRequiredError
+					if errors.As(err, &setupErr) {
+						result := app.NewHeadlessProviderSetupRequiredResult(setupErr.provider, setupErr.model, setupErr.message).
+							WithInput(promptInput.input)
+						return writeHeadlessResult(cmd, result)
+					}
 					return err
 				}
-				if query == "" {
-					return fmt.Errorf("query argument is required in headless mode")
+				result := runHeadless(cmd.Context(), promptInput.query, runtime.model, runtime.provider, runtime.cfg)
+				if result == nil {
+					result = app.NewHeadlessConfigErrorResult(runtime.provider.Name(), runtime.model, "headless run returned nil result")
 				}
-				result := runHeadless(cmd.Context(), query, runtime.model, runtime.provider, runtime.cfg)
-				jsonBytes, _ := json.MarshalIndent(result, "", "  ")
-				fmt.Println(string(jsonBytes))
-				if result.Status == app.HeadlessStatusError {
-					cmd.SilenceUsage = true
-					return fmt.Errorf("headless execution failed")
-				}
-				return nil
+				result.WithInput(promptInput.input)
+				return writeHeadlessResult(cmd, result)
 			case executionModeOnce:
 				runtime, err := loadRuntimeSelectionForMode(cmd, mode)
 				if err != nil {
@@ -161,6 +171,16 @@ Examples:
 	return cmd
 }
 
+type headlessProviderSetupRequiredError struct {
+	provider string
+	model    string
+	message  string
+}
+
+func (e *headlessProviderSetupRequiredError) Error() string {
+	return e.message
+}
+
 func resolveProviderForExecutionMode(cmd *cobra.Command, providerName string, mode executionMode, model string) (api.Provider, error) {
 	if executionModeIsInteractive(mode) {
 		return resolveInteractiveProvider(providerName)
@@ -170,15 +190,28 @@ func resolveProviderForExecutionMode(cmd *cobra.Command, providerName string, mo
 		return provider, nil
 	}
 	if mode == executionModeHeadless && isProviderSetupError(providerName, err) {
-		result := app.NewHeadlessProviderSetupRequiredResult(providerName, model, err.Error())
-		jsonBytes, _ := json.MarshalIndent(result, "", "  ")
-		fmt.Println(string(jsonBytes))
+		return nil, &headlessProviderSetupRequiredError{
+			provider: providerName,
+			model:    model,
+			message:  err.Error(),
+		}
+	}
+	return nil, err
+}
+
+func writeHeadlessResult(cmd *cobra.Command, result *app.HeadlessResult) error {
+	jsonOutput, err := result.ToJSON()
+	if err != nil {
+		return err
+	}
+	fmt.Println(jsonOutput)
+	if result.Status == app.HeadlessStatusError {
 		if cmd != nil {
 			cmd.SilenceUsage = true
 		}
-		return nil, fmt.Errorf("headless execution failed")
+		return fmt.Errorf("headless execution failed")
 	}
-	return nil, err
+	return nil
 }
 
 func configureRootCommand(rootCmd *cobra.Command) {
@@ -206,6 +239,7 @@ func configureRootCommand(rootCmd *cobra.Command) {
 	// 新規: --output-format/--headless フラグ
 	rootCmd.Flags().StringVar(&outputFormat, "output-format", "text", "Output format: text or json")
 	rootCmd.Flags().BoolVar(&headless, "headless", false, "Run in headless mode (JSON output, no UI)")
+	rootCmd.Flags().StringVar(&promptFile, "prompt-file", "", "Read headless prompt from file path or '-' for stdin")
 
 	// 新規: --no-update-check フラグ
 	rootCmd.Flags().BoolVar(&noUpdateCheck, "no-update-check", false, "Disable automatic version check")

@@ -65,6 +65,7 @@ func resetRootFlagsForTest() {
 	headless = false
 	noUpdateCheck = false
 	imageFlag = ""
+	promptFile = ""
 	legacyNoTUI = false
 	openAISubscriptionAuthDeviceFlag = false
 	rootCmd = newRootCommand()
@@ -909,8 +910,17 @@ func TestRootCommand_HeadlessMissingProviderCredentialPrintsJSONSetupError(t *te
 	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
 		t.Fatalf("stdout is not headless JSON: %v\noutput=%q", err, output)
 	}
+	if parsed.SchemaVersion != agent.HeadlessSchemaVersion {
+		t.Fatalf("schema_version = %q, want %q", parsed.SchemaVersion, agent.HeadlessSchemaVersion)
+	}
 	if parsed.Status != agent.HeadlessStatusError {
 		t.Fatalf("status = %q, want %q", parsed.Status, agent.HeadlessStatusError)
+	}
+	if parsed.Input == nil {
+		t.Fatal("input = nil, want args metadata")
+	}
+	if parsed.Input.Source != agent.HeadlessInputSourceArgs || parsed.Input.Bytes != len([]byte("hello")) {
+		t.Fatalf("input = %+v, want args bytes for hello", parsed.Input)
 	}
 	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeProviderSetupRequired {
 		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeProviderSetupRequired)

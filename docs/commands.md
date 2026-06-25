@@ -1005,12 +1005,24 @@ API error、cancel、tool loop limit 到達時は `status: "error"` と `error.t
 # JSON出力
 xelyon --headless "main.goを読んで概要を説明して"
 
+# prompt file から入力
+xelyon --headless --prompt-file prompt.md
+
+# stdin から入力
+cat prompt.md | xelyon --headless -
+cat prompt.md | xelyon --headless --prompt-file -
+
 # 出力例
 {
+  "schema_version": "xelyon.headless.v1",
   "status": "success",
   "provider": "gemini",
   "model": "gemini-3.5-flash",
   "response": "このファイルは...",
+  "input": {
+    "source": "args",
+    "bytes": 42
+  },
   "duration_ms": 1234,
   "timestamp": "2026-05-25T12:00:00+09:00",
   "cost": 0.00012
@@ -1022,6 +1034,8 @@ xelyon --headless "バグを修正して" | jq -r '.response'
 # CI/CDパイプラインで使用
 xelyon --output-format json "テストを実行して" | jq -e '.status == "success"'
 ```
+
+`input.source` は `args`、`prompt_file`、`stdin` のいずれかです。`--prompt-file prompt.md` の場合は `input.prompt_file` に指定 path が入り、prompt 本文は JSON には出ません。prompt file と stdin は 1 MiB まで読み込み、空入力、directory、存在しない file、query 引数との併用は `status: "error"` / `error.type: "config_error"` になります。
 
 ### 対話的確認モード
 

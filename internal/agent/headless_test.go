@@ -244,6 +244,9 @@ func TestHeadlessResult_ToJSON(t *testing.T) {
 	if !strings.Contains(jsonStr, `"status": "success"`) {
 		t.Error("Expected JSON to contain status field")
 	}
+	if !strings.Contains(jsonStr, `"schema_version": "xelyon.headless.v1"`) {
+		t.Error("Expected JSON to contain schema_version field")
+	}
 	if !strings.Contains(jsonStr, `"provider": "DeepSeek"`) {
 		t.Error("Expected JSON to contain provider field")
 	}
@@ -252,6 +255,34 @@ func TestHeadlessResult_ToJSON(t *testing.T) {
 	}
 	if !strings.Contains(jsonStr, `"response": "Test response"`) {
 		t.Error("Expected JSON to contain response field")
+	}
+}
+
+func TestHeadlessResult_ConstructorsSetSchemaVersion(t *testing.T) {
+	tests := []struct {
+		name   string
+		result *HeadlessResult
+	}{
+		{
+			name:   "success",
+			result: NewSuccessResult("openai", "gpt-5.4", "ok", nil, 10),
+		},
+		{
+			name:   "error",
+			result: NewErrorResult("openai", "gpt-5.4", HeadlessErrorTypeConfig, "bad input", 10),
+		},
+		{
+			name:   "tool loop limit",
+			result: NewToolLoopLimitResult("openai", "gpt-5.4", 3, nil, 10),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.result.SchemaVersion != HeadlessSchemaVersion {
+				t.Fatalf("SchemaVersion = %q, want %q", tt.result.SchemaVersion, HeadlessSchemaVersion)
+			}
+		})
 	}
 }
 
@@ -498,6 +529,29 @@ func TestRunHeadlessWithConfig_CollectsTokenUsageAndCost(t *testing.T) {
 	}
 	if result.PricingUnavailable {
 		t.Fatal("result.PricingUnavailable = true, want false for known pricing")
+	}
+}
+
+func TestRunHeadlessWithConfig_AttachesArgsInputMetadata(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	query := "日本語 prompt"
+	provider := &headlessToolSetProbeProvider{}
+	result := RunHeadlessWithConfig(context.Background(), query, "gpt-5.4", provider, newProjectMapDisabledConfig())
+	if result.Status != HeadlessStatusSuccess {
+		t.Fatalf("result.Status = %q, want success", result.Status)
+	}
+	if result.Input == nil {
+		t.Fatal("result.Input = nil, want args metadata")
+	}
+	if result.Input.Source != HeadlessInputSourceArgs {
+		t.Fatalf("result.Input.Source = %q, want %q", result.Input.Source, HeadlessInputSourceArgs)
+	}
+	if result.Input.Bytes != len([]byte(query)) {
+		t.Fatalf("result.Input.Bytes = %d, want %d", result.Input.Bytes, len([]byte(query)))
+	}
+	if result.Input.PromptFile != "" {
+		t.Fatalf("result.Input.PromptFile = %q, want empty", result.Input.PromptFile)
 	}
 }
 

@@ -11,10 +11,36 @@ import (
 // HeadlessResult は headless mode の実行結果を表す。
 type HeadlessResult = agent.HeadlessResult
 
+// HeadlessInput は headless prompt input metadata を表す。
+type HeadlessInput = agent.HeadlessInput
+
+// HeadlessInputSource は headless prompt の入力元を表す。
+type HeadlessInputSource = agent.HeadlessInputSource
+
 const (
+	// HeadlessSchemaVersion は headless JSON contract の schema version。
+	HeadlessSchemaVersion = agent.HeadlessSchemaVersion
 	// HeadlessStatusError は headless JSON の失敗 status。
 	HeadlessStatusError = agent.HeadlessStatusError
+	// HeadlessErrorTypeConfig は CLI/config/input validation 系の headless error type。
+	HeadlessErrorTypeConfig = agent.HeadlessErrorTypeConfig
+	// HeadlessInputSourceArgs は positional args 由来の prompt input source。
+	HeadlessInputSourceArgs = agent.HeadlessInputSourceArgs
+	// HeadlessInputSourcePromptFile は --prompt-file 由来の prompt input source。
+	HeadlessInputSourcePromptFile = agent.HeadlessInputSourcePromptFile
+	// HeadlessInputSourceStdin は stdin 由来の prompt input source。
+	HeadlessInputSourceStdin = agent.HeadlessInputSourceStdin
 )
+
+// NewHeadlessInput は headless prompt input metadata を生成する。
+func NewHeadlessInput(source HeadlessInputSource, promptFile string, byteCount int) HeadlessInput {
+	return agent.NewHeadlessInput(source, promptFile, byteCount)
+}
+
+// NewHeadlessConfigErrorResult は config/input validation 用の headless JSON error を作る。
+func NewHeadlessConfigErrorResult(provider, model, message string) *HeadlessResult {
+	return agent.NewErrorResult(provider, model, agent.HeadlessErrorTypeConfig, message, 0)
+}
 
 // NewHeadlessProviderSetupRequiredResult は provider setup 未完了の headless JSON error を作る。
 func NewHeadlessProviderSetupRequiredResult(provider, model, message string) *HeadlessResult {

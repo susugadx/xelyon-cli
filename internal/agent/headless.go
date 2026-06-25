@@ -7,11 +7,16 @@ import (
 )
 
 const (
+	// HeadlessSchemaVersion は headless JSON contract の schema version。
+	HeadlessSchemaVersion = "xelyon.headless.v1"
+
 	// HeadlessStatusSuccess は headless JSON の成功 status。
 	HeadlessStatusSuccess = "success"
 	// HeadlessStatusError は headless JSON の失敗 status。
 	HeadlessStatusError = "error"
 
+	// HeadlessErrorTypeConfig は CLI/config/input validation 系の headless error type。
+	HeadlessErrorTypeConfig = "config_error"
 	// HeadlessErrorTypeCancelled は context cancel / timeout 系の headless error type。
 	HeadlessErrorTypeCancelled = "cancelled"
 	// HeadlessErrorTypeAPI は provider request 失敗の headless error type。
@@ -20,14 +25,33 @@ const (
 	HeadlessErrorTypeProviderSetupRequired = "provider_setup_required"
 	// HeadlessErrorTypeToolLoopLimit は tool loop limit 到達時の headless error type。
 	HeadlessErrorTypeToolLoopLimit = "tool_loop_limit"
+
+	// HeadlessInputSourceArgs は positional args 由来の prompt input source。
+	HeadlessInputSourceArgs HeadlessInputSource = "args"
+	// HeadlessInputSourcePromptFile は --prompt-file 由来の prompt input source。
+	HeadlessInputSourcePromptFile HeadlessInputSource = "prompt_file"
+	// HeadlessInputSourceStdin は stdin 由来の prompt input source。
+	HeadlessInputSourceStdin HeadlessInputSource = "stdin"
 )
+
+// HeadlessInputSource は headless prompt の入力元を表す。
+type HeadlessInputSource string
+
+// HeadlessInput は headless JSON に出す prompt input metadata を表す。
+type HeadlessInput struct {
+	Source     HeadlessInputSource `json:"source"`                // args, prompt_file, stdin
+	PromptFile string              `json:"prompt_file,omitempty"` // --prompt-file の指定 path
+	Bytes      int                 `json:"bytes"`                 // prompt body の byte 数
+}
 
 // HeadlessResult はHeadlessモードの実行結果
 type HeadlessResult struct {
+	SchemaVersion      string           `json:"schema_version"`                // headless JSON schema version
 	Status             string           `json:"status"`                        // HeadlessStatusSuccess or HeadlessStatusError
 	Provider           string           `json:"provider"`                      // LLMプロバイダー名
 	Model              string           `json:"model"`                         // モデル名
 	Response           string           `json:"response"`                      // AIの最終回答
+	Input              *HeadlessInput   `json:"input,omitempty"`               // prompt input metadata
 	ToolCalls          []ToolCallResult `json:"tool_calls,omitempty"`          // 実行されたツール呼び出し
 	Tokens             *TokenUsage      `json:"tokens,omitempty"`              // トークン使用量
 	WebSearch          *WebSearchUsage  `json:"web_search,omitempty"`          // ネイティブ Web 検索の固定料金観測
@@ -69,37 +93,75 @@ type ErrorInfo struct {
 	Code    int    `json:"code,omitempty"` // エラーコード（HTTPステータスなど）
 }
 
+// NewHeadlessInput は headless prompt input metadata を生成する。
+func NewHeadlessInput(source HeadlessInputSource, promptFile string, byteCount int) HeadlessInput {
+	if byteCount < 0 {
+		byteCount = 0
+	}
+	if source != HeadlessInputSourcePromptFile {
+		promptFile = ""
+	}
+	return HeadlessInput{
+		Source:     source,
+		PromptFile: promptFile,
+		Bytes:      byteCount,
+	}
+}
+
+// WithInput は HeadlessResult に prompt input metadata を付与する。
+func (r *HeadlessResult) WithInput(input HeadlessInput) *HeadlessResult {
+	if r == nil {
+		return nil
+	}
+	r.Input = &input
+	return r
+}
+
 // ToJSON は HeadlessResult を JSON 文字列に変換
 func (r *HeadlessResult) ToJSON() (string, error) {
-	bytes, err := json.MarshalIndent(r, "", "  ")
+	normalized := r.normalizedForJSON()
+	bytes, err := json.MarshalIndent(normalized, "", "  ")
 	if err != nil {
 		return "", err
 	}
 	return string(bytes), nil
 }
 
+func (r *HeadlessResult) normalizedForJSON() HeadlessResult {
+	if r == nil {
+		return HeadlessResult{SchemaVersion: HeadlessSchemaVersion}
+	}
+	normalized := *r
+	if normalized.SchemaVersion == "" {
+		normalized.SchemaVersion = HeadlessSchemaVersion
+	}
+	return normalized
+}
+
 // NewSuccessResult は成功結果を生成
 func NewSuccessResult(provider, model, response string, toolCalls []ToolCallResult, durationMs int64) *HeadlessResult {
 	return &HeadlessResult{
-		Status:     HeadlessStatusSuccess,
-		Provider:   provider,
-		Model:      model,
-		Response:   response,
-		ToolCalls:  toolCalls,
-		DurationMs: durationMs,
-		Timestamp:  time.Now().Format(time.RFC3339),
+		SchemaVersion: HeadlessSchemaVersion,
+		Status:        HeadlessStatusSuccess,
+		Provider:      provider,
+		Model:         model,
+		Response:      response,
+		ToolCalls:     toolCalls,
+		DurationMs:    durationMs,
+		Timestamp:     time.Now().Format(time.RFC3339),
 	}
 }
 
 // NewErrorResult はエラー結果を生成
 func NewErrorResult(provider, model string, errType, errMsg string, durationMs int64) *HeadlessResult {
 	return &HeadlessResult{
-		Status:     HeadlessStatusError,
-		Provider:   provider,
-		Model:      model,
-		Response:   "",
-		DurationMs: durationMs,
-		Timestamp:  time.Now().Format(time.RFC3339),
+		SchemaVersion: HeadlessSchemaVersion,
+		Status:        HeadlessStatusError,
+		Provider:      provider,
+		Model:         model,
+		Response:      "",
+		DurationMs:    durationMs,
+		Timestamp:     time.Now().Format(time.RFC3339),
 		Error: &ErrorInfo{
 			Type:    errType,
 			Message: errMsg,

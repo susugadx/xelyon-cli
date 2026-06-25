@@ -35,7 +35,8 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 	runner := newHeadlessRunner(query, model, provider, cfg)
 	runner.startedAt = startedAt
 	defer runner.agent.Cleanup()
-	return runner.run(ctx)
+	result := runner.run(ctx)
+	return result.WithInput(NewHeadlessInput(HeadlessInputSourceArgs, "", len([]byte(query))))
 }
 
 func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.Config) *headlessRunner {
@@ -81,7 +82,7 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 
 func (r *headlessRunner) run(ctx context.Context) *HeadlessResult {
 	if r.initErr != nil {
-		return r.errorResult("config_error", r.initErr.Error())
+		return r.errorResult(HeadlessErrorTypeConfig, r.initErr.Error())
 	}
 
 	maxIterations := normalizeToolLoopLimit(r.agent.cfg().General.ToolLoopLimit)
