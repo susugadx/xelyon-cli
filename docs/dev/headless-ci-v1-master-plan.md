@@ -31,6 +31,7 @@ Goal の完了条件は、v1 の stable contract が実装・テスト・docs �
   - Scope: 既存 error path の分類と exit-code mapping の土台まで。`--fail-on-tool-error` は Phase 2-B に分ける。
   - Verification: focused headless / exit policy tests、`git diff --check`、`make ci-check`
 - [x] Phase 2-B: `--fail-on-tool-error` を追加し、strict mode だけ tool failure を headless failure に昇格する。
+  - Commit: `47127857 headless CI の tool error strict mode を追加`
   - Scope: explicit headless option、tool error promotion、CLI flag、CI exit code 4、docs update まで。
   - Verification: focused headless / cmd exit policy tests、`go test ./cmd ./internal/agent ./internal/climode -count=1`、`git diff --check`
 - [ ] Phase 3: `summary.changed_files`、`summary.commands`、`summary.final_checks` を source-of-truth 経由で追加する。
