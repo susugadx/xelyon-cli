@@ -18,15 +18,19 @@ import (
 )
 
 type headlessRunner struct {
-	agent      *Agent
-	provider   api.Provider
-	model      string
-	query      string
-	options    HeadlessRunOptions
-	startedAt  time.Time
-	toolCalls  []ToolCallResult
-	finalReply string
-	initErr    error
+	agent            *Agent
+	provider         api.Provider
+	model            string
+	query            string
+	options          HeadlessRunOptions
+	startedAt        time.Time
+	toolCalls        []ToolCallResult
+	commands         []HeadlessCommandSummary
+	finalChecks      []HeadlessFinalCheckSummary
+	finalReply       string
+	initErr          error
+	cancelledErr     error
+	finalCheckFailed bool
 }
 
 // RunHeadlessWithConfig は指定設定で Headless モードのクエリを実行する。
@@ -153,6 +157,7 @@ func (r *headlessRunner) handleAssistantResponse(ctx context.Context, response s
 	// ツール呼び出しがなければ最終レスポンスとして終了
 	if len(parsedCalls) == 0 {
 		r.finalReply = response
+		r.runFinalChecksIfNeeded(ctx)
 		return true
 	}
 
@@ -180,13 +185,16 @@ func (r *headlessRunner) executeToolCall(ctx context.Context, tc *tools.ToolCall
 	})
 
 	execResult := r.agent.executeQuietToolResult(ctx, tc, strings.NewReader(""), io.Discard, io.Discard, true)
-	output, change := execResult.Result, execResult.Change
-	r.agent.noteProjectMapMutation(tc, change)
+	output := execResult.Result
 	r.agent.recordSkillActivationFromToolResult(tc, output, execResult.Error)
+	r.agent.mutationTracker().recordExecutedToolResult(tc, execResult, true)
 
 	success := isHeadlessToolCallSuccess(execResult)
 	if r.agent.Stats != nil {
 		r.agent.Stats.AddToolExecution(tc.Tool)
+	}
+	if summary, ok := newHeadlessCommandSummary(tc, execResult); ok {
+		r.commands = append(r.commands, summary)
 	}
 
 	r.toolCalls = append(r.toolCalls, ToolCallResult{
@@ -210,11 +218,6 @@ func (r *headlessRunner) executeToolCall(ctx context.Context, tc *tools.ToolCall
 	}
 	subagent.EmitEvent(ctx, event)
 	appendHeadlessToolResultToHistory(r.agent, tc, output)
-
-	// ファイル変更履歴を記録
-	if change != nil {
-		r.agent.appendChange(*change)
-	}
 }
 
 // isHeadlessToolCallSuccess は headless 実行におけるツール結果の成功判定を返す。
@@ -226,7 +229,13 @@ func isHeadlessToolCallSuccess(execResult tools.ExecutionResult) bool {
 
 func (r *headlessRunner) successResult() *HeadlessResult {
 	duration := time.Since(r.startedAt).Milliseconds()
-	result := attachHeadlessStats(r.agent, NewSuccessResult(r.provider.Name(), r.model, r.finalReply, r.toolCalls, duration))
+	result := r.attachSummary(attachHeadlessStats(r.agent, NewSuccessResult(r.provider.Name(), r.model, r.finalReply, r.toolCalls, duration)))
+	if r.cancelledErr != nil {
+		return promoteHeadlessCancelledResult(result, r.cancelledErr)
+	}
+	if r.finalCheckFailed {
+		return promoteHeadlessFinalCheckFailedResult(result)
+	}
 	if r.options.FailOnToolError && hasFailedHeadlessToolCall(r.toolCalls) {
 		return promoteHeadlessToolErrorResult(result)
 	}
@@ -235,13 +244,13 @@ func (r *headlessRunner) successResult() *HeadlessResult {
 
 func (r *headlessRunner) errorResult(errType, errMsg string) *HeadlessResult {
 	duration := time.Since(r.startedAt).Milliseconds()
-	return attachHeadlessStats(r.agent, NewErrorResult(r.provider.Name(), r.model, errType, errMsg, duration))
+	return r.attachSummary(attachHeadlessStats(r.agent, NewErrorResult(r.provider.Name(), r.model, errType, errMsg, duration)))
 }
 
 func (r *headlessRunner) loopLimitResult(limit int) *HeadlessResult {
 	duration := time.Since(r.startedAt).Milliseconds()
 	result := NewToolLoopLimitResult(r.provider.Name(), r.model, limit, r.toolCalls, duration)
-	return attachHeadlessStats(r.agent, result)
+	return r.attachSummary(attachHeadlessStats(r.agent, result))
 }
 
 func attachHeadlessStats(agent *Agent, result *HeadlessResult) *HeadlessResult {

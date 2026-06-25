@@ -34,7 +34,10 @@ Goal の完了条件は、v1 の stable contract が実装・テスト・docs �
   - Commit: `47127857 headless CI の tool error strict mode を追加`
   - Scope: explicit headless option、tool error promotion、CLI flag、CI exit code 4、docs update まで。
   - Verification: focused headless / cmd exit policy tests、`go test ./cmd ./internal/agent ./internal/climode -count=1`、`git diff --check`
-- [ ] Phase 3: `summary.changed_files`、`summary.commands`、`summary.final_checks` を source-of-truth 経由で追加する。
+- [x] Phase 3: `summary.changed_files`、`summary.commands`、`summary.final_checks` を source-of-truth 経由で追加する。
+  - Scope: headless summary DTO / builder、bash command summary、headless final check execution and failure classification、docs update まで。
+  - Review follow-up: headless final-check cancellation、normal-mode final-check API deadline 分離、`summary.commands` cancellation classification まで修正した。
+  - Verification: focused headless summary / final check / cmd exit policy tests、affected package tests、`git diff --check`、local review
 - [ ] Phase 4: `--read-only` / `--dry-run` no-mutation safety mode を追加する。
 - [ ] Phase 5: public docs と GitHub Actions examples を現行 schema / flags に合わせる。
 - [ ] Phase 6: headless image support を、scope が制御できる場合だけ実装する。
@@ -50,16 +53,12 @@ Goal の完了条件は、v1 の stable contract が実装・テスト・docs �
 - `status: "error"` の headless result は CLI error として返る。
 - provider setup 不足は `provider_setup_required` の headless JSON として stdout に出せる。
 - error JSON 後に Cobra usage を stderr に混ぜない regression test がある。
-- JSON には `schema_version`, `status`, `provider`, `model`, `response`, `input`, `tool_calls`, `tokens`, `web_search`, `duration_ms`, `timestamp`, `error`, `cost`, `pricing_unavailable` がある。
+- JSON には `schema_version`, `status`, `provider`, `model`, `response`, `input`, `summary`, `tool_calls`, `tokens`, `web_search`, `duration_ms`, `timestamp`, `error`, `cost`, `pricing_unavailable` がある。
 - `--prompt-file <path>`、`--prompt-file -`、headless / JSON mode での bare `-` stdin 入力に対応している。
 - tool loop limit、API error、token/cost、web search usage、stdout pure JSON などの focused tests がある。
 
 一方で、CI 用の公開 contract としては以下が弱い。
 
-- tool error を最終成功と切り離して CI failure にできない。
-- `failure_reason`, `exit_policy`, `recommended_exit_code` がまだない。
-- final checks の実行結果が headless JSON に出ない。
-- changed files / command summary が headless JSON に出ない。
 - review-only / dry-run で workspace mutation を禁止できない。
 - headless image は現在 `--headless` / `--output-format json` と併用禁止。
 
@@ -176,12 +175,12 @@ Phase 0 で小さく owner を分け、実装後 Final-B で構造整理を必�
 - `internal/agent/recorded_task_changes.go` は `changeStack` から current task の changed files を snapshot できる。
 - `internal/taskstate` は runtime task ledger を持ち、`ChangedFiles`, `TouchedFiles`, `LastFailedTests`, `LastPassedTests` などを snapshot できる。
 - `internal/agent/mutation_tracker.go` は tool result から task ledger と change stack を更新する owner である。
-- headless runner の current implementation は `executeToolCall` 内で `appendChange` を直接呼んでおり、mutation tracker の共通 path とは完全には揃っていない。
+- headless runner は tool execution result を `MutationTracker` へ渡し、changed files summary は task ledger snapshot を source of truth にする。
 
 ### Final checks owner
 
 - `internal/agent/final_check_commands.go` が `final_checks.commands` を実行し、`taskstate.TestObservation` を記録する。
-- final checks は現状 normal mode の completion flow と強く結びついており、headless JSON summary へは出ていない。
+- headless は変更ファイルがある最終 no-tool 応答時に `runFinalCheckCommands` を再利用し、結果を `summary.final_checks` に出す。
 - `final_checks.commands` は `XELYON_CHANGED_FILES` を env として渡す。
 
 ### Docs owner
@@ -471,6 +470,16 @@ Add top-level `summary` object:
 - Large output is omitted or bounded.
 - No assistant text parsing is required for summary.
 
+Phase 3 implementation notes:
+
+- `internal/agent/headless_summary.go` owns summary construction and command/final-check DTO conversion.
+- Headless tool execution records through `MutationTracker`, so `summary.changed_files` comes from the task ledger rather than direct runner state.
+- Headless runs configured `final_checks.commands` once when a final no-tool response arrives after observed file changes.
+- Final check failures are promoted to `status:"error"` with `error.type` / `failure_reason` = `final_check_failed`; output text is not included in summary.
+- Headless final-check parent cancellation is promoted to `cancelled`; per-command timeout remains `final_check_failed`.
+- Normal-mode final checks use request explicit-cancel context without inheriting the API request deadline.
+- `summary.commands` classifies bash cancellation markers and tool errors as `failed` / `-1` rather than `passed` / `0`.
+
 ## 12. Phase 4: Read-only / Dry-run Safety Mode
 
 ### Purpose
@@ -740,7 +749,7 @@ Do not change:
 
 - Should `--dry-run` be a strict alias for `--read-only` in v1, or should it eventually mean "preview planned writes"? Recommendation: v1 alias/no-write, future preview mode separate.
 - Should detailed process exit codes become default in a future major version? Recommendation: keep `legacy` default for now, document `ci` policy.
-- Should final checks run automatically in headless when changes occur, or only when the model triggers completion semantics? Recommendation: implement only if an existing owner path can be reused cleanly; otherwise expose summary for commands first and make automatic final checks a follow-up.
+- Final checks now run automatically in headless when changed files are observed and `final_checks.commands` is configured; implementation reuses `runFinalCheckCommands`.
 - Should command summaries include bounded output excerpts? Recommendation: omit by default in v1; add opt-in later.
 - Should headless image be part of the first implementation Goal or a follow-up Goal? Recommendation: keep it in the master plan but do not block Headless CI v1 stable contract on image support.
 

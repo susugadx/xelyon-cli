@@ -219,6 +219,15 @@ func TestRootCommand_HeadlessExitCodePolicyCIClassifiesRuntimeErrors(t *testing.
 			reason:    agent.HeadlessFailureReasonToolLoopLimit,
 			code:      1,
 		},
+		{
+			name: "final check failed",
+			result: func(provider api.Provider, model string) *agent.HeadlessResult {
+				return agent.NewErrorResult(provider.Name(), model, agent.HeadlessErrorTypeFinalCheckFailed, "final checks failed", 0)
+			},
+			errorType: agent.HeadlessErrorTypeFinalCheckFailed,
+			reason:    agent.HeadlessFailureReasonFinalCheckFailed,
+			code:      5,
+		},
 	}
 
 	for _, tt := range tests {

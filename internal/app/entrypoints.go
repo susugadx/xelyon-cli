@@ -14,6 +14,15 @@ type HeadlessResult = agent.HeadlessResult
 // HeadlessInput は headless prompt input metadata を表す。
 type HeadlessInput = agent.HeadlessInput
 
+// HeadlessSummary は headless JSON に出す CI 向け runtime summary を表す。
+type HeadlessSummary = agent.HeadlessSummary
+
+// HeadlessCommandSummary は tool 経由で実行されたコマンドの要約を表す。
+type HeadlessCommandSummary = agent.HeadlessCommandSummary
+
+// HeadlessFinalCheckSummary は final_checks.commands の実行結果要約を表す。
+type HeadlessFinalCheckSummary = agent.HeadlessFinalCheckSummary
+
 // HeadlessInputSource は headless prompt の入力元を表す。
 type HeadlessInputSource = agent.HeadlessInputSource
 
@@ -34,6 +43,8 @@ const (
 	HeadlessExitPolicyCI = agent.HeadlessExitPolicyCI
 	// HeadlessErrorTypeConfig は CLI/config/input validation 系の headless error type。
 	HeadlessErrorTypeConfig = agent.HeadlessErrorTypeConfig
+	// HeadlessErrorTypeFinalCheckFailed は headless final check 失敗の error type。
+	HeadlessErrorTypeFinalCheckFailed = agent.HeadlessErrorTypeFinalCheckFailed
 	// HeadlessInputSourceArgs は positional args 由来の prompt input source。
 	HeadlessInputSourceArgs = agent.HeadlessInputSourceArgs
 	// HeadlessInputSourcePromptFile は --prompt-file 由来の prompt input source。

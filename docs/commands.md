@@ -1001,6 +1001,8 @@ env value、raw args、server error detail、tool schema body、description 全�
 Gemini native web search の `usageMetadata` は通常の token usage として `tokens` / `cost` に含まれます。Kimi `$web_search` を使った場合、既存の `cost` は token cost + web search call fee の合計を維持し、`web_search` object に `calls`、`fee_estimate`、`result_tokens` を分けて出します。検索結果 tokens は次 request の `prompt_tokens` に含まれる前提の表示用観測値で、headless JSON の token totals には再加算しません。
 API error、cancel、tool loop limit 到達時は `status: "error"` と `error.type` を出力し、CLI は non-zero exit code を返します。`error.type` は既存互換の分類で、CI 向け分類は `failure_reason` に出ます。成功時は `failure_reason` を省略し、`recommended_exit_code` は `0` です。既定の `exit_policy` は `legacy` で、error は従来どおり exit code `1` です。既定では failed tool call が `tool_calls[].success=false` に残っていても最終応答があれば全体は success のままです。CI で failed tool call も失敗扱いにする場合は `--fail-on-tool-error` を指定します。CI で詳細 code が必要な場合は `--exit-code-policy ci` を指定します。
 
+`summary` は runtime observation がある場合だけ出ます。`summary.changed_files` は tool の `FileChange` を task ledger で repo-relative に正規化したものです。`summary.commands` は bash tool で実行したコマンドの `command`、`exit_code`、`status`、`source:"tool"` を出します。`summary.final_checks` は変更ファイルがある headless 実行で `final_checks.commands` が設定されている場合に実行され、`command`、`exit_code`、`status` を出します。コマンド出力本文は JSON summary には入れません。final check が失敗した場合は `status:"error"`、`error.type:"final_check_failed"`、`failure_reason:"final_check_failed"` になります。
+
 ```bash
 # JSON出力
 xelyon --headless "main.goを読んで概要を説明して"
@@ -1023,6 +1025,24 @@ cat prompt.md | xelyon --headless --prompt-file -
     "source": "args",
     "bytes": 42
   },
+  "summary": {
+    "changed_files": ["internal/example.go"],
+    "commands": [
+      {
+        "command": "go test ./internal/agent -run TestHeadless -count=1",
+        "exit_code": 0,
+        "status": "passed",
+        "source": "tool"
+      }
+    ],
+    "final_checks": [
+      {
+        "command": "make verify-fast",
+        "exit_code": 0,
+        "status": "passed"
+      }
+    ]
+  },
   "exit_policy": "legacy",
   "recommended_exit_code": 0,
   "duration_ms": 1234,
@@ -1040,7 +1060,7 @@ xelyon --output-format json --exit-code-policy ci "テストを実行して" | j
 xelyon --headless --fail-on-tool-error --exit-code-policy ci "修正してテストして"
 ```
 
-`input.source` は `args`、`prompt_file`、`stdin` のいずれかです。`--prompt-file prompt.md` の場合は `input.prompt_file` に指定 path が入り、prompt 本文は JSON には出ません。prompt file と stdin は 1 MiB まで読み込み、空入力、directory、存在しない file、query 引数との併用は `status: "error"` / `error.type: "config_error"` / `failure_reason: "usage_error"` になります。`--exit-code-policy ci` では、usage error は `recommended_exit_code: 2`、provider setup required は `3`、`--fail-on-tool-error` による tool error は `4`、API error は `6`、cancelled は `7` です。tool loop limit と unknown error は `1` のままです。
+`input.source` は `args`、`prompt_file`、`stdin` のいずれかです。`--prompt-file prompt.md` の場合は `input.prompt_file` に指定 path が入り、prompt 本文は JSON には出ません。prompt file と stdin は 1 MiB まで読み込み、空入力、directory、存在しない file、query 引数との併用は `status: "error"` / `error.type: "config_error"` / `failure_reason: "usage_error"` になります。`--exit-code-policy ci` では、usage error は `recommended_exit_code: 2`、provider setup required は `3`、`--fail-on-tool-error` による tool error は `4`、final check failure は `5`、API error は `6`、cancelled は `7` です。tool loop limit と unknown error は `1` のままです。
 
 ### 対話的確認モード
 

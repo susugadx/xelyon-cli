@@ -74,10 +74,10 @@ func HeadlessFailureReasonForErrorType(errType string) HeadlessFailureReason {
 		return HeadlessFailureReasonToolLoopLimit
 	case HeadlessErrorTypeToolError:
 		return HeadlessFailureReasonToolError
+	case HeadlessErrorTypeFinalCheckFailed:
+		return HeadlessFailureReasonFinalCheckFailed
 	case string(HeadlessFailureReasonUsageError):
 		return HeadlessFailureReasonUsageError
-	case string(HeadlessFailureReasonFinalCheckFailed):
-		return HeadlessFailureReasonFinalCheckFailed
 	case string(HeadlessFailureReasonReadOnlyViolation):
 		return HeadlessFailureReasonReadOnlyViolation
 	case string(HeadlessFailureReasonUnsupportedCapability):

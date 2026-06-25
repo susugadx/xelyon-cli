@@ -54,7 +54,10 @@ func (h *normalModeNoToolHandler) handlePostMutationFinalChecks(response string)
 	turnMutations := h.state.turnMutations.Snapshot()
 	finalCheckTargets := h.finalCheckTargetSnapshot(turnMutations)
 
-	result := a.runFinalCheckCommands(finalCheckTargets.Files)
+	result := a.runFinalCheckCommands(a.finalCheckParentContext(h.runner.ctx), finalCheckTargets.Files)
+	if result.Cancelled {
+		return true, normalModeBreak
+	}
 	if !result.NeedsContinue {
 		h.state.finalCheckRetry.Reset()
 		return false, normalModeContinue

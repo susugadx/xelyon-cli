@@ -27,6 +27,8 @@ const (
 	HeadlessErrorTypeToolLoopLimit = "tool_loop_limit"
 	// HeadlessErrorTypeToolError は strict mode で tool 実行失敗を全体失敗へ昇格した headless error type。
 	HeadlessErrorTypeToolError = "tool_error"
+	// HeadlessErrorTypeFinalCheckFailed は headless final check 失敗の error type。
+	HeadlessErrorTypeFinalCheckFailed = "final_check_failed"
 
 	// HeadlessInputSourceArgs は positional args 由来の prompt input source。
 	HeadlessInputSourceArgs HeadlessInputSource = "args"
@@ -63,6 +65,7 @@ type HeadlessResult struct {
 	FailureReason       HeadlessFailureReason `json:"failure_reason,omitempty"`      // CI 向け失敗分類
 	ExitPolicy          HeadlessExitPolicy    `json:"exit_policy"`                   // exit code policy
 	RecommendedExitCode int                   `json:"recommended_exit_code"`         // 推奨 process exit code
+	Summary             *HeadlessSummary      `json:"summary,omitempty"`             // CI 向け runtime summary
 	ToolCalls           []ToolCallResult      `json:"tool_calls,omitempty"`          // 実行されたツール呼び出し
 	Tokens              *TokenUsage           `json:"tokens,omitempty"`              // トークン使用量
 	WebSearch           *WebSearchUsage       `json:"web_search,omitempty"`          // ネイティブ Web 検索の固定料金観測
@@ -71,6 +74,28 @@ type HeadlessResult struct {
 	Error               *ErrorInfo            `json:"error,omitempty"`               // エラー情報
 	Cost                float64               `json:"cost"`                          // 推定コスト（USD）
 	PricingUnavailable  bool                  `json:"pricing_unavailable,omitempty"` // 既知の料金表がない場合 true
+}
+
+// HeadlessSummary は headless JSON に出す CI 向け runtime summary を表す。
+type HeadlessSummary struct {
+	ChangedFiles []string                    `json:"changed_files,omitempty"` // 変更が観測されたファイル
+	Commands     []HeadlessCommandSummary    `json:"commands,omitempty"`      // tool 経由で実行されたコマンド
+	FinalChecks  []HeadlessFinalCheckSummary `json:"final_checks,omitempty"`  // final_checks.commands の実行結果
+}
+
+// HeadlessCommandSummary は bash tool などで実行されたコマンドの要約を表す。
+type HeadlessCommandSummary struct {
+	Command  string `json:"command"`   // 実行されたコマンド
+	ExitCode int    `json:"exit_code"` // 終了コード。不明な失敗は -1
+	Status   string `json:"status"`    // passed or failed
+	Source   string `json:"source"`    // tool
+}
+
+// HeadlessFinalCheckSummary は final_checks.commands の実行結果要約を表す。
+type HeadlessFinalCheckSummary struct {
+	Command  string `json:"command"`   // 実行された final check コマンド
+	ExitCode int    `json:"exit_code"` // 終了コード。不明な失敗は -1
+	Status   string `json:"status"`    // passed or failed
 }
 
 // ToolCallResult は個別のツール呼び出し結果
@@ -207,6 +232,38 @@ func promoteHeadlessToolErrorResult(result *HeadlessResult) *HeadlessResult {
 		Message: "one or more tool calls failed",
 	}
 	result.FailureReason = HeadlessFailureReasonToolError
+	result.RecommendedExitCode = RecommendedHeadlessExitCode(result.Status, result.FailureReason, result.ExitPolicy)
+	return result
+}
+
+func promoteHeadlessCancelledResult(result *HeadlessResult, err error) *HeadlessResult {
+	if result == nil {
+		return nil
+	}
+	message := "context canceled"
+	if err != nil {
+		message = err.Error()
+	}
+	result.Status = HeadlessStatusError
+	result.Error = &ErrorInfo{
+		Type:    HeadlessErrorTypeCancelled,
+		Message: message,
+	}
+	result.FailureReason = HeadlessFailureReasonCancelled
+	result.RecommendedExitCode = RecommendedHeadlessExitCode(result.Status, result.FailureReason, result.ExitPolicy)
+	return result
+}
+
+func promoteHeadlessFinalCheckFailedResult(result *HeadlessResult) *HeadlessResult {
+	if result == nil {
+		return nil
+	}
+	result.Status = HeadlessStatusError
+	result.Error = &ErrorInfo{
+		Type:    HeadlessErrorTypeFinalCheckFailed,
+		Message: "one or more final check commands failed",
+	}
+	result.FailureReason = HeadlessFailureReasonFinalCheckFailed
 	result.RecommendedExitCode = RecommendedHeadlessExitCode(result.Status, result.FailureReason, result.ExitPolicy)
 	return result
 }

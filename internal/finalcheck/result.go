@@ -1,6 +1,7 @@
 package finalcheck
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/susugadx/xelyon-cli/internal/turnsupport"
@@ -8,11 +9,28 @@ import (
 
 const outputTruncateLimit = 2000
 
+const (
+	// CommandStatusPassed は final check command が成功した状態を表す。
+	CommandStatusPassed = "passed"
+	// CommandStatusFailed は final check command が失敗した状態を表す。
+	CommandStatusFailed = "failed"
+)
+
 // RunResult は final check 実行後に normal turn が必要とする判定結果。
 type RunResult struct {
 	NeedsContinue      bool
 	Feedback           string
 	FailureFingerprint string
+	Checks             []CommandResult
+	Cancelled          bool
+	Err                error
+}
+
+// CommandResult は final check command の機械可読な実行結果を表す。
+type CommandResult struct {
+	Command  string
+	ExitCode int
+	Status   string
 }
 
 // BuildFailureResult は失敗した final check command から retry 用 feedback を作る。
@@ -29,6 +47,18 @@ func BuildFailureResult(command string, exitCode int, output string, diffStat st
 		NeedsContinue:      true,
 		Feedback:           feedback,
 		FailureFingerprint: FailureFingerprint(command, exitCode, output),
+	}
+}
+
+// BuildCancelledResult は親 context の cancellation による final check 中断結果を作る。
+func BuildCancelledResult(err error, checks []CommandResult) RunResult {
+	if err == nil {
+		err = context.Canceled
+	}
+	return RunResult{
+		Cancelled: true,
+		Err:       err,
+		Checks:    checks,
 	}
 }
 
