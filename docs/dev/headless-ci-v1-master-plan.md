@@ -27,9 +27,12 @@ Goal の完了条件は、v1 の stable contract が実装・テスト・docs �
   - Commit: `42265919 headless CI 入力契約を追加`
   - Verification: focused headless tests、`git diff --check`、`make verify-fast`、`make ci-check`
 - [x] Phase 2-A: `failure_reason`、`exit_policy`、`recommended_exit_code` と `--exit-code-policy legacy|ci` を追加した。
+  - Commit: `f89d7cde headless CI の終了コードポリシーを追加`
   - Scope: 既存 error path の分類と exit-code mapping の土台まで。`--fail-on-tool-error` は Phase 2-B に分ける。
-  - Verification: focused headless / exit policy tests、`git diff --check`
-- [ ] Phase 2-B: `--fail-on-tool-error` を追加し、strict mode だけ tool failure を headless failure に昇格する。
+  - Verification: focused headless / exit policy tests、`git diff --check`、`make ci-check`
+- [x] Phase 2-B: `--fail-on-tool-error` を追加し、strict mode だけ tool failure を headless failure に昇格する。
+  - Scope: explicit headless option、tool error promotion、CLI flag、CI exit code 4、docs update まで。
+  - Verification: focused headless / cmd exit policy tests、`go test ./cmd ./internal/agent ./internal/climode -count=1`、`git diff --check`
 - [ ] Phase 3: `summary.changed_files`、`summary.commands`、`summary.final_checks` を source-of-truth 経由で追加する。
 - [ ] Phase 4: `--read-only` / `--dry-run` no-mutation safety mode を追加する。
 - [ ] Phase 5: public docs と GitHub Actions examples を現行 schema / flags に合わせる。
@@ -387,6 +390,19 @@ With `--fail-on-tool-error`:
 - If any tool call has `success=false`, final result becomes `status: "error"`.
 - `error.type` and `failure_reason` become `tool_error`.
 - Response can still be included if available, but CI must not treat it as success.
+
+Phase 2-B implementation brief:
+
+- Shared change: YES. This adds a user-visible CLI flag and changes headless JSON / process exit behavior only when strict tool failure policy is explicitly enabled.
+- Contract owner: `internal/agent` remains the headless JSON and failure policy source of truth. `cmd` only parses `--fail-on-tool-error` and passes the selected headless run option.
+- Runtime owner: `internal/agent/headless_runner.go` owns tool execution observations and should be the place that detects failed `ToolCallResult` entries for strict-mode promotion.
+- Recommended shape: add an additive headless run options type, keep `RunHeadlessWithConfig` as the default-compatible wrapper, and use an options-aware entrypoint for CLI headless mode.
+- Contract additions: add typed `HeadlessErrorTypeToolError` and `HeadlessRunOptions{FailOnToolError bool}` in `internal/agent`, with `internal/app` aliases only where `cmd` needs them.
+- Default compatibility: without `--fail-on-tool-error`, failed tool calls remain in `tool_calls[].success=false` and the overall result can still be success.
+- Strict compatibility: with `--fail-on-tool-error`, an otherwise-successful headless result containing at least one failed tool call is promoted to `status: "error"`, `error.type: "tool_error"`, `failure_reason: "tool_error"`, and `recommended_exit_code` follows the selected `exit_policy`.
+- Error precedence: Phase 2-B should not reclassify pre-existing API, cancelled, config, provider setup, or tool loop limit errors just because a failed tool call was observed earlier.
+- Serialization: no schema version bump; this is additive and uses existing Phase 2-A fields.
+- Out of scope: final checks, read-only / dry-run, summary extraction, and changing tool success detection rules.
 
 ### Tests
 

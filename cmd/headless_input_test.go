@@ -26,7 +26,7 @@ func TestRootCommand_HeadlessPromptFilePassesContentAndInputMetadata(t *testing.
 	}
 
 	var gotQuery string
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		gotQuery = query
 		return agent.NewSuccessResult(provider.Name(), model, "ok", nil, 0)
 	}
@@ -50,7 +50,7 @@ func TestRootCommand_HeadlessPromptFileDashReadsStdin(t *testing.T) {
 
 	body := "stdin prompt\n"
 	var gotQuery string
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		gotQuery = query
 		return agent.NewSuccessResult(provider.Name(), model, "ok", nil, 0)
 	}
@@ -71,7 +71,7 @@ func TestRootCommand_HeadlessBareDashReadsStdin(t *testing.T) {
 
 	body := "bare dash prompt\n"
 	var gotQuery string
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		gotQuery = query
 		return agent.NewSuccessResult(provider.Name(), model, "ok", nil, 0)
 	}
@@ -96,7 +96,7 @@ func TestRootCommand_HeadlessPromptFileRejectsPositionalQuery(t *testing.T) {
 	}
 
 	runHeadlessCalled := false
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		runHeadlessCalled = true
 		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
 	}
@@ -164,7 +164,7 @@ func TestRootCommand_HeadlessPromptInputValidationErrorsReturnJSON(t *testing.T)
 			t.Setenv("HOME", t.TempDir())
 
 			runHeadlessCalled := false
-			runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+			runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 				runHeadlessCalled = true
 				return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
 			}

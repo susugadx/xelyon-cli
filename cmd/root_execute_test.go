@@ -1,10 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/susugadx/xelyon-cli/internal/agent"
+	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestExecute_HelperProcess(t *testing.T) {
@@ -30,6 +35,21 @@ func TestExecute_HelperProcess(t *testing.T) {
 		args = []string{"--exit-code-policy", "ci", "--provider"}
 	case "headless_usage_ci":
 		args = []string{"--headless", "--exit-code-policy", "ci", "--provider", "ollama", "--no-update-check"}
+	case "headless_tool_error_ci":
+		runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+			if !options.FailOnToolError {
+				t.Fatal("FailOnToolError = false, want true")
+			}
+			result := agent.NewErrorResult(provider.Name(), model, agent.HeadlessErrorTypeToolError, "one or more tool calls failed", 0)
+			result.ToolCalls = []agent.ToolCallResult{{
+				Tool:    "str_replace",
+				Args:    map[string]string{"path": "target.txt"},
+				Output:  "Error: old_str not found",
+				Success: false,
+			}}
+			return result
+		}
+		args = []string{"--headless", "--fail-on-tool-error", "--exit-code-policy", "ci", "--provider", "ollama", "--no-update-check", "hello"}
 	case "root_usage_ci":
 		args = []string{"--exit-code-policy", "ci", "--output-format", "yaml", "--no-update-check", "hello"}
 	case "invalid_exit_policy":
@@ -135,6 +155,35 @@ func TestExecute_ExitsWithHeadlessRecommendedCode(t *testing.T) {
 	}
 	if !strings.Contains(string(output), `"recommended_exit_code": 2`) {
 		t.Fatalf("combined output = %q, want recommended_exit_code 2", string(output))
+	}
+}
+
+func TestExecute_ExitsWithHeadlessToolErrorRecommendedCode(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable() error = %v", err)
+	}
+
+	cmd := exec.Command(exe, "-test.run=TestExecute_HelperProcess")
+	cmd.Env = append(os.Environ(), "GO_WANT_XELYON_ROOT_EXECUTE_HELPER=headless_tool_error_ci")
+
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected Execute() helper to exit with non-zero status")
+	}
+
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("error = %T, want *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != 4 {
+		t.Fatalf("exit code = %d, want 4\noutput=%s", exitErr.ExitCode(), string(output))
+	}
+	if !strings.Contains(string(output), `"failure_reason": "tool_error"`) {
+		t.Fatalf("combined output = %q, want tool_error JSON", string(output))
+	}
+	if !strings.Contains(string(output), `"recommended_exit_code": 4`) {
+		t.Fatalf("combined output = %q, want recommended_exit_code 4", string(output))
 	}
 }
 

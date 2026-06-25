@@ -63,6 +63,7 @@ func resetRootFlagsForTest() {
 	diffLines = -1
 	outputFormat = "text"
 	headless = false
+	failOnToolError = false
 	exitCodePolicy = string(agent.HeadlessExitPolicyLegacy)
 	noUpdateCheck = false
 	imageFlag = ""
@@ -109,7 +110,7 @@ type rootCommandRunners struct {
 	runTUIWithResumeDirect         func(string, api.Provider, *config.Config, bool, string) error
 	runTUIWithResumePicker         func(string, api.Provider, *config.Config, bool, bool)
 	runTUIWithImage                func(string, string, api.Provider, string, *config.Config, bool) error
-	runHeadless                    func(context.Context, string, string, api.Provider, *config.Config) *agent.HeadlessResult
+	runHeadless                    func(context.Context, string, string, api.Provider, *config.Config, agent.HeadlessRunOptions) *agent.HeadlessResult
 	runOnce                        func(string, string, api.Provider, *config.Config, bool, bool) error
 	runOnceWithImage               func(string, string, api.Provider, string, *config.Config, bool, bool) error
 }
@@ -169,7 +170,7 @@ func TestRootCommand_PositionalQueryDefaultsToOnce(t *testing.T) {
 	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		interactiveCalled = true
 		return agent.NewSuccessResult(provider.Name(), model, "", nil, 0)
 	}
@@ -209,7 +210,7 @@ func TestRootCommand_OnceExecutesSingleTurn(t *testing.T) {
 	runLegacyInteractiveWithResume = func(model string, provider api.Provider, cfg *config.Config, autoApprove bool) {
 		interactiveCalled = true
 	}
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		interactiveCalled = true
 		return nil
 	}
@@ -788,7 +789,7 @@ func TestRootCommand_PositionalQueryUsesHeadlessInJSONMode(t *testing.T) {
 	headlessCalled := false
 	onceCalled := false
 	interactiveCalled := false
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		headlessCalled = true
 		if query != "hello" {
 			t.Fatalf("query = %q, want hello", query)
@@ -824,7 +825,7 @@ func TestRootCommand_HeadlessOpenAISubscriptionExpiredTokenReachesRunner(t *test
 	saveExpiredOpenAISubscriptionCredentialForRootTest(t)
 
 	headlessCalled := false
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		headlessCalled = true
 		if api.IsProviderSetupRequired(provider) {
 			t.Fatalf("provider = %T, want executable subscription provider", provider)
@@ -864,7 +865,7 @@ func TestRootCommand_HeadlessMissingProviderCredentialPrintsJSONSetupError(t *te
 	t.Setenv("OPENAI_API_KEY", "")
 
 	headlessCalled := false
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		headlessCalled = true
 		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
 	}
@@ -946,7 +947,7 @@ func TestRootCommand_HeadlessUnknownProviderReturnsCommandErrorWithoutSetupJSON(
 	withRootCommandTest(t)
 
 	headlessCalled := false
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		headlessCalled = true
 		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
 	}
@@ -1003,7 +1004,7 @@ func TestRootCommand_OutputFormatIsCaseInsensitive(t *testing.T) {
 	withRootCommandTest(t)
 
 	headlessCalled := false
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		headlessCalled = true
 		if query != "hello" {
 			t.Fatalf("query = %q, want hello", query)
@@ -1062,7 +1063,7 @@ func TestRootCommand_HeadlessJSONStdoutIsPureJSON(t *testing.T) {
 		},
 	}
 
-	runHeadless = func(ctx context.Context, query string, model string, providerArg api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, providerArg api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		if cfg == nil {
 			cfg = config.DefaultConfig()
 		} else {
@@ -1110,7 +1111,7 @@ func TestRootCommand_HeadlessErrorReturnsErrorAfterPrintingJSON(t *testing.T) {
 	withRootCommandTest(t)
 	t.Setenv("HOME", t.TempDir())
 
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		return agent.NewToolLoopLimitResult(provider.Name(), model, 10, nil, 0)
 	}
 

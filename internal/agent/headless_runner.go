@@ -22,6 +22,7 @@ type headlessRunner struct {
 	provider   api.Provider
 	model      string
 	query      string
+	options    HeadlessRunOptions
 	startedAt  time.Time
 	toolCalls  []ToolCallResult
 	finalReply string
@@ -31,8 +32,15 @@ type headlessRunner struct {
 // RunHeadlessWithConfig は指定設定で Headless モードのクエリを実行する。
 // ctx が Done になるとサブエージェント含め処理を中断する。
 func RunHeadlessWithConfig(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *HeadlessResult {
+	return RunHeadlessWithConfigOptions(ctx, query, model, provider, cfg, HeadlessRunOptions{})
+}
+
+// RunHeadlessWithConfigOptions は指定設定と追加ポリシーで Headless モードのクエリを実行する。
+// ctx が Done になるとサブエージェント含め処理を中断する。
+func RunHeadlessWithConfigOptions(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options HeadlessRunOptions) *HeadlessResult {
 	startedAt := time.Now()
 	runner := newHeadlessRunner(query, model, provider, cfg)
+	runner.options = options
 	runner.startedAt = startedAt
 	defer runner.agent.Cleanup()
 	result := runner.run(ctx)
@@ -218,7 +226,11 @@ func isHeadlessToolCallSuccess(execResult tools.ExecutionResult) bool {
 
 func (r *headlessRunner) successResult() *HeadlessResult {
 	duration := time.Since(r.startedAt).Milliseconds()
-	return attachHeadlessStats(r.agent, NewSuccessResult(r.provider.Name(), r.model, r.finalReply, r.toolCalls, duration))
+	result := attachHeadlessStats(r.agent, NewSuccessResult(r.provider.Name(), r.model, r.finalReply, r.toolCalls, duration))
+	if r.options.FailOnToolError && hasFailedHeadlessToolCall(r.toolCalls) {
+		return promoteHeadlessToolErrorResult(result)
+	}
+	return result
 }
 
 func (r *headlessRunner) errorResult(errType, errMsg string) *HeadlessResult {
@@ -258,6 +270,15 @@ func attachHeadlessStats(agent *Agent, result *HeadlessResult) *HeadlessResult {
 	result.Cost = estimate.Cost
 	result.PricingUnavailable = estimate.PricingUnavailable
 	return result
+}
+
+func hasFailedHeadlessToolCall(toolCalls []ToolCallResult) bool {
+	for _, call := range toolCalls {
+		if !call.Success {
+			return true
+		}
+	}
+	return false
 }
 
 func assignHeadlessRescueToolCallIDs(toolCalls []*tools.ToolCall) {

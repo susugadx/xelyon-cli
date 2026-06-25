@@ -20,6 +20,9 @@ type HeadlessInputSource = agent.HeadlessInputSource
 // HeadlessExitPolicy は headless JSON の推奨 exit code policy を表す。
 type HeadlessExitPolicy = agent.HeadlessExitPolicy
 
+// HeadlessRunOptions は headless 実行時の追加ポリシーを表す。
+type HeadlessRunOptions = agent.HeadlessRunOptions
+
 const (
 	// HeadlessSchemaVersion は headless JSON contract の schema version。
 	HeadlessSchemaVersion = agent.HeadlessSchemaVersion
@@ -87,6 +90,11 @@ func RunLegacyInteractiveWithImageWithConfig(query string, model string, provide
 // RunHeadlessWithConfig は指定設定で headless mode の query を実行する。
 func RunHeadlessWithConfig(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *HeadlessResult {
 	return agent.RunHeadlessWithConfig(ctx, query, model, provider, cfg)
+}
+
+// RunHeadlessWithConfigOptions は指定設定と追加ポリシーで headless mode の query を実行する。
+func RunHeadlessWithConfigOptions(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options HeadlessRunOptions) *HeadlessResult {
+	return agent.RunHeadlessWithConfigOptions(ctx, query, model, provider, cfg, options)
 }
 
 // RunOnceWithConfig は指定設定で単一 query を 1 turn だけ実行して終了する。

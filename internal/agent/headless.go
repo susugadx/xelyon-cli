@@ -25,6 +25,8 @@ const (
 	HeadlessErrorTypeProviderSetupRequired = "provider_setup_required"
 	// HeadlessErrorTypeToolLoopLimit は tool loop limit 到達時の headless error type。
 	HeadlessErrorTypeToolLoopLimit = "tool_loop_limit"
+	// HeadlessErrorTypeToolError は strict mode で tool 実行失敗を全体失敗へ昇格した headless error type。
+	HeadlessErrorTypeToolError = "tool_error"
 
 	// HeadlessInputSourceArgs は positional args 由来の prompt input source。
 	HeadlessInputSourceArgs HeadlessInputSource = "args"
@@ -42,6 +44,12 @@ type HeadlessInput struct {
 	Source     HeadlessInputSource `json:"source"`                // args, prompt_file, stdin
 	PromptFile string              `json:"prompt_file,omitempty"` // --prompt-file の指定 path
 	Bytes      int                 `json:"bytes"`                 // prompt body の byte 数
+}
+
+// HeadlessRunOptions は headless 実行時の追加ポリシーを表す。
+type HeadlessRunOptions struct {
+	// FailOnToolError は tool_calls[].success=false を全体 failure に昇格する。
+	FailOnToolError bool
 }
 
 // HeadlessResult はHeadlessモードの実行結果
@@ -185,6 +193,20 @@ func NewErrorResult(provider, model string, errType, errMsg string, durationMs i
 		ExitPolicy: HeadlessExitPolicyLegacy,
 	}
 	result.FailureReason = result.normalizedFailureReason()
+	result.RecommendedExitCode = RecommendedHeadlessExitCode(result.Status, result.FailureReason, result.ExitPolicy)
+	return result
+}
+
+func promoteHeadlessToolErrorResult(result *HeadlessResult) *HeadlessResult {
+	if result == nil {
+		return nil
+	}
+	result.Status = HeadlessStatusError
+	result.Error = &ErrorInfo{
+		Type:    HeadlessErrorTypeToolError,
+		Message: "one or more tool calls failed",
+	}
+	result.FailureReason = HeadlessFailureReasonToolError
 	result.RecommendedExitCode = RecommendedHeadlessExitCode(result.Status, result.FailureReason, result.ExitPolicy)
 	return result
 }

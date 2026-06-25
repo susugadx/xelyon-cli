@@ -18,22 +18,23 @@ import (
 )
 
 var (
-	resume         bool
-	once           bool
-	interactive    bool
-	quiet          bool
-	providerFlag   string
-	modelFlag      string
-	autoApprove    bool
-	loopThreshold  int
-	diffLines      int
-	outputFormat   string
-	headless       bool
-	exitCodePolicy string
-	noUpdateCheck  bool
-	imageFlag      string
-	promptFile     string
-	legacyNoTUI    bool
+	resume          bool
+	once            bool
+	interactive     bool
+	quiet           bool
+	providerFlag    string
+	modelFlag       string
+	autoApprove     bool
+	loopThreshold   int
+	diffLines       int
+	outputFormat    string
+	headless        bool
+	failOnToolError bool
+	exitCodePolicy  string
+	noUpdateCheck   bool
+	imageFlag       string
+	promptFile      string
+	legacyNoTUI     bool
 
 	runLegacyInteractive           = app.RunLegacyInteractiveWithConfig
 	runLegacyInteractiveWithResume = app.RunLegacyInteractiveWithResumeWithConfig
@@ -43,7 +44,7 @@ var (
 	runTUIWithResumeDirect         = app.RunTUIWithResumeSessionWithConfig
 	runTUIWithResumePicker         = app.RunTUIWithResumePickerWithConfig
 	runTUIWithImage                = app.RunTUIWithImageWithConfig
-	runHeadless                    = app.RunHeadlessWithConfig
+	runHeadless                    = app.RunHeadlessWithConfigOptions
 	runOnce                        = app.RunOnceWithConfig
 	runOnceWithImage               = app.RunOnceWithImageWithConfig
 )
@@ -122,7 +123,9 @@ Examples:
 					}
 					return err
 				}
-				result := runHeadless(cmd.Context(), promptInput.query, runtime.model, runtime.provider, runtime.cfg)
+				result := runHeadless(cmd.Context(), promptInput.query, runtime.model, runtime.provider, runtime.cfg, app.HeadlessRunOptions{
+					FailOnToolError: failOnToolError,
+				})
 				if result == nil {
 					result = app.NewHeadlessConfigErrorResult(runtime.provider.Name(), runtime.model, "headless run returned nil result")
 				}
@@ -281,6 +284,7 @@ func configureRootCommand(rootCmd *cobra.Command) {
 	// 新規: --output-format/--headless フラグ
 	rootCmd.Flags().StringVar(&outputFormat, "output-format", "text", "Output format: text or json")
 	rootCmd.Flags().BoolVar(&headless, "headless", false, "Run in headless mode (JSON output, no UI)")
+	rootCmd.Flags().BoolVar(&failOnToolError, "fail-on-tool-error", false, "Treat failed headless tool calls as run failures")
 	rootCmd.Flags().StringVar(&exitCodePolicy, "exit-code-policy", string(app.HeadlessExitPolicyLegacy), "Exit code policy: legacy or ci")
 	rootCmd.Flags().StringVar(&promptFile, "prompt-file", "", "Read headless prompt from file path or '-' for stdin")
 

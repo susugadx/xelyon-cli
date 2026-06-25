@@ -15,7 +15,10 @@ func TestRootCommand_HeadlessExitCodePolicyCIOnSuccess(t *testing.T) {
 	withRootCommandTest(t)
 	t.Setenv("HOME", t.TempDir())
 
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+		if options.FailOnToolError {
+			t.Fatal("FailOnToolError = true, want default false")
+		}
 		return agent.NewSuccessResult(provider.Name(), model, "ok", nil, 0)
 	}
 
@@ -32,6 +35,92 @@ func TestRootCommand_HeadlessExitCodePolicyCIOnSuccess(t *testing.T) {
 	if parsed.RecommendedExitCode != 0 {
 		t.Fatalf("recommended_exit_code = %d, want 0", parsed.RecommendedExitCode)
 	}
+}
+
+func TestRootCommand_HeadlessDefaultsFailOnToolErrorFalse(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+		if options.FailOnToolError {
+			t.Fatal("FailOnToolError = true, want default false")
+		}
+		return agent.NewSuccessResult(provider.Name(), model, "ok", []agent.ToolCallResult{{
+			Tool:    "str_replace",
+			Args:    map[string]string{"path": "target.txt"},
+			Output:  "Error: old_str not found",
+			Success: false,
+		}}, 0)
+	}
+
+	parsed, _, stderr, err := executeRootCommandForHeadlessJSONTest(t, []string{"--headless", "--exit-code-policy", "ci", "--provider", "ollama", "--no-update-check", "hello"}, "")
+	if err != nil {
+		t.Fatalf("Execute() error = %v\nstderr=%s", err, stderr)
+	}
+	if parsed.Status != agent.HeadlessStatusSuccess {
+		t.Fatalf("status = %q, want success", parsed.Status)
+	}
+	if parsed.FailureReason != "" {
+		t.Fatalf("failure_reason = %q, want empty", parsed.FailureReason)
+	}
+	if parsed.RecommendedExitCode != 0 {
+		t.Fatalf("recommended_exit_code = %d, want 0", parsed.RecommendedExitCode)
+	}
+	if len(parsed.ToolCalls) != 1 || parsed.ToolCalls[0].Success {
+		t.Fatalf("tool_calls = %+v, want preserved failed tool call", parsed.ToolCalls)
+	}
+}
+
+func TestRootCommand_FailOnToolErrorUsesCIExitPolicy(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+
+	called := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+		called = true
+		if !options.FailOnToolError {
+			t.Fatal("FailOnToolError = false, want true")
+		}
+		result := agent.NewErrorResult(provider.Name(), model, agent.HeadlessErrorTypeToolError, "one or more tool calls failed", 0)
+		result.Response = "final response after tool failure"
+		result.ToolCalls = []agent.ToolCallResult{{
+			Tool:    "str_replace",
+			Args:    map[string]string{"path": "target.txt"},
+			Output:  "Error: old_str not found",
+			Success: false,
+		}}
+		return result
+	}
+
+	parsed, _, stderr, err := executeRootCommandForHeadlessJSONTest(t, []string{"--headless", "--fail-on-tool-error", "--exit-code-policy", "ci", "--provider", "ollama", "--no-update-check", "hello"}, "")
+	if err == nil {
+		t.Fatal("expected headless execution error")
+	}
+	if !called {
+		t.Fatal("headless runner was not called")
+	}
+	if strings.Contains(stderr, "Usage:") {
+		t.Fatalf("stderr contains Cobra usage after headless JSON error:\n%s", stderr)
+	}
+	if parsed.Status != agent.HeadlessStatusError {
+		t.Fatalf("status = %q, want error", parsed.Status)
+	}
+	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeToolError {
+		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeToolError)
+	}
+	if parsed.FailureReason != agent.HeadlessFailureReasonToolError {
+		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonToolError)
+	}
+	if parsed.RecommendedExitCode != 4 {
+		t.Fatalf("recommended_exit_code = %d, want 4", parsed.RecommendedExitCode)
+	}
+	if parsed.Response != "final response after tool failure" {
+		t.Fatalf("response = %q, want preserved final response", parsed.Response)
+	}
+	if len(parsed.ToolCalls) != 1 || parsed.ToolCalls[0].Success {
+		t.Fatalf("tool_calls = %+v, want preserved failed tool call", parsed.ToolCalls)
+	}
+	requireCommandExitCode(t, err, 4)
 }
 
 func TestRootCommand_HeadlessPromptInputErrorUsesCIExitPolicy(t *testing.T) {
@@ -65,7 +154,7 @@ func TestRootCommand_HeadlessProviderSetupRequiredUsesCIExitPolicy(t *testing.T)
 	t.Setenv("OPENAI_API_KEY", "")
 
 	headlessCalled := false
-	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 		headlessCalled = true
 		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
 	}
@@ -137,7 +226,7 @@ func TestRootCommand_HeadlessExitCodePolicyCIClassifiesRuntimeErrors(t *testing.
 			withRootCommandTest(t)
 			t.Setenv("HOME", t.TempDir())
 
-			runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config) *agent.HeadlessResult {
+			runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
 				return tt.result(provider, model)
 			}
 
