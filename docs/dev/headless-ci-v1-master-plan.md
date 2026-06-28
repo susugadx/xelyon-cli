@@ -41,7 +41,9 @@ Goal の完了条件は、v1 の stable contract が実装・テスト・docs �
 - [x] Phase 4: `--read-only` / `--dry-run` no-mutation safety mode を追加する。
   - Scope: headless/JSON 専用 flags、`--dry-run` strict alias、config bootstrap read-only loader、provider tool definition からの write tool / MCP / sub-agent exclusion、read-only 時の session history / change history / audit log storage / MCP bootstrap / startup ProjectMap cache / skill-router git status signal / skill-router usage ledger 抑止、実行直前 deny、strict 時の `read_only_violation` 昇格、docs update まで。
   - Verification: focused cmd / internal/agent / internal/tools tests、affected package tests、`git diff --check`
-- [ ] Phase 5: public docs と GitHub Actions examples を現行 schema / flags に合わせる。
+- [x] Phase 5: public docs と GitHub Actions examples を現行 schema / flags に合わせる。
+  - Scope: `docs/commands.md` の Headless reference 整理、`docs/ci.md` の GitHub Actions PR smoke 例追加、README からの入口追加まで。CLI flags、JSON schema、exit code、runtime behavior は変更しない。
+  - Verification: docs flag drift scan、`git diff --check`
 - [ ] Phase 6: headless image support を、scope が制御できる場合だけ実装する。
 - [x] Phase Final-A: impact audit / review-hole sweep を実施する。
   - Scope: read-only startup persistence、provider-history raw output artifact materialization、startup/warmup no-write surfaces、affected caller paths の review-hole sweep まで。

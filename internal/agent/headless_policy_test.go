@@ -3,6 +3,9 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -88,6 +91,34 @@ func TestRecommendedHeadlessExitCode(t *testing.T) {
 				t.Fatalf("RecommendedHeadlessExitCode() = %d, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestHeadlessExitCodeDocumentationIncludesFailureReasons(t *testing.T) {
+	body, err := os.ReadFile("../../docs/commands.md")
+	if err != nil {
+		t.Fatalf("ReadFile(docs/commands.md) error = %v", err)
+	}
+	text := string(body)
+	reasons := []HeadlessFailureReason{
+		HeadlessFailureReasonUsageError,
+		HeadlessFailureReasonConfigError,
+		HeadlessFailureReasonProviderSetupRequired,
+		HeadlessFailureReasonToolError,
+		HeadlessFailureReasonFinalCheckFailed,
+		HeadlessFailureReasonAPIError,
+		HeadlessFailureReasonCancelled,
+		HeadlessFailureReasonReadOnlyViolation,
+		HeadlessFailureReasonUnsupportedCapability,
+		HeadlessFailureReasonToolLoopLimit,
+		HeadlessFailureReasonUnknownError,
+	}
+	for _, reason := range reasons {
+		code := RecommendedHeadlessExitCode(HeadlessStatusError, reason, HeadlessExitPolicyCI)
+		want := "| `" + string(reason) + "` | `" + strconv.Itoa(code) + "` |"
+		if !strings.Contains(text, want) {
+			t.Fatalf("docs/commands.md should include %q in the headless exit-code table", want)
+		}
 	}
 }
 

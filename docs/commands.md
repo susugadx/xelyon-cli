@@ -997,17 +997,14 @@ env value、raw args、server error detail、tool schema body、description 全�
 
 ### Headlessモード
 
-対話なしでJSON形式で結果を出力します。他のツールやスクリプトから呼び出す際に便利です。
-Gemini native web search の `usageMetadata` は通常の token usage として `tokens` / `cost` に含まれます。Kimi `$web_search` を使った場合、既存の `cost` は token cost + web search call fee の合計を維持し、`web_search` object に `calls`、`fee_estimate`、`result_tokens` を分けて出します。検索結果 tokens は次 request の `prompt_tokens` に含まれる前提の表示用観測値で、headless JSON の token totals には再加算しません。
-API error、cancel、tool loop limit 到達時は `status: "error"` と `error.type` を出力し、CLI は non-zero exit code を返します。`error.type` は既存互換の分類で、CI 向け分類は `failure_reason` に出ます。成功時は `failure_reason` を省略し、`recommended_exit_code` は `0` です。既定の `exit_policy` は `legacy` で、error は従来どおり exit code `1` です。既定では failed tool call が `tool_calls[].success=false` に残っていても最終応答があれば全体は success のままです。CI で failed tool call も失敗扱いにする場合は `--fail-on-tool-error` を指定します。CI で詳細 code が必要な場合は `--exit-code-policy ci` を指定します。`--read-only` は headless 実行で workspace mutation を禁止し、write tool、bash tool、skill script execution tool、MCP tool、sub-agent tool を拒否します。`--dry-run` は v1 では `--read-only` と同じ no-write mode です。
+対話なしで machine-readable JSON だけを stdout に出力します。`--headless` と `--output-format json` はどちらも headless mode に解決されます。CI でそのまま使う例は [Headless CI guide](ci.md) を参照してください。
 
-`summary` は runtime observation がある場合だけ出ます。`summary.changed_files` は tool の `FileChange` を task ledger で repo-relative に正規化したものです。`summary.commands` は bash tool で実行したコマンドの `command`、`exit_code`、`status`、`source:"tool"` を出します。`summary.final_checks` は変更ファイルがある headless 実行で `final_checks.commands` が設定されている場合に実行され、`command`、`exit_code`、`status` を出します。コマンド出力本文は JSON summary には入れません。final check が失敗した場合は `status:"error"`、`error.type:"final_check_failed"`、`failure_reason:"final_check_failed"` になります。
-
-read-only mode で拒否された tool call は実ツールを実行せず、`tool_calls[]` に `success:false` と `Error:` output を残します。拒否された bash は `summary.commands` に `status:"failed"` / `exit_code:-1` / `source:"tool"` として残ります。`--fail-on-tool-error` なしでは、拒否 tool call があっても最終応答があれば全体 status は success のままです。`--fail-on-tool-error` ありでは `status:"error"`、`error.type:"read_only_violation"`、`failure_reason:"read_only_violation"` に昇格し、denied call 後に tool loop limit へ到達した場合も `read_only_violation` を保持します。read-only mode では shell の read-only 判定に依存せず、bash tool と `run_skill_script` 全体を非表示・拒否します。read-only headless run は runner 到達前の config bootstrap から no-write になり、first-run HOME でも `~/.xelyon/config.yaml` / `~/.xelyon/AGENTS.md` を作成しません。read-only headless run は session history / change history / audit log storage、persistent tool cache、startup artifact cleanup を workspace 上で create/load/save/delete せず、startup ProjectMap build / prompt injection / `~/.xelyon/cache/projectmap` persistence も実行しません。LSP client startup / warmup も read-only headless run では無効化します。provider-history raw output artifact projection は候補/report を残しますが、read-only mode では artifact materialization を行わず、provider-facing history も artifact-backed replacement に置き換えません。skill-router runtime hint は read-only mode で `git status --porcelain` signal を使わず、recommendation / activation usage ledger も保存しません。`mcp.headless: true` の環境でも read-only mode では MCP server に接続せず、`mcp_*` tool call も拒否します。XML 形式の `<mcp_...>` attempt も、Markdown code block 外にあり、対応する閉じタグがある場合だけ denied tool call として `tool_calls[]` に記録します。MCP tool の read/write capability metadata は v1 では未分類のため、read-only mode では fail-closed にします。`spawn_agent` / `wait_agent` も read-only mode では未分類の実行経路として非表示・拒否します。`--read-only` と `--dry-run` は `--headless` または `--output-format json` 専用です。
+#### 利用例
 
 ```bash
-# JSON出力
+# 基本実行
 xelyon --headless "main.goを読んで概要を説明して"
+xelyon --output-format json "バグを修正して"
 
 # prompt file から入力
 xelyon --headless --prompt-file prompt.md
@@ -1016,7 +1013,19 @@ xelyon --headless --prompt-file prompt.md
 cat prompt.md | xelyon --headless -
 cat prompt.md | xelyon --headless --prompt-file -
 
-# 出力例
+# jq と組み合わせる
+xelyon --headless "バグを修正して" | jq -r '.response'
+
+# CI 推奨 command
+xelyon --headless --prompt-file prompt.md --exit-code-policy ci --fail-on-tool-error --read-only
+
+# workspace mutation を禁止する review-only 実行
+xelyon --headless --prompt-file review-prompt.md --exit-code-policy ci --fail-on-tool-error --read-only
+```
+
+#### JSON 出力例
+
+```json
 {
   "schema_version": "xelyon.headless.v1",
   "status": "success",
@@ -1051,21 +1060,43 @@ cat prompt.md | xelyon --headless --prompt-file -
   "timestamp": "2026-05-25T12:00:00+09:00",
   "cost": 0.00012
 }
-
-# jqと組み合わせて
-xelyon --headless "バグを修正して" | jq -r '.response'
-
-# CI/CDパイプラインで使用
-xelyon --output-format json --exit-code-policy ci "テストを実行して" | jq -e '.status == "success"'
-
-# failed tool call も CI failure にする
-xelyon --headless --fail-on-tool-error --exit-code-policy ci "修正してテストして"
-
-# workspace mutation を禁止する review-only 実行
-xelyon --headless --read-only --fail-on-tool-error --exit-code-policy ci "PRをレビューして"
 ```
 
-`input.source` は `args`、`prompt_file`、`stdin` のいずれかです。`--prompt-file prompt.md` の場合は `input.prompt_file` に指定 path が入り、prompt 本文は JSON には出ません。prompt file と stdin は 1 MiB まで読み込み、空入力、directory、存在しない file、query 引数との併用は `status: "error"` / `error.type: "config_error"` / `failure_reason: "usage_error"` になります。`--read-only` / `--dry-run` を headless / JSON mode 以外で使った場合も usage error です。`--exit-code-policy ci` では、usage error は `recommended_exit_code: 2`、provider setup required は `3`、`--fail-on-tool-error` による tool error は `4`、final check failure は `5`、API error は `6`、cancelled は `7`、read-only violation は `8` です。tool loop limit と unknown error は `1` のままです。
+#### JSON / exit policy contract
+
+`schema_version` は `xelyon.headless.v1` です。prompt 本文は JSON に出しません。`input.source` は `args`、`prompt_file`、`stdin` のいずれかで、`--prompt-file prompt.md` の場合は `input.prompt_file` に指定 path が入ります。prompt file と stdin は 1 MiB まで読み込み、空入力、directory、存在しない file、query 引数との併用は `status:"error"` / `error.type:"config_error"` / `failure_reason:"usage_error"` になります。
+
+`error.type` は既存互換の分類で、CI 向け分類は `failure_reason` に出ます。成功時は `failure_reason` を省略し、`recommended_exit_code` は `0` です。既定の `exit_policy` は `legacy` で、error は従来どおり process exit code `1` です。CI で詳細 code が必要な場合は `--exit-code-policy ci` を指定します。
+
+| `failure_reason` | `--exit-code-policy ci` の `recommended_exit_code` |
+| --- | --- |
+| `usage_error` | `2` |
+| `config_error` | `3` |
+| `provider_setup_required` | `3` |
+| `tool_error` | `4` |
+| `final_check_failed` | `5` |
+| `api_error` | `6` |
+| `cancelled` | `7` |
+| `read_only_violation` | `8` |
+| `unsupported_capability` | `9` |
+| `tool_loop_limit` | `1` |
+| `unknown_error` | `1` |
+
+既定では failed tool call が `tool_calls[].success=false` に残っていても、最終応答があれば全体は success のままです。CI で failed tool call も失敗扱いにする場合は `--fail-on-tool-error` を指定します。
+
+`summary` は runtime observation がある場合だけ出ます。`summary.changed_files` は tool の `FileChange` を task ledger で repo-relative に正規化したものです。`summary.commands` は bash tool で実行したコマンドの `command`、`exit_code`、`status`、`source:"tool"` を出します。`summary.final_checks` は変更ファイルがある headless 実行で `final_checks.commands` が設定されている場合に実行され、`command`、`exit_code`、`status` を出します。コマンド出力本文は JSON summary には入れません。final check が失敗した場合は `status:"error"`、`error.type:"final_check_failed"`、`failure_reason:"final_check_failed"` になります。
+
+Gemini native web search の `usageMetadata` は通常の token usage として `tokens` / `cost` に含まれます。Kimi `$web_search` を使った場合、既存の `cost` は token cost + web search call fee の合計を維持し、`web_search` object に `calls`、`fee_estimate`、`result_tokens` を分けて出します。検索結果 tokens は次 request の `prompt_tokens` に含まれる前提の表示用観測値で、headless JSON の token totals には再加算しません。
+
+#### Read-only / dry-run contract
+
+`--read-only` は headless 実行で workspace mutation を禁止します。`--dry-run` は v1 では `--read-only` と同じ no-write mode です。どちらも `--headless` または `--output-format json` 専用で、それ以外では `usage_error` になります。
+
+read-only mode は write tool、bash tool、`run_skill_script`、MCP tool、`spawn_agent` / `wait_agent` を非表示または拒否します。拒否された tool call は実ツールを実行せず、`tool_calls[]` に `success:false` と `Error:` output を残します。拒否された bash は `summary.commands` に `status:"failed"` / `exit_code:-1` / `source:"tool"` として残ります。`--fail-on-tool-error` なしでは、拒否 tool call があっても最終応答があれば全体 status は success のままです。`--fail-on-tool-error` ありでは `status:"error"`、`error.type:"read_only_violation"`、`failure_reason:"read_only_violation"` に昇格し、denied call 後に tool loop limit へ到達した場合も `read_only_violation` を保持します。
+
+read-only headless run は runner 到達前の config bootstrap から no-write になり、first-run HOME でも `~/.xelyon/config.yaml` / `~/.xelyon/AGENTS.md` を作成しません。session history / change history / audit log storage、persistent tool cache、startup artifact cleanup、startup ProjectMap build / prompt injection / `~/.xelyon/cache/projectmap` persistence、LSP client startup / warmup も実行しません。provider-history raw output artifact projection は候補/report を残しますが、artifact materialization と artifact-backed provider-facing replacement は行いません。skill-router runtime hint は `git status --porcelain` signal を使わず、recommendation / activation usage ledger も保存しません。
+
+`mcp.headless: true` の環境でも read-only mode では MCP server に接続せず、`mcp_*` tool call も拒否します。XML 形式の `<mcp_...>` attempt も、Markdown code block 外にあり、対応する閉じタグがある場合だけ denied tool call として `tool_calls[]` に記録します。MCP tool の read/write capability metadata は v1 では未分類のため、read-only mode では fail-closed にします。
 
 ### 対話的確認モード
 
@@ -1085,6 +1116,7 @@ xelyon
 
 - [プロバイダー設定](providers.md)
 - [設定リファレンス](config.md)
+- [Headless CI guide](ci.md)
 - [Search optimization and structured impact](search.md)
 - [LSP連携](lsp.md)
 - [MCP連携](mcp.md)
