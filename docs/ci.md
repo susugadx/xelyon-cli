@@ -81,7 +81,7 @@ jobs:
 
 この例では `prompt.md` に PR の base/head SHA、merge base SHA、merge-base から head までの changed-file list と diff を埋め込んでから XELYON を起動します。`--read-only` 実行では、この prompt 内の delta が review source of truth です。runtime 側の bash / MCP / sub-agent 経由の差分探索には依存できないため、PR review として使う workflow では実行前に delta を prompt へ渡してください。
 
-`--exit-code-policy ci` では、`usage_error`、provider setup 不足、tool error、final check failure、API error、cancel、read-only violation がそれぞれ別の `recommended_exit_code` になります。workflow step の失敗判定は process exit code に任せ、必要に応じて `xelyon-result.json` を artifact として保存してください。
+`--exit-code-policy ci` では、`usage_error`、provider setup 不足、tool error、final check failure、API error、cancel、read-only violation、unsupported capability などが `failure_reason` と `recommended_exit_code` に分類されます。workflow step の失敗判定は process exit code に任せ、必要に応じて `xelyon-result.json` を artifact として保存してください。
 
 ## Provider setup
 

@@ -70,10 +70,6 @@ func (r Request) validate() error {
 		return fmt.Errorf("--resume cannot be used with query arguments")
 	}
 
-	if r.HasImage && r.OutputFormat == OutputFormatJSON {
-		return fmt.Errorf("--image cannot be used with --headless or --output-format json")
-	}
-
 	if r.Quiet && !r.effectiveOnce() {
 		return fmt.Errorf("--quiet can only be used with one-shot execution")
 	}

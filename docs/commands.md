@@ -1013,6 +1013,9 @@ xelyon --headless --prompt-file prompt.md
 cat prompt.md | xelyon --headless -
 cat prompt.md | xelyon --headless --prompt-file -
 
+# 画像入力を含める
+xelyon --headless --image screenshot.png "このスクリーンショットを確認して"
+
 # jq と組み合わせる
 xelyon --headless "バグを修正して" | jq -r '.response'
 
@@ -1034,7 +1037,13 @@ xelyon --headless --prompt-file review-prompt.md --exit-code-policy ci --fail-on
   "response": "このファイルは...",
   "input": {
     "source": "args",
-    "bytes": 42
+    "bytes": 42,
+    "image": {
+      "path": "screenshot.png",
+      "mime_type": "image/png",
+      "bytes": 12345,
+      "provider_supported": true
+    }
   },
   "summary": {
     "changed_files": ["internal/example.go"],
@@ -1064,7 +1073,7 @@ xelyon --headless --prompt-file review-prompt.md --exit-code-policy ci --fail-on
 
 #### JSON / exit policy contract
 
-`schema_version` は `xelyon.headless.v1` です。prompt 本文は JSON に出しません。`input.source` は `args`、`prompt_file`、`stdin` のいずれかで、`--prompt-file prompt.md` の場合は `input.prompt_file` に指定 path が入ります。prompt file と stdin は 1 MiB まで読み込み、空入力、directory、存在しない file、query 引数との併用は `status:"error"` / `error.type:"config_error"` / `failure_reason:"usage_error"` になります。
+`schema_version` は `xelyon.headless.v1` です。prompt 本文は JSON に出しません。`input.source` は `args`、`prompt_file`、`stdin` のいずれかで、`--prompt-file prompt.md` の場合は `input.prompt_file` に指定 path が入ります。prompt file と stdin は 1 MiB まで読み込み、空入力、directory、存在しない file、query 引数との併用は `status:"error"` / `error.type:"config_error"` / `failure_reason:"usage_error"` になります。`--image` は headless / JSON mode でも使えます。JSON には `input.image.path`、`input.image.mime_type`、`input.image.bytes`、`input.image.provider_supported` の bounded metadata だけを出し、raw image bytes や base64 body は出しません。画像非対応 provider では `failure_reason:"unsupported_capability"`、画像 file が読めない場合は `failure_reason:"usage_error"` になります。
 
 `error.type` は既存互換の分類で、CI 向け分類は `failure_reason` に出ます。成功時は `failure_reason` を省略し、`recommended_exit_code` は `0` です。既定の `exit_policy` は `legacy` で、error は従来どおり process exit code `1` です。CI で詳細 code が必要な場合は `--exit-code-policy ci` を指定します。
 

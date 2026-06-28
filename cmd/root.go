@@ -122,16 +122,28 @@ Examples:
 				if err != nil {
 					var setupErr *headlessProviderSetupRequiredError
 					if errors.As(err, &setupErr) {
+						imageSetupResolution := resolveHeadlessProviderSetupRequiredImageInput(setupErr.provider, setupErr.model, promptInput.input, imageFlag)
+						promptInput.input = imageSetupResolution.input
+						if imageSetupResolution.result != nil {
+							return writeHeadlessResult(cmd, imageSetupResolution.result, resolvedExitPolicy)
+						}
 						result := app.NewHeadlessProviderSetupRequiredResult(setupErr.provider, setupErr.model, setupErr.message).
 							WithInput(promptInput.input)
 						return writeHeadlessResult(cmd, result, resolvedExitPolicy)
 					}
 					return err
 				}
-				result := runHeadless(cmd.Context(), promptInput.query, runtime.model, runtime.provider, runtime.cfg, app.HeadlessRunOptions{
+				options := app.HeadlessRunOptions{
 					FailOnToolError: failOnToolError,
 					ReadOnly:        readOnly || dryRun,
-				})
+				}
+				imageResolution := resolveHeadlessImageInput(runtime.provider, runtime.model, promptInput.input, imageFlag)
+				promptInput.input = imageResolution.input
+				if imageResolution.result != nil {
+					return writeHeadlessResult(cmd, imageResolution.result, resolvedExitPolicy)
+				}
+				options.Image = imageResolution.image
+				result := runHeadless(cmd.Context(), promptInput.query, runtime.model, runtime.provider, runtime.cfg, options)
 				if result == nil {
 					result = app.NewHeadlessConfigErrorResult(runtime.provider.Name(), runtime.model, "headless run returned nil result")
 				}

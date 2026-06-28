@@ -1383,19 +1383,6 @@ func TestRootCommand_ImageErrorPropagation(t *testing.T) {
 	}
 }
 
-func TestRootCommand_ImageWithJSONReturnsError(t *testing.T) {
-	withRootCommandTest(t)
-	rootCmd.SetArgs([]string{"--image", "/tmp/image.png", "--output-format", "json", "--provider", "ollama", "--no-update-check", "describe"})
-
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("expected error for --image with JSON output")
-	}
-	if !strings.Contains(err.Error(), "--image cannot be used with --headless or --output-format json") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestRootCommand_QuietWithImageUsesOneShotImagePath(t *testing.T) {
 	withRootCommandTest(t)
 

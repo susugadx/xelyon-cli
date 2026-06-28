@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/susugadx/xelyon-cli/internal/api"
 )
 
 const (
@@ -31,6 +33,8 @@ const (
 	HeadlessErrorTypeFinalCheckFailed = "final_check_failed"
 	// HeadlessErrorTypeReadOnlyViolation は read-only mode の no-write 違反の error type。
 	HeadlessErrorTypeReadOnlyViolation = "read_only_violation"
+	// HeadlessErrorTypeUnsupportedCapability は要求 capability が provider/runtime で未対応な場合の error type。
+	HeadlessErrorTypeUnsupportedCapability = "unsupported_capability"
 
 	// HeadlessInputSourceArgs は positional args 由来の prompt input source。
 	HeadlessInputSourceArgs HeadlessInputSource = "args"
@@ -48,6 +52,15 @@ type HeadlessInput struct {
 	Source     HeadlessInputSource `json:"source"`                // args, prompt_file, stdin
 	PromptFile string              `json:"prompt_file,omitempty"` // --prompt-file の指定 path
 	Bytes      int                 `json:"bytes"`                 // prompt body の byte 数
+	Image      *HeadlessInputImage `json:"image,omitempty"`       // --image の metadata
+}
+
+// HeadlessInputImage は headless JSON に出す画像入力 metadata を表す。
+type HeadlessInputImage struct {
+	Path              string `json:"path"`                // --image の指定 path
+	MIMEType          string `json:"mime_type,omitempty"` // image/png など
+	Bytes             int64  `json:"bytes,omitempty"`     // 画像 file size
+	ProviderSupported bool   `json:"provider_supported"`  // 選択 provider が画像入力対応か
 }
 
 // HeadlessRunOptions は headless 実行時の追加ポリシーを表す。
@@ -56,6 +69,8 @@ type HeadlessRunOptions struct {
 	FailOnToolError bool
 	// ReadOnly は headless 実行で workspace mutation を拒否する no-write mode。
 	ReadOnly bool
+	// Image は初回 request に添付する画像入力。nil の場合は text-only。
+	Image *api.ImageData
 }
 
 // HeadlessResult はHeadlessモードの実行結果
@@ -146,6 +161,33 @@ func NewHeadlessInput(source HeadlessInputSource, promptFile string, byteCount i
 		PromptFile: promptFile,
 		Bytes:      byteCount,
 	}
+}
+
+// NewHeadlessInputImage は headless image input metadata を生成する。
+func NewHeadlessInputImage(path string, mimeType string, byteCount int64, providerSupported bool) HeadlessInputImage {
+	if byteCount < 0 {
+		byteCount = 0
+	}
+	return HeadlessInputImage{
+		Path:              path,
+		MIMEType:          mimeType,
+		Bytes:             byteCount,
+		ProviderSupported: providerSupported,
+	}
+}
+
+// NewHeadlessInputImageFromData は読み込み済み画像から headless image metadata を生成する。
+func NewHeadlessInputImageFromData(image *api.ImageData, providerSupported bool) HeadlessInputImage {
+	if image == nil {
+		return NewHeadlessInputImage("", "", 0, providerSupported)
+	}
+	return NewHeadlessInputImage(image.Path, image.MediaType, image.Size, providerSupported)
+}
+
+// WithImage は HeadlessInput に画像入力 metadata を付与する。
+func (i HeadlessInput) WithImage(image HeadlessInputImage) HeadlessInput {
+	i.Image = &image
+	return i
 }
 
 // WithInput は HeadlessResult に prompt input metadata を付与する。

@@ -80,7 +80,7 @@ func HeadlessFailureReasonForErrorType(errType string) HeadlessFailureReason {
 		return HeadlessFailureReasonReadOnlyViolation
 	case string(HeadlessFailureReasonUsageError):
 		return HeadlessFailureReasonUsageError
-	case string(HeadlessFailureReasonUnsupportedCapability):
+	case HeadlessErrorTypeUnsupportedCapability:
 		return HeadlessFailureReasonUnsupportedCapability
 	default:
 		return HeadlessFailureReasonUnknownError

@@ -48,7 +48,11 @@ func RunHeadlessWithConfigOptions(ctx context.Context, query string, model strin
 	runner.startedAt = startedAt
 	defer runner.agent.Cleanup()
 	result := runner.run(ctx)
-	return result.WithInput(NewHeadlessInput(HeadlessInputSourceArgs, "", len([]byte(query))))
+	input := NewHeadlessInput(HeadlessInputSourceArgs, "", len([]byte(query)))
+	if options.Image != nil {
+		input = input.WithImage(NewHeadlessInputImageFromData(options.Image, provider.SupportsImages()))
+	}
+	return result.WithInput(input)
 }
 
 func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.Config) *headlessRunner {
@@ -107,6 +111,9 @@ func (r *headlessRunner) run(ctx context.Context) *HeadlessResult {
 	if r.initErr != nil {
 		return r.errorResult(HeadlessErrorTypeConfig, r.initErr.Error())
 	}
+	if r.options.Image != nil && !r.provider.SupportsImages() {
+		return r.errorResult(HeadlessErrorTypeUnsupportedCapability, fmt.Sprintf("provider %q does not support image input", r.provider.Name()))
+	}
 
 	maxIterations := normalizeToolLoopLimit(r.agent.cfg().General.ToolLoopLimit)
 
@@ -151,6 +158,17 @@ func (r *headlessRunner) requestAssistantResponse(ctx context.Context, iteration
 		effectivePrompt = r.agent.normalModeSystemPromptForRequestWithDirectives(reqCtx, r.query, iteration == 0, runtimeDirectives)
 	}
 	requestCtx := r.agent.prepareResponseContextForPrompt(r.agent.requestContext(reqCtx), effectivePrompt)
+	if iteration == 0 && r.options.Image != nil {
+		requestCtx, history := r.agent.providerFacingHistoryExcludingLatestMessageForRequest(requestCtx)
+		response, err := r.provider.ChatWithImage(requestCtx, effectivePrompt, history, r.query, r.options.Image, r.model)
+		if err != nil {
+			return "", err
+		}
+		r.agent.recordResponseContextForPrompt(effectivePrompt)
+		r.agent.markRuntimeDirectivesDelivered(runtimeDirectives)
+		return response, nil
+	}
+
 	requestCtx, history := r.agent.providerFacingHistoryForRequest(requestCtx)
 	response, err := r.provider.ChatWithTools(requestCtx, effectivePrompt, history, r.model)
 	if err != nil {

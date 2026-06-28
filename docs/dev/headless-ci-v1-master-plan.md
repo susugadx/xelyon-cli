@@ -44,7 +44,9 @@ Goal の完了条件は、v1 の stable contract が実装・テスト・docs �
 - [x] Phase 5: public docs と GitHub Actions examples を現行 schema / flags に合わせる。
   - Scope: `docs/commands.md` の Headless reference 整理、`docs/ci.md` の GitHub Actions PR smoke 例追加、README からの入口追加まで。CLI flags、JSON schema、exit code、runtime behavior は変更しない。
   - Verification: docs flag drift scan、`git diff --check`
-- [ ] Phase 6: headless image support を、scope が制御できる場合だけ実装する。
+- [x] Phase 6: headless image support を、scope が制御できる範囲で実装した。
+  - Scope: `--headless` / `--output-format json` で `--image` を受理し、既存 `api.LoadImage` validation と provider `SupportsImages` を再利用する。JSON には `input.image` bounded metadata だけを出し、raw image bytes / base64 は出さない。画像非対応 provider は `unsupported_capability`、画像 file 読み込み失敗は `usage_error` として structured JSON error にする。
+  - Verification: focused climode / cmd / internal/agent tests、docs drift tests、setup-required + image-unsupported precedence regression、`git diff --check`
 - [x] Phase Final-A: impact audit / review-hole sweep を実施する。
   - Scope: read-only startup persistence、provider-history raw output artifact materialization、startup/warmup no-write surfaces、affected caller paths の review-hole sweep まで。
   - Verification: focused cmd / internal/agent / providerhistory tests、affected package tests、`git diff --check`、local review
@@ -66,7 +68,7 @@ Goal の完了条件は、v1 の stable contract が実装・テスト・docs �
 一方で、CI 用の公開 contract としては以下が弱い。
 
 - review-only / dry-run で workspace mutation を禁止できない。
-- headless image は現在 `--headless` / `--output-format json` と併用禁止。
+- 計画開始時点では、headless image は `--headless` / `--output-format json` と併用禁止だった。
 
 ## 2. Shared Contract Preflight
 
@@ -593,20 +595,20 @@ Headless CI v1 を OSS 利用者がすぐ使えるようにする。
 
 Headless CI でも screenshot / error image / UI artifact を扱えるようにする。
 
-### Current constraint
+### Implemented contract
 
-`--image` is currently incompatible with `--headless` / `--output-format json`.
+`--image` is compatible with `--headless` / `--output-format json` when the selected provider supports image input.
 
 ### Design contract
 
-- Do not force this into initial v1 if it destabilizes CLI mode contract.
-- When implemented, JSON must include bounded image metadata, not raw image bytes.
-- Suggested `input.image` fields:
+- JSON includes bounded image metadata, not raw image bytes.
+- `input.image` fields:
   - `path`
   - `mime_type`
   - `bytes`
   - `provider_supported`
 - Unsupported provider should return `unsupported_capability`, not generic API error.
+- If `--image` targets a provider that is both image-unsupported and missing setup, image unsupported capability wins over `provider_setup_required`.
 
 ### Owner candidates
 
@@ -617,11 +619,12 @@ Headless CI でも screenshot / error image / UI artifact を扱えるように�
 
 ### Tests
 
-- `--headless --image` with supported provider runs image path.
-- Unsupported provider returns structured JSON error.
-- Missing image returns structured JSON error.
-- JSON does not include raw base64 image.
-- Existing interactive and one-shot image behavior remains unchanged.
+- [x] `--headless --image` with supported provider runs image path.
+- [x] Unsupported provider returns structured JSON error.
+- [x] Unsupported provider returns `unsupported_capability` even when provider setup is missing.
+- [x] Missing image returns structured JSON error.
+- [x] JSON does not include raw base64 image.
+- [x] Existing interactive and one-shot image behavior remains unchanged.
 
 ## 15. Mode / Policy / Defaults
 

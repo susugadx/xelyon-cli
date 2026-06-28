@@ -85,7 +85,7 @@ xelyon
 デフォルトは通常モード（ツール個別確認）。軽いタスクにはオーバーヘッドなく即座に応答。
 
 ### Headless CI
-`xelyon --headless --prompt-file prompt.md --exit-code-policy ci --fail-on-tool-error --read-only` で、CI / GitHub Actions から JSON 出力の review-only 実行ができます。CLI contract は [docs/commands.md](docs/commands.md#headlessモード)、コピーしやすい workflow 例は [docs/ci.md](docs/ci.md) を参照してください。
+`xelyon --headless --prompt-file prompt.md --exit-code-policy ci --fail-on-tool-error --read-only` で、CI / GitHub Actions から JSON 出力の review-only 実行ができます。`--image screenshot.png` を付けると画像入力 metadata も JSON に含められます。CLI contract は [docs/commands.md](docs/commands.md#headlessモード)、コピーしやすい workflow 例は [docs/ci.md](docs/ci.md) を参照してください。
 
 ### 🔄 自動リトライ機能
 ツール実行が失敗した場合、自動的にリトライして成功するまで試行します。

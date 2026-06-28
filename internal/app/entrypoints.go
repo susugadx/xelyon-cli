@@ -14,6 +14,9 @@ type HeadlessResult = agent.HeadlessResult
 // HeadlessInput は headless prompt input metadata を表す。
 type HeadlessInput = agent.HeadlessInput
 
+// HeadlessInputImage は headless image input metadata を表す。
+type HeadlessInputImage = agent.HeadlessInputImage
+
 // HeadlessSummary は headless JSON に出す CI 向け runtime summary を表す。
 type HeadlessSummary = agent.HeadlessSummary
 
@@ -47,6 +50,8 @@ const (
 	HeadlessErrorTypeFinalCheckFailed = agent.HeadlessErrorTypeFinalCheckFailed
 	// HeadlessErrorTypeReadOnlyViolation は read-only mode の no-write 違反の error type。
 	HeadlessErrorTypeReadOnlyViolation = agent.HeadlessErrorTypeReadOnlyViolation
+	// HeadlessErrorTypeUnsupportedCapability は要求 capability が provider/runtime で未対応な場合の error type。
+	HeadlessErrorTypeUnsupportedCapability = agent.HeadlessErrorTypeUnsupportedCapability
 	// HeadlessInputSourceArgs は positional args 由来の prompt input source。
 	HeadlessInputSourceArgs = agent.HeadlessInputSourceArgs
 	// HeadlessInputSourcePromptFile は --prompt-file 由来の prompt input source。
@@ -58,6 +63,16 @@ const (
 // NewHeadlessInput は headless prompt input metadata を生成する。
 func NewHeadlessInput(source HeadlessInputSource, promptFile string, byteCount int) HeadlessInput {
 	return agent.NewHeadlessInput(source, promptFile, byteCount)
+}
+
+// NewHeadlessInputImage は headless image input metadata を生成する。
+func NewHeadlessInputImage(path string, mimeType string, byteCount int64, providerSupported bool) HeadlessInputImage {
+	return agent.NewHeadlessInputImage(path, mimeType, byteCount, providerSupported)
+}
+
+// NewHeadlessInputImageFromData は読み込み済み画像から headless image metadata を生成する。
+func NewHeadlessInputImageFromData(image *api.ImageData, providerSupported bool) HeadlessInputImage {
+	return agent.NewHeadlessInputImageFromData(image, providerSupported)
 }
 
 // ParseHeadlessExitPolicy は CLI flag 値を HeadlessExitPolicy に変換する。
@@ -83,6 +98,11 @@ func NewHeadlessUsageErrorResult(provider, model, message string) *HeadlessResul
 // NewHeadlessProviderSetupRequiredResult は provider setup 未完了の headless JSON error を作る。
 func NewHeadlessProviderSetupRequiredResult(provider, model, message string) *HeadlessResult {
 	return agent.NewErrorResult(provider, model, agent.HeadlessErrorTypeProviderSetupRequired, message, 0)
+}
+
+// NewHeadlessUnsupportedCapabilityResult は capability 未対応の headless JSON error を作る。
+func NewHeadlessUnsupportedCapabilityResult(provider, model, message string) *HeadlessResult {
+	return agent.NewErrorResult(provider, model, agent.HeadlessErrorTypeUnsupportedCapability, message, 0)
 }
 
 // RunLegacyInteractiveWithConfig は legacy classic REPL を実行する。
