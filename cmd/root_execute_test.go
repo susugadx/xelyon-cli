@@ -50,6 +50,24 @@ func TestExecute_HelperProcess(t *testing.T) {
 			return result
 		}
 		args = []string{"--headless", "--fail-on-tool-error", "--exit-code-policy", "ci", "--provider", "ollama", "--no-update-check", "hello"}
+	case "headless_read_only_violation_ci":
+		runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+			if !options.FailOnToolError {
+				t.Fatal("FailOnToolError = false, want true")
+			}
+			if !options.ReadOnly {
+				t.Fatal("ReadOnly = false, want true")
+			}
+			result := agent.NewErrorResult(provider.Name(), model, agent.HeadlessErrorTypeReadOnlyViolation, "one or more tool calls were denied by read-only mode", 0)
+			result.ToolCalls = []agent.ToolCallResult{{
+				Tool:    "write_file",
+				Args:    map[string]string{"path": "target.txt"},
+				Output:  "Error: read-only mode denied write-capable tool: write_file",
+				Success: false,
+			}}
+			return result
+		}
+		args = []string{"--headless", "--read-only", "--fail-on-tool-error", "--exit-code-policy", "ci", "--provider", "ollama", "--no-update-check", "hello"}
 	case "root_usage_ci":
 		args = []string{"--exit-code-policy", "ci", "--output-format", "yaml", "--no-update-check", "hello"}
 	case "invalid_exit_policy":
@@ -184,6 +202,38 @@ func TestExecute_ExitsWithHeadlessToolErrorRecommendedCode(t *testing.T) {
 	}
 	if !strings.Contains(string(output), `"recommended_exit_code": 4`) {
 		t.Fatalf("combined output = %q, want recommended_exit_code 4", string(output))
+	}
+}
+
+func TestExecute_ExitsWithHeadlessReadOnlyViolationRecommendedCode(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable() error = %v", err)
+	}
+
+	cmd := exec.Command(exe, "-test.run=TestExecute_HelperProcess")
+	cmd.Env = append(os.Environ(), "GO_WANT_XELYON_ROOT_EXECUTE_HELPER=headless_read_only_violation_ci")
+
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected Execute() helper to exit with non-zero status")
+	}
+
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("error = %T, want *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != 8 {
+		t.Fatalf("exit code = %d, want 8\noutput=%s", exitErr.ExitCode(), string(output))
+	}
+	if !strings.Contains(string(output), `"failure_reason": "read_only_violation"`) {
+		t.Fatalf("combined output = %q, want read_only_violation JSON", string(output))
+	}
+	if !strings.Contains(string(output), `"recommended_exit_code": 8`) {
+		t.Fatalf("combined output = %q, want recommended_exit_code 8", string(output))
+	}
+	if strings.Contains(string(output), "Usage:") {
+		t.Fatalf("combined output contains Cobra usage after headless JSON error:\n%s", string(output))
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/investigation"
 	"github.com/susugadx/xelyon-cli/internal/prompt"
+	toolsubagent "github.com/susugadx/xelyon-cli/internal/tools/subagent"
 )
 
 type toolSurfacePhase string
@@ -48,7 +49,7 @@ func newToolVisibilityPolicy(editToolMode string, phase toolSurfacePhase, opts t
 	excluded := baseToolSurfaceExclusions(editToolMode, phase)
 	excluded = appendUniqueStrings(excluded, investigationToolSurfaceExclusions(surface)...)
 	if !opts.allowSubAgents {
-		excluded = appendUniqueStrings(excluded, "spawn_agent", "wait_agent")
+		excluded = appendUniqueStrings(excluded, toolsubagent.SpawnAgentToolName, toolsubagent.WaitAgentToolName)
 	}
 	policy.excludedTools = excluded
 	return policy

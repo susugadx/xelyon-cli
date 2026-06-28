@@ -1,5 +1,7 @@
 package agent
 
+import toolsubagent "github.com/susugadx/xelyon-cli/internal/tools/subagent"
+
 func normalizeParallelToolFamily(tool string) string {
 	switch tool {
 	case "read_file", "read_files", "list_dir":
@@ -24,9 +26,9 @@ func parallelGroupSummaryLabel(tool string) string {
 
 func parallelSpinnerBucket(tool string) string {
 	switch tool {
-	case "spawn_agent":
+	case toolsubagent.SpawnAgentToolName:
 		return "spawn"
-	case "wait_agent":
+	case toolsubagent.WaitAgentToolName:
 		return "wait"
 	}
 

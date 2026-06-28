@@ -29,6 +29,8 @@ const (
 	HeadlessErrorTypeToolError = "tool_error"
 	// HeadlessErrorTypeFinalCheckFailed は headless final check 失敗の error type。
 	HeadlessErrorTypeFinalCheckFailed = "final_check_failed"
+	// HeadlessErrorTypeReadOnlyViolation は read-only mode の no-write 違反の error type。
+	HeadlessErrorTypeReadOnlyViolation = "read_only_violation"
 
 	// HeadlessInputSourceArgs は positional args 由来の prompt input source。
 	HeadlessInputSourceArgs HeadlessInputSource = "args"
@@ -52,6 +54,8 @@ type HeadlessInput struct {
 type HeadlessRunOptions struct {
 	// FailOnToolError は tool_calls[].success=false を全体 failure に昇格する。
 	FailOnToolError bool
+	// ReadOnly は headless 実行で workspace mutation を拒否する no-write mode。
+	ReadOnly bool
 }
 
 // HeadlessResult はHeadlessモードの実行結果
@@ -264,6 +268,20 @@ func promoteHeadlessFinalCheckFailedResult(result *HeadlessResult) *HeadlessResu
 		Message: "one or more final check commands failed",
 	}
 	result.FailureReason = HeadlessFailureReasonFinalCheckFailed
+	result.RecommendedExitCode = RecommendedHeadlessExitCode(result.Status, result.FailureReason, result.ExitPolicy)
+	return result
+}
+
+func promoteHeadlessReadOnlyViolationResult(result *HeadlessResult) *HeadlessResult {
+	if result == nil {
+		return nil
+	}
+	result.Status = HeadlessStatusError
+	result.Error = &ErrorInfo{
+		Type:    HeadlessErrorTypeReadOnlyViolation,
+		Message: "one or more tool calls were denied by read-only mode",
+	}
+	result.FailureReason = HeadlessFailureReasonReadOnlyViolation
 	result.RecommendedExitCode = RecommendedHeadlessExitCode(result.Status, result.FailureReason, result.ExitPolicy)
 	return result
 }

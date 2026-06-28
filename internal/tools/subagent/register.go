@@ -23,6 +23,13 @@ type subAgentWaiter interface {
 	Wait(ids []string, timeoutMs int) WaitResponse
 }
 
+const (
+	// SpawnAgentToolName は sub-agent 起動 tool 名です。
+	SpawnAgentToolName = "spawn_agent"
+	// WaitAgentToolName は sub-agent 待機 tool 名です。
+	WaitAgentToolName = "wait_agent"
+)
+
 // SpawnAgentTool は spawn_agent ツールです。
 type SpawnAgentTool struct {
 	manager subAgentSpawner
@@ -33,7 +40,7 @@ func NewSpawnAgentTool(manager subAgentSpawner) *SpawnAgentTool {
 	return &SpawnAgentTool{manager: manager}
 }
 
-func (t *SpawnAgentTool) Name() string { return "spawn_agent" }
+func (t *SpawnAgentTool) Name() string { return SpawnAgentToolName }
 
 func (t *SpawnAgentTool) Description() string {
 	return tools.ToolDescription(t.Name())
@@ -133,7 +140,7 @@ func NewWaitAgentTool(manager subAgentWaiter) *WaitAgentTool {
 	return &WaitAgentTool{manager: manager}
 }
 
-func (t *WaitAgentTool) Name() string { return "wait_agent" }
+func (t *WaitAgentTool) Name() string { return WaitAgentToolName }
 
 func (t *WaitAgentTool) Description() string {
 	return tools.ToolDescription(t.Name())

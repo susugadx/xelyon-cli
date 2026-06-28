@@ -19,6 +19,8 @@ type RuntimeOptions struct {
 	EnableCurrentTaskStateContext         bool
 	EnableProviderHistoryRehydrateContext bool
 	EnableProviderHistoryReduction        bool
+	ReadOnly                              bool
+	SkipDevArtifactCleanup                bool
 	ProviderHistoryReductionMode          ProviderHistoryReductionMode
 	ProviderHistoryReductionModeSet       bool
 	ProviderHistoryRawOutputArtifacts     config.ProviderHistoryRawOutputArtifactsConfig
@@ -235,10 +237,10 @@ func registerRuntimeSubAgentTools(runtime *AgentRuntime) {
 	if !runtime.Config.SubAgent.Enabled {
 		return
 	}
-	if !runtime.Registry.HasTool("spawn_agent") {
+	if !runtime.Registry.HasTool(subagent.SpawnAgentToolName) {
 		runtime.Registry.Register(subagent.NewSpawnAgentTool(runtime.SubAgentManager))
 	}
-	if !runtime.Registry.HasTool("wait_agent") {
+	if !runtime.Registry.HasTool(subagent.WaitAgentToolName) {
 		runtime.Registry.Register(subagent.NewWaitAgentTool(runtime.SubAgentManager))
 	}
 }

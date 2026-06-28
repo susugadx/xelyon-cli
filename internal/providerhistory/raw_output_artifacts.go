@@ -34,6 +34,13 @@ func recordArtifactBackedKept(report *CommandEditDryRunReport, reason string) {
 	report.ArtifactBackedKeptReasonCounts[reason]++
 }
 
+func providerHistoryRawOutputMaterializationDeniedReason(policy Policy) string {
+	if policy.RawOutputApplyDisabledReason != "" {
+		return policy.RawOutputApplyDisabledReason
+	}
+	return providerHistoryRawOutputMaterializationReadOnlyReason
+}
+
 func buildProviderHistoryArtifactBackedCommandPlaceholder(ref rawoutputs.RawOutputRef, content string) string {
 	return buildProviderHistoryRawOutputPlaceholder("data-bearing command output", ref, content)
 }

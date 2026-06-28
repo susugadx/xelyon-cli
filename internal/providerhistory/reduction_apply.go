@@ -102,7 +102,7 @@ func applyProviderHistoryRawOutputReductionCandidate(report *ProjectionReport, p
 		return
 	}
 	if !rawOutputArtifactMaterializationAllowed(policy) {
-		reason := providerHistoryRawOutputMaterializationReadOnlyReason
+		reason := providerHistoryRawOutputMaterializationDeniedReason(policy)
 		keepReductionCandidate(report, candidateIndex, reason)
 		report.Candidates[candidateIndex].FailClosedReason = reason
 		return

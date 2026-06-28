@@ -38,10 +38,14 @@ Goal の完了条件は、v1 の stable contract が実装・テスト・docs �
   - Scope: headless summary DTO / builder、bash command summary、headless final check execution and failure classification、docs update まで。
   - Review follow-up: headless final-check cancellation、normal-mode final-check API deadline 分離、`summary.commands` cancellation classification まで修正した。
   - Verification: focused headless summary / final check / cmd exit policy tests、affected package tests、`git diff --check`、local review
-- [ ] Phase 4: `--read-only` / `--dry-run` no-mutation safety mode を追加する。
+- [x] Phase 4: `--read-only` / `--dry-run` no-mutation safety mode を追加する。
+  - Scope: headless/JSON 専用 flags、`--dry-run` strict alias、config bootstrap read-only loader、provider tool definition からの write tool / MCP / sub-agent exclusion、read-only 時の session history / change history / audit log storage / MCP bootstrap / startup ProjectMap cache / skill-router git status signal / skill-router usage ledger 抑止、実行直前 deny、strict 時の `read_only_violation` 昇格、docs update まで。
+  - Verification: focused cmd / internal/agent / internal/tools tests、affected package tests、`git diff --check`
 - [ ] Phase 5: public docs と GitHub Actions examples を現行 schema / flags に合わせる。
 - [ ] Phase 6: headless image support を、scope が制御できる場合だけ実装する。
-- [ ] Phase Final-A: impact audit / review-hole sweep を実施する。
+- [x] Phase Final-A: impact audit / review-hole sweep を実施する。
+  - Scope: read-only startup persistence、provider-history raw output artifact materialization、startup/warmup no-write surfaces、affected caller paths の review-hole sweep まで。
+  - Verification: focused cmd / internal/agent / providerhistory tests、affected package tests、`git diff --check`、local review
 - [ ] Phase Final-B: mandatory comprehensive refactor including tests を実施する。
 
 ## 1. Current State / Implemented Preconditions
@@ -495,7 +499,7 @@ Add flags:
 
 Initial v1 behavior:
 
-- `--read-only` means write-capable tools are unavailable or denied.
+- `--read-only` means write-capable tools and unclassified execution surfaces are unavailable or denied.
 - `--dry-run` is an alias or near-alias for no-write execution in headless CI v1.
 - If the model attempts a write-capable tool, result should be a structured denied tool result.
 - With `--fail-on-tool-error`, denied write attempt becomes `read_only_violation`.
@@ -505,7 +509,7 @@ Initial v1 behavior:
 
 - Tool visibility / execution policy should be owned by runtime/tool visibility policy, not ad hoc checks in each write tool.
 - Write tool classification should use existing `tools.IsWriteTool` or a single source of truth.
-- Bash command policy must distinguish read-only commands from mutating commands using existing shell safety policy where available.
+- Bash is fail-closed in read-only headless v1; shell command read-only classification is not used for this mode.
 
 ### Safety gates
 
@@ -519,10 +523,38 @@ Initial v1 behavior:
 
 - `--read-only` allows read_file / search_code / gather_context.
 - `--read-only` denies apply_patch / write_file / delete_file / str_replace.
-- Mutating bash command is denied.
-- Read-only bash command remains allowed if the normal policy allows it.
+- Bash commands are denied, including commands that look read-only under the normal shell policy.
+- Heuristic-bypass bash examples such as command substitution and `find . -delete` must not execute.
 - Denied mutation does not change files.
 - JSON has `failure_reason: "read_only_violation"` under strict policy.
+- First-run HOME does not get `~/.xelyon/config.yaml` / `~/.xelyon/AGENTS.md` under `--headless --read-only` or `--headless --dry-run`; normal headless keeps existing bootstrap behavior.
+- First-run HOME does not get `~/.xelyon/history`, `~/.xelyon/changes`, or `~/.xelyon/audit` from read-only startup, including when `XELYON_AUDIT_LOG=1`.
+- XML-form `<mcp_...>` examples inside Markdown code blocks and unmatched open tags remain final text, not denied attempts.
+- Strict read-only violation remains `read_only_violation` even if a denied call is followed by tool loop limit.
+
+Phase 4 implementation notes:
+
+- `cmd/root.go` parses `--read-only` / `--dry-run` and normalizes both to `HeadlessRunOptions.ReadOnly`.
+- `--read-only` / `--dry-run` are usage errors outside `--headless` / `--output-format json`.
+- `cmd` selects `cliruntime.LoadConfigSelectionReadOnly` before runner startup when headless read-only / dry-run is active, so missing config bootstrap does not create `~/.xelyon/config.yaml` or the default global `AGENTS.md`.
+- `internal/agent/headless_runner.go` excludes provider-visible write tools using `tools.IsWriteTool`, plus bash, `run_skill_script`, MCP exported tools, and sub-agent tools, without changing normal headless edit surface behavior.
+- Read-only headless does not initialize session history storage, change storage, or file audit logging, so first-run HOME does not get `~/.xelyon/history`, `~/.xelyon/changes`, or `~/.xelyon/audit` from startup.
+- Read-only headless uses a runtime config copy with `mcp.headless=false`, so MCP server processes are not started and `~/.xelyon/mcp.json` is not created by MCP bootstrap during read-only runs.
+- Read-only headless uses the same runtime config copy with `project_map.enabled=false`, so startup project-map build, prompt injection, and `~/.xelyon/cache/projectmap` persistence do not run during read-only runs.
+- Read-only headless uses the same runtime config copy with `lsp.enabled=false`, so LSP client startup and warmup processes do not run during read-only runs.
+- Read-only headless sets the internal runtime read-only policy, so skill-router runtime hints do not run `git status --porcelain` and skill-router recommendation / activation usage ledger writes are skipped.
+- Read-only headless propagates the same internal runtime read-only policy to provider-history projection, so raw output artifact candidates can be reported but artifact materialization and artifact-backed provider-facing replacements are not applied.
+- MCP exported tools are fail-closed in read-only mode until a later per-server/tool read-only capability contract exists.
+- `spawn_agent` / `wait_agent` are fail-closed in read-only mode until sub-agent read-only inheritance is designed.
+- Read-only headless uses a non-persistent ToolCache so cache load/save cannot create, overwrite, or remove `.xelyon/cache/tool_cache.json`.
+- Read-only headless skips startup dev artifact cleanup so old `.xelyon/artifacts/*` files are not removed during no-write runs.
+- Execution-time guard rejects `tools.IsWriteTool(tc.Tool)`, all `bash` tool calls, and `run_skill_script` before invoking the real tool.
+- Execution-time guard also rejects `mcp_*` tool calls before registry execution, including manually emitted tool JSON.
+- Read-only headless also rescues XML-form `<mcp_...>` attempts as synthetic denied tool calls before an unknown XML tag can become a benign final response; candidate detection lives in `internal/tools` and only returns matching-close-tag XML outside Markdown code blocks.
+- Execution-time guard rejects `spawn_agent` / `wait_agent` before registry execution, including manually emitted tool JSON.
+- Denied calls are recorded as failed `tool_calls[]`; denied bash also appears in `summary.commands` as `failed` / `-1`.
+- Denied calls do not call `MutationTracker` and therefore do not record file mutations or invalidate project map as if a write occurred.
+- Strict promotion precedence for otherwise-successful results is `cancelled` -> `final_check_failed` -> `read_only_violation` -> `tool_error`; loop-limit results also preserve `read_only_violation` when the loop was caused after a denied read-only attempt.
 
 ## 13. Phase 5: Docs and GitHub Actions Examples
 
@@ -661,6 +693,7 @@ Do not include:
 - `go test ./cmd -run 'Headless|OutputFormat|PromptFile|ExitCode|ReadOnly' -count=1`
 - `go test ./internal/climode -run 'Mode|OutputFormat|Image' -count=1`
 - `go test ./internal/agent -run 'Headless|FinalCheck|ReadOnly|ToolError|Summary' -count=1`
+- `go test ./internal/tools -run 'XML.*Tool|ParseToolCalls|XMLRescue' -count=1`
 - `go test ./internal/taskstate -run 'ChangedFiles|TestObservation|Snapshot' -count=1`
 
 ### Broader tests

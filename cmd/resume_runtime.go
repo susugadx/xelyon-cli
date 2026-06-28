@@ -32,6 +32,10 @@ type resumeRuntimeSelection struct {
 }
 
 func loadInteractiveConfigSelection(cmd *cobra.Command) *config.Config {
+	return loadConfigSelection(cmd, false)
+}
+
+func loadConfigSelection(cmd *cobra.Command, readOnly bool) *config.Config {
 	overrides := cliruntime.ConfigOverrides{}
 	if flag := cmd.Flags().Lookup("loop-threshold"); flag != nil && flag.Changed {
 		overrides.LoopThresholdChanged = true
@@ -41,11 +45,14 @@ func loadInteractiveConfigSelection(cmd *cobra.Command) *config.Config {
 		overrides.DiffLinesChanged = true
 		overrides.DiffLines = diffLines
 	}
+	if readOnly {
+		return cliruntime.LoadConfigSelectionReadOnly(cmd.ErrOrStderr(), overrides)
+	}
 	return cliruntime.LoadConfigSelection(cmd.ErrOrStderr(), overrides)
 }
 
 func loadRuntimeSelectionForMode(cmd *cobra.Command, mode executionMode) (interactiveRuntimeSelection, error) {
-	cfg := loadInteractiveConfigSelection(cmd)
+	cfg := loadConfigSelection(cmd, mode == executionModeHeadless && (readOnly || dryRun))
 	return selectRuntime(cmd, cfg, mode)
 }
 

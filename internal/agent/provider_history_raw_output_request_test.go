@@ -500,6 +500,64 @@ func TestNormalModeRequestApplyCompactsWebSearchResultAndInjectsRedactedRawOutpu
 	}
 }
 
+func TestProviderHistoryRawOutputReadOnlyRequestApplyKeepsWebSearchRawAndDoesNotMaterializeArtifact(t *testing.T) {
+	agent, provider, store := newProviderHistoryRawOutputRequestAgent(t)
+	countingStore := &countingRawOutputArtifactStore{inner: store}
+	webOutput := providerHistoryLargeSafeWebSearchResult()
+	query := "OpenAI Responses API previous_response_id documentation"
+	agent.Runtime.Options.ReadOnly = true
+	agent.Runtime.RawOutputArtifactStore = countingStore
+	configureProviderHistoryRawOutputRequestApply(agent, 4096, 8192)
+	agent.History = []api.Message{
+		{Role: "user", Content: "inspect web search history"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_web_old", "web_search", map[string]string{"query": query})),
+		providerHistoryToolResult("call_web_old", "web_search", webOutput),
+		{Role: "assistant", Content: "web data reviewed"},
+		providerHistoryAssistantToolCalls(providerHistoryToolCallWithJSONArguments(t, "call_web_dup", "web_search", map[string]string{"query": query})),
+		providerHistoryToolResult("call_web_dup", "web_search", webOutput),
+		{Role: "assistant", Content: "duplicate raw web result remains"},
+		providerHistoryAssistantToolCall("call_latest", "read_file"),
+		providerHistoryToolResult("call_latest", "read_file", "latest read"),
+		{Role: "assistant", Content: "ready"},
+	}
+	syncProviderHistoryRawOutputRequestSession(agent)
+
+	if err := agent.chatInternal("show response ids", nil); err != nil {
+		t.Fatalf("chatInternal() error = %v", err)
+	}
+
+	if got := provider.capturedHistory[2].Content; got != webOutput {
+		t.Fatalf("provider web_search output = %q, want raw output in read-only mode", got)
+	}
+	if len(provider.capturedActiveContextBlocks) != 0 {
+		t.Fatalf("active context blocks = %#v, want none without raw output artifact refs", provider.capturedActiveContextBlocks)
+	}
+	if provider.capturedResponseIDChainDisabled {
+		t.Fatal("response ID chain disabled despite read-only raw output keep")
+	}
+	if countingStore.createCalls != 0 || countingStore.verifyCalls != 0 || countingStore.scanCalls != 0 {
+		t.Fatalf("read-only artifact calls = create:%d verify:%d scan:%d, want no raw output store side effects", countingStore.createCalls, countingStore.verifyCalls, countingStore.scanCalls)
+	}
+	report := agent.Runtime.LastProviderHistoryProjectionReport
+	if report.ReplacedCount != 0 ||
+		report.RawOutputRefCount != 0 ||
+		report.DataBearingCandidateCount != 1 ||
+		report.ResponsesChainDisabled {
+		t.Fatalf("LastProviderHistoryProjectionReport = %#v, want read-only candidate without replacement", report)
+	}
+	candidate := providerHistoryProjectionCandidateByToolCallID(report, "call_web_old")
+	if candidate == nil ||
+		!candidate.ArtifactBackedCandidate ||
+		candidate.RawOutputRefID != "" ||
+		candidate.ArtifactGateStatus != "read_only" ||
+		candidate.KeepReason != providerHistoryProjectionReadOnlyReason ||
+		candidate.FailClosedReason != providerHistoryProjectionReadOnlyReason ||
+		candidate.ReplacementApplied ||
+		candidate.ArtifactBackedApplyEligible {
+		t.Fatalf("web_search candidate = %#v, want read-only fail-closed candidate", candidate)
+	}
+}
+
 func providerHistoryRawOutputTightBudgetFixture(term string) (string, string, int, int) {
 	const totalLines = 900
 	const matchIndex = 450

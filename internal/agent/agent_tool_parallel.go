@@ -8,6 +8,7 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/tools/file/readtool"
+	toolsubagent "github.com/susugadx/xelyon-cli/internal/tools/subagent"
 )
 
 type ToolExecCallback func(idx int, tc *tools.ToolCall, result toolruntime.Result)
@@ -34,7 +35,7 @@ type readFileBatchExecution struct {
 //	現状は bash など context-aware なツールが実行中キャンセルを拾える。
 func (a *Agent) executeToolForParallelResult(ctx context.Context, tc *tools.ToolCall) tools.ExecutionResult {
 	// wait_agent はリアルタイムイベント表示を使用（parallel path でも live view を優先）
-	if tc.Tool == "wait_agent" {
+	if tc.Tool == toolsubagent.WaitAgentToolName {
 		output, change := a.executeWaitAgentWithLiveView(ctx, tc)
 		return tools.ExecutionResult{
 			Result: output,

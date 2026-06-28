@@ -38,7 +38,7 @@ func recordProviderHistoryDataBearingToolArtifactCandidate(report *ProjectionRep
 		return
 	}
 	if !rawOutputArtifactMaterializationAllowed(policy) {
-		entry.KeepReason = providerHistoryRawOutputMaterializationReadOnlyReason
+		entry.KeepReason = providerHistoryRawOutputMaterializationDeniedReason(policy)
 		entry.FailClosedReason = entry.KeepReason
 		entry.ArtifactGateStatus = "read_only"
 		report.Candidates = append(report.Candidates, entry)

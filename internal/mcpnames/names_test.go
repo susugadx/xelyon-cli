@@ -43,3 +43,25 @@ func TestMCPExportedToolName(t *testing.T) {
 		})
 	}
 }
+
+func TestMCPIsExportedToolName(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{name: "exported", in: "mcp_github_get_issue", want: true},
+		{name: "minimal prefix", in: "mcp_", want: true},
+		{name: "builtin", in: "read_file", want: false},
+		{name: "similar", in: "xmcp_github_get_issue", want: false},
+		{name: "empty", in: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsExportedToolName(tt.in); got != tt.want {
+				t.Fatalf("IsExportedToolName(%q) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
+}

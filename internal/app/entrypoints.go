@@ -45,6 +45,8 @@ const (
 	HeadlessErrorTypeConfig = agent.HeadlessErrorTypeConfig
 	// HeadlessErrorTypeFinalCheckFailed は headless final check 失敗の error type。
 	HeadlessErrorTypeFinalCheckFailed = agent.HeadlessErrorTypeFinalCheckFailed
+	// HeadlessErrorTypeReadOnlyViolation は read-only mode の no-write 違反の error type。
+	HeadlessErrorTypeReadOnlyViolation = agent.HeadlessErrorTypeReadOnlyViolation
 	// HeadlessInputSourceArgs は positional args 由来の prompt input source。
 	HeadlessInputSourceArgs = agent.HeadlessInputSourceArgs
 	// HeadlessInputSourcePromptFile は --prompt-file 由来の prompt input source。

@@ -30,6 +30,8 @@ var (
 	outputFormat    string
 	headless        bool
 	failOnToolError bool
+	readOnly        bool
+	dryRun          bool
 	exitCodePolicy  string
 	noUpdateCheck   bool
 	imageFlag       string
@@ -93,6 +95,9 @@ Examples:
 			if headlessPromptFileFlagChanged(cmd) && mode != executionModeHeadless {
 				return commandErrorForExitPolicy(fmt.Errorf("--prompt-file can only be used with --headless or --output-format json"), resolvedExitPolicy, 2)
 			}
+			if (readOnly || dryRun) && mode != executionModeHeadless {
+				return commandErrorForExitPolicy(fmt.Errorf("--read-only and --dry-run can only be used with --headless or --output-format json"), resolvedExitPolicy, 2)
+			}
 
 			// バージョンチェック（--no-update-check または JSON 出力でない場合）
 			if !noUpdateCheck && resolvedOutputFormat != outputFormatJSON {
@@ -125,6 +130,7 @@ Examples:
 				}
 				result := runHeadless(cmd.Context(), promptInput.query, runtime.model, runtime.provider, runtime.cfg, app.HeadlessRunOptions{
 					FailOnToolError: failOnToolError,
+					ReadOnly:        readOnly || dryRun,
 				})
 				if result == nil {
 					result = app.NewHeadlessConfigErrorResult(runtime.provider.Name(), runtime.model, "headless run returned nil result")
@@ -285,6 +291,8 @@ func configureRootCommand(rootCmd *cobra.Command) {
 	rootCmd.Flags().StringVar(&outputFormat, "output-format", "text", "Output format: text or json")
 	rootCmd.Flags().BoolVar(&headless, "headless", false, "Run in headless mode (JSON output, no UI)")
 	rootCmd.Flags().BoolVar(&failOnToolError, "fail-on-tool-error", false, "Treat failed headless tool calls as run failures")
+	rootCmd.Flags().BoolVar(&readOnly, "read-only", false, "Prevent workspace mutation in headless mode")
+	rootCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Alias for --read-only in headless mode")
 	rootCmd.Flags().StringVar(&exitCodePolicy, "exit-code-policy", string(app.HeadlessExitPolicyLegacy), "Exit code policy: legacy or ci")
 	rootCmd.Flags().StringVar(&promptFile, "prompt-file", "", "Read headless prompt from file path or '-' for stdin")
 

@@ -64,6 +64,8 @@ func resetRootFlagsForTest() {
 	outputFormat = "text"
 	headless = false
 	failOnToolError = false
+	readOnly = false
+	dryRun = false
 	exitCodePolicy = string(agent.HeadlessExitPolicyLegacy)
 	noUpdateCheck = false
 	imageFlag = ""

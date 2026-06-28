@@ -45,10 +45,12 @@ func NewAgentWithRuntime(model string, provider api.Provider, headless bool, run
 	errOut := runtimeUI.ErrorOutput()
 
 	applyAgentUILanguage(cfg)
-	toolsdev.CleanupArtifactsWithWriter(errOut)
+	if !runtime.Options.SkipDevArtifactCleanup {
+		toolsdev.CleanupArtifactsWithWriter(errOut)
+	}
 
-	storage := newAgentHistoryStorage(out)
-	changeStorage := newAgentChangeStorage(out)
+	storage := newAgentHistoryStorage(runtime, out)
+	changeStorage := newAgentChangeStorage(runtime, out)
 	mcpManager := setupMCPManager(cfg, headless, out, errOut, runtime.effectiveRegistry())
 	lspClient := newAgentLSPClient(cfg, runtime.effectiveInvocationCWD(), errOut)
 	providerRuntimeName := providerRuntimeNameFromProvider(provider)
@@ -106,7 +108,10 @@ func applyAgentUILanguage(cfg *config.Config) {
 	}
 }
 
-func newAgentHistoryStorage(out io.Writer) *history.Storage {
+func newAgentHistoryStorage(runtime *AgentRuntime, out io.Writer) *history.Storage {
+	if runtime != nil && runtime.Options.ReadOnly {
+		return nil
+	}
 	storage, err := history.NewStorage()
 	if err != nil {
 		red.Fprintf(out, "Warning: Failed to initialize history storage: %v\n", err)
@@ -115,7 +120,10 @@ func newAgentHistoryStorage(out io.Writer) *history.Storage {
 	return storage
 }
 
-func newAgentChangeStorage(out io.Writer) *history.ChangeStorage {
+func newAgentChangeStorage(runtime *AgentRuntime, out io.Writer) *history.ChangeStorage {
+	if runtime != nil && runtime.Options.ReadOnly {
+		return nil
+	}
 	changeStorage, err := history.NewChangeStorage()
 	if err != nil {
 		yellow.Fprintf(out, "Warning: Failed to initialize change storage: %v\n", err)

@@ -34,8 +34,9 @@ func recordProviderHistoryArtifactBackedCommandCandidate(report *CommandEditDryR
 		return
 	}
 	if !rawOutputArtifactMaterializationAllowed(policy) {
-		entry.KeepReason = providerHistoryRawOutputMaterializationReadOnlyReason
-		entry.FailClosedReason = providerHistoryRawOutputMaterializationReadOnlyReason
+		reason := providerHistoryRawOutputMaterializationDeniedReason(policy)
+		entry.KeepReason = reason
+		entry.FailClosedReason = reason
 		entry.ArtifactGateStatus = "read_only"
 		recordArtifactBackedKept(report, entry.KeepReason)
 		report.Kept = append(report.Kept, *entry)
@@ -177,7 +178,7 @@ func applyProviderHistoryArtifactBackedCommandReplacementCandidate(report *Comma
 		return
 	}
 	if !rawOutputArtifactMaterializationAllowed(policy) {
-		reason := providerHistoryRawOutputMaterializationReadOnlyReason
+		reason := providerHistoryRawOutputMaterializationDeniedReason(policy)
 		report.Candidates[candidateIndex].KeepReason = reason
 		report.Candidates[candidateIndex].FailClosedReason = reason
 		recordArtifactBackedKept(report, reason)

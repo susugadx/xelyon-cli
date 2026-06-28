@@ -8,10 +8,13 @@ import (
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
+// RunSkillScriptToolName は skill script 実行 tool 名です。
+const RunSkillScriptToolName = "run_skill_script"
+
 // RunSkillScriptTool は skill scripts 配下のスクリプトを既存 bash 経路で実行する薄いラッパー。
 type RunSkillScriptTool struct{}
 
-func (t *RunSkillScriptTool) Name() string { return "run_skill_script" }
+func (t *RunSkillScriptTool) Name() string { return RunSkillScriptToolName }
 
 func (t *RunSkillScriptTool) Description() string {
 	return tools.ToolDescription(t.Name())

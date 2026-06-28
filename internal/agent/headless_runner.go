@@ -18,19 +18,20 @@ import (
 )
 
 type headlessRunner struct {
-	agent            *Agent
-	provider         api.Provider
-	model            string
-	query            string
-	options          HeadlessRunOptions
-	startedAt        time.Time
-	toolCalls        []ToolCallResult
-	commands         []HeadlessCommandSummary
-	finalChecks      []HeadlessFinalCheckSummary
-	finalReply       string
-	initErr          error
-	cancelledErr     error
-	finalCheckFailed bool
+	agent             *Agent
+	provider          api.Provider
+	model             string
+	query             string
+	options           HeadlessRunOptions
+	startedAt         time.Time
+	toolCalls         []ToolCallResult
+	commands          []HeadlessCommandSummary
+	finalChecks       []HeadlessFinalCheckSummary
+	finalReply        string
+	initErr           error
+	cancelledErr      error
+	finalCheckFailed  bool
+	readOnlyViolation bool
 }
 
 // RunHeadlessWithConfig は指定設定で Headless モードのクエリを実行する。
@@ -43,8 +44,7 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 // ctx が Done になるとサブエージェント含め処理を中断する。
 func RunHeadlessWithConfigOptions(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options HeadlessRunOptions) *HeadlessResult {
 	startedAt := time.Now()
-	runner := newHeadlessRunner(query, model, provider, cfg)
-	runner.options = options
+	runner := newHeadlessRunnerWithOptions(query, model, provider, cfg, options)
 	runner.startedAt = startedAt
 	defer runner.agent.Cleanup()
 	result := runner.run(ctx)
@@ -52,10 +52,16 @@ func RunHeadlessWithConfigOptions(ctx context.Context, query string, model strin
 }
 
 func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.Config) *headlessRunner {
-	runtime := NewAgentRuntimeWithConfig(cfg)
+	return newHeadlessRunnerWithOptions(query, model, provider, cfg, HeadlessRunOptions{})
+}
+
+func newHeadlessRunnerWithOptions(query, model string, provider api.Provider, cfg *config.Config, options HeadlessRunOptions) *headlessRunner {
+	runtime := newHeadlessAgentRuntime(cfg, options)
 	runtime.AutoApprove = true
 	runtime.UI = uiruntime.NewRuntime(strings.NewReader(""), io.Discard, io.Discard)
-	configureRuntimeAuditLoggerFromEnv(runtime, io.Discard, false)
+	if !options.ReadOnly {
+		configureRuntimeAuditLoggerFromEnv(runtime, io.Discard, false)
+	}
 
 	agent := NewAgentWithRuntime(model, provider, true, runtime)
 	agent.setAutoApprove(true) // Headlessモードは自動承認（SafetyLow以外）
@@ -75,7 +81,11 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 	toolVisibility := resolveToolVisibilityPolicyWithConfig(agent.ProviderName, model, agent.cfg(), toolSurfacePhaseNormal, toolVisibilityOptions{
 		allowSubAgents: allowSubAgents,
 	})
-	agent.registry().SetExcludedTools(agent.excludedToolsForVisibilityPolicy(toolVisibility))
+	excludedTools := agent.excludedToolsForVisibilityPolicy(toolVisibility)
+	if options.ReadOnly {
+		excludedTools = headlessReadOnlyExcludedTools(agent.registry(), excludedTools)
+	}
+	agent.registry().SetExcludedTools(excludedTools)
 
 	// 初期ユーザーメッセージをHistoryに追加
 	agent.History = append(agent.History, api.Message{
@@ -88,6 +98,7 @@ func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.C
 		provider: provider,
 		model:    model,
 		query:    query,
+		options:  options,
 		initErr:  initErr,
 	}
 }
@@ -152,6 +163,9 @@ func (r *headlessRunner) requestAssistantResponse(ctx context.Context, iteration
 
 func (r *headlessRunner) handleAssistantResponse(ctx context.Context, response string) bool {
 	parsedCalls := r.agent.parseToolCalls(response)
+	if r.options.ReadOnly {
+		parsedCalls = append(parsedCalls, headlessReadOnlyMCPXMLToolAttempts(response)...)
+	}
 	assignHeadlessRescueToolCallIDs(parsedCalls)
 
 	// ツール呼び出しがなければ最終レスポンスとして終了
@@ -184,10 +198,15 @@ func (r *headlessRunner) executeToolCall(ctx context.Context, tc *tools.ToolCall
 		ToolIndex: toolCount,
 	})
 
-	execResult := r.agent.executeQuietToolResult(ctx, tc, strings.NewReader(""), io.Discard, io.Discard, true)
+	execResult, denied := r.readOnlyDeniedToolResult(tc)
+	if denied {
+		r.readOnlyViolation = true
+	} else {
+		execResult = r.agent.executeQuietToolResult(ctx, tc, strings.NewReader(""), io.Discard, io.Discard, true)
+		r.agent.recordSkillActivationFromToolResult(tc, execResult.Result, execResult.Error)
+		r.agent.mutationTracker().recordExecutedToolResult(tc, execResult, true)
+	}
 	output := execResult.Result
-	r.agent.recordSkillActivationFromToolResult(tc, output, execResult.Error)
-	r.agent.mutationTracker().recordExecutedToolResult(tc, execResult, true)
 
 	success := isHeadlessToolCallSuccess(execResult)
 	if r.agent.Stats != nil {
@@ -236,6 +255,9 @@ func (r *headlessRunner) successResult() *HeadlessResult {
 	if r.finalCheckFailed {
 		return promoteHeadlessFinalCheckFailedResult(result)
 	}
+	if r.options.FailOnToolError && r.readOnlyViolation {
+		return promoteHeadlessReadOnlyViolationResult(result)
+	}
 	if r.options.FailOnToolError && hasFailedHeadlessToolCall(r.toolCalls) {
 		return promoteHeadlessToolErrorResult(result)
 	}
@@ -250,6 +272,9 @@ func (r *headlessRunner) errorResult(errType, errMsg string) *HeadlessResult {
 func (r *headlessRunner) loopLimitResult(limit int) *HeadlessResult {
 	duration := time.Since(r.startedAt).Milliseconds()
 	result := NewToolLoopLimitResult(r.provider.Name(), r.model, limit, r.toolCalls, duration)
+	if r.options.FailOnToolError && r.readOnlyViolation {
+		result = promoteHeadlessReadOnlyViolationResult(result)
+	}
 	return r.attachSummary(attachHeadlessStats(r.agent, result))
 }
 
