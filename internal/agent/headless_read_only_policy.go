@@ -36,26 +36,28 @@ func headlessRuntimeConfigForOptions(cfg *config.Config, options HeadlessRunOpti
 
 func headlessReadOnlyExcludedTools(registry *tools.Registry, baseExcluded []string) []string {
 	excluded := append([]string(nil), baseExcluded...)
-	excluded = appendUniqueStrings(excluded, "bash", toolskills.RunSkillScriptToolName, subagent.SpawnAgentToolName, subagent.WaitAgentToolName)
+	excluded = appendHeadlessReadOnlyDeniedToolNames(excluded,
+		"bash",
+		toolskills.RunSkillScriptToolName,
+		subagent.SpawnAgentToolName,
+		subagent.WaitAgentToolName,
+	)
 	if registry == nil {
 		return excluded
 	}
 	for _, def := range registry.GetToolDefinitions() {
-		if isHeadlessReadOnlyDeniedToolName(def.Name) {
-			excluded = appendUniqueStrings(excluded, def.Name)
-		}
+		excluded = appendHeadlessReadOnlyDeniedToolNames(excluded, def.Name)
 	}
 	return excluded
 }
 
-func isHeadlessReadOnlyDeniedToolName(toolName string) bool {
-	if isHeadlessReadOnlyShellExecutionToolName(toolName) {
-		return true
+func appendHeadlessReadOnlyDeniedToolNames(excluded []string, toolNames ...string) []string {
+	for _, toolName := range toolNames {
+		if _, denied := classifyHeadlessReadOnlyDeniedToolName(toolName); denied {
+			excluded = appendUniqueStrings(excluded, toolName)
+		}
 	}
-	if tools.IsWriteTool(toolName) || mcpnames.IsExportedToolName(toolName) {
-		return true
-	}
-	return isHeadlessReadOnlySubAgentToolName(toolName)
+	return excluded
 }
 
 func headlessReadOnlyMCPXMLToolAttempts(response string) []*tools.ToolCall {
@@ -76,40 +78,29 @@ func (r *headlessRunner) readOnlyDeniedToolResult(tc *tools.ToolCall) (tools.Exe
 	if r == nil || !r.options.ReadOnly || tc == nil {
 		return tools.ExecutionResult{}, false
 	}
-	if tools.IsWriteTool(tc.Tool) {
-		return newHeadlessReadOnlyDeniedExecutionResult(fmt.Sprintf("Error: read-only mode denied write-capable tool: %s", tc.Tool)), true
+	output, denied := classifyHeadlessReadOnlyDeniedToolName(tc.Tool)
+	if !denied {
+		return tools.ExecutionResult{}, false
 	}
-	if mcpnames.IsExportedToolName(tc.Tool) {
-		return newHeadlessReadOnlyDeniedExecutionResult(fmt.Sprintf("Error: read-only mode denied MCP tool: %s", tc.Tool)), true
-	}
-	if isHeadlessReadOnlySubAgentToolName(tc.Tool) {
-		return newHeadlessReadOnlyDeniedExecutionResult(fmt.Sprintf("Error: read-only mode denied sub-agent tool: %s", tc.Tool)), true
-	}
-	if tc.Tool == "bash" {
-		return newHeadlessReadOnlyDeniedExecutionResult("Error: read-only mode denied bash tool"), true
-	}
-	if tc.Tool == toolskills.RunSkillScriptToolName {
-		return newHeadlessReadOnlyDeniedExecutionResult("Error: read-only mode denied skill script execution tool: run_skill_script"), true
-	}
-	return tools.ExecutionResult{}, false
+	return newHeadlessReadOnlyDeniedExecutionResult(output), true
 }
 
-func isHeadlessReadOnlyShellExecutionToolName(toolName string) bool {
+func classifyHeadlessReadOnlyDeniedToolName(toolName string) (string, bool) {
 	switch toolName {
-	case "bash", toolskills.RunSkillScriptToolName:
-		return true
-	default:
-		return false
-	}
-}
-
-func isHeadlessReadOnlySubAgentToolName(toolName string) bool {
-	switch toolName {
+	case "bash":
+		return "Error: read-only mode denied bash tool", true
+	case toolskills.RunSkillScriptToolName:
+		return "Error: read-only mode denied skill script execution tool: run_skill_script", true
 	case subagent.SpawnAgentToolName, subagent.WaitAgentToolName:
-		return true
-	default:
-		return false
+		return fmt.Sprintf("Error: read-only mode denied sub-agent tool: %s", toolName), true
 	}
+	if tools.IsWriteTool(toolName) {
+		return fmt.Sprintf("Error: read-only mode denied write-capable tool: %s", toolName), true
+	}
+	if mcpnames.IsExportedToolName(toolName) {
+		return fmt.Sprintf("Error: read-only mode denied MCP tool: %s", toolName), true
+	}
+	return "", false
 }
 
 func newHeadlessReadOnlyDeniedExecutionResult(output string) tools.ExecutionResult {

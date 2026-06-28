@@ -46,7 +46,7 @@ Goal の完了条件は、v1 の stable contract が実装・テスト・docs �
 - [x] Phase Final-A: impact audit / review-hole sweep を実施する。
   - Scope: read-only startup persistence、provider-history raw output artifact materialization、startup/warmup no-write surfaces、affected caller paths の review-hole sweep まで。
   - Verification: focused cmd / internal/agent / providerhistory tests、affected package tests、`git diff --check`、local review
-- [ ] Phase Final-B: mandatory comprehensive refactor including tests を実施する。
+- [x] Phase Final-B: mandatory comprehensive refactor including tests を実施する。
 
 ## 1. Current State / Implemented Preconditions
 
