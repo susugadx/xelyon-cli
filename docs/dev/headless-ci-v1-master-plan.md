@@ -161,7 +161,7 @@ Phase 0 で小さく owner を分け、実装後 Final-B で構造整理を必�
 
 - `cmd/root.go` が root flags、mode dispatch、headless execution、provider setup JSON を持つ。
 - `internal/climode/mode.go` が `--headless` / `--output-format json` / `--image` の mode validation を持つ。
-- 現在 `--image` は JSON output と併用禁止である。
+- 計画開始時点では `--image` は JSON output と併用禁止だった。Phase 6 で `--headless` / `--output-format json` 対応済み。
 - `cmd/root_test.go` に JSON mode path、provider setup JSON、unknown provider distinction、stdout pure JSON、headless error JSON の regression tests がある。
 
 ### Headless result / runner owner
@@ -790,6 +790,20 @@ Do not change:
 - Final checks now run automatically in headless when changed files are observed and `final_checks.commands` is configured; implementation reuses `runFinalCheckCommands`.
 - Should command summaries include bounded output excerpts? Recommendation: omit by default in v1; add opt-in later.
 - Should headless image be part of the first implementation Goal or a follow-up Goal? Recommendation: keep it in the master plan but do not block Headless CI v1 stable contract on image support.
+
+## 22.1 Future Roadmap Note
+
+Headless CI v1 is the contract foundation, not proof that `--headless --read-only` is already ergonomic in real workflows.
+
+For OSS adoption, expect ordinary `--headless` JSON usage to be the first practical entrypoint. Treat `--read-only` as the CI safety contract for review-only automation, but do not broaden runtime bash / MCP / sub-agent permissions just to make it feel more convenient before dogfooding identifies concrete gaps.
+
+Recommended next sequence:
+
+1. Dogfood ordinary `--headless` and the documented PR smoke workflow in this repository.
+2. Record read-only friction from real runs: missing context, prompt preparation burden, artifact readability, final-check behavior, and bash limitations.
+3. Prefer a context preparation helper over loosening read-only runtime policy. For example, a future `xelyon ci prepare-pr-prompt` could gather merge-base diff, changed files, repo metadata, and configured check hints before invoking `xelyon --headless --prompt-file ... --read-only`.
+4. Build Eval Runner on top of the headless JSON / exit-code contract after the dogfood path is stable.
+5. Keep Batch backend as a later layer for parallel execution, retries, matrix runs, artifacts, and baseline comparison.
 
 ## 23. Goal Handoff Prompt
 

@@ -782,7 +782,7 @@ xelyon --image receipt.png --provider kimi "この画像の内容を要約して
 
 **対応フォーマット**: PNG, JPEG, GIF, WebP
 **対応プロバイダー**: Kimi, Gemini, Claude, OpenAI, Azure OpenAI（DeepSeek, Ollama, Groqは非対応）
-**制限**: `--image` は `--headless` / `--output-format json` と併用できません。`--resume` とも併用できません。
+**制限**: `--image` は `--resume` と併用できません。`--headless` / `--output-format json` では対応プロバイダーの場合に使用でき、JSON には bounded image metadata だけを出します。
 
 ### その他のオプション
 

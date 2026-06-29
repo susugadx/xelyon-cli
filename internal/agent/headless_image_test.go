@@ -52,6 +52,7 @@ func TestHeadlessImageDocumentationIncludesJSONContract(t *testing.T) {
 	text := string(body)
 	required := []string{
 		"--image screenshot.png",
+		"`--image` は headless / JSON mode でも使えます",
 		"input.image.path",
 		"input.image.mime_type",
 		"input.image.bytes",
@@ -64,6 +65,14 @@ func TestHeadlessImageDocumentationIncludesJSONContract(t *testing.T) {
 	for _, want := range required {
 		if !strings.Contains(text, want) {
 			t.Fatalf("docs/commands.md should include %q for the headless image JSON contract", want)
+		}
+	}
+	forbidden := []string{
+		"`--image` は `--headless` / `--output-format json` と併用できません",
+	}
+	for _, wantMissing := range forbidden {
+		if strings.Contains(text, wantMissing) {
+			t.Fatalf("docs/commands.md should not say %q after headless image support", wantMissing)
 		}
 	}
 }
