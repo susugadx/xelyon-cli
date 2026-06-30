@@ -195,6 +195,27 @@ func TestRootCommand_HeadlessPromptInputValidationErrorsReturnJSON(t *testing.T)
 	}
 }
 
+func TestRootCommand_HeadlessPromptInputValidationWithImageIncludesMetadata(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+
+	runHeadlessCalled := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+		runHeadlessCalled = true
+		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
+	}
+
+	imagePath := filepath.Join(t.TempDir(), "missing-is-not-read.png")
+	promptPath := filepath.Join(t.TempDir(), "missing.md")
+	parsed, _, stderr, err := executeRootCommandForHeadlessJSONTest(t, []string{"--headless", "--provider", "openai", "--no-update-check", "--image", imagePath, "--prompt-file", promptPath}, "")
+	requireHeadlessConfigError(t, parsed, stderr, err)
+	if runHeadlessCalled {
+		t.Fatal("headless runner must not be called after prompt input validation error")
+	}
+	requireHeadlessInput(t, parsed.Input, agent.HeadlessInputSourcePromptFile, promptPath, 0)
+	requireHeadlessInputImage(t, parsed.Input, imagePath, "", 0, true)
+}
+
 func TestRootCommand_PromptFileRequiresHeadlessJSONMode(t *testing.T) {
 	withRootCommandTest(t)
 

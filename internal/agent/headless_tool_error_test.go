@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/tools/subagent"
 )
 
 type headlessToolErrorUsageProvider struct {
@@ -122,6 +123,89 @@ func TestRunHeadlessWithConfigOptions_FailOnToolErrorPromotesSuccessResult(t *te
 	}
 	if result.Cost <= 0 {
 		t.Fatalf("Cost = %f, want preserved positive cost", result.Cost)
+	}
+}
+
+func TestHeadlessWaitAgentResponseHasFailure(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{
+			name:   "completed",
+			output: `{"results":[{"agent_id":"sub-001","status":"completed","output":"ok"}],"status":"completed"}`,
+			want:   false,
+		},
+		{
+			name:   "top level error",
+			output: `{"results":[{"agent_id":"sub-001","status":"error","output":"tests failed"}],"status":"error"}`,
+			want:   true,
+		},
+		{
+			name:   "child error with completed envelope",
+			output: `{"results":[{"agent_id":"sub-001","status":"error","output":"tests failed"}],"status":"completed"}`,
+			want:   true,
+		},
+		{
+			name:   "timeout",
+			output: `{"results":[{"agent_id":"sub-001","status":"timeout","output":""}],"status":"timeout"}`,
+			want:   true,
+		},
+		{
+			name:   "invalid json keeps generic tool success",
+			output: `not-json`,
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := headlessWaitAgentResponseHasFailure(tt.output); got != tt.want {
+				t.Fatalf("headlessWaitAgentResponseHasFailure() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunHeadlessWithConfigOptions_FailOnToolErrorPromotesWaitAgentErrorStatus(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	provider := &headlessToolErrorUsageProvider{
+		responses: []string{
+			fmt.Sprintf(`{"tool":"%s","args":{"ids":%q}}`, subagent.WaitAgentToolName, `["sub-missing"]`),
+			"final response after delegated failure",
+		},
+	}
+
+	result := RunHeadlessWithConfigOptions(context.Background(), "wait for delegated work", "gpt-5.4-nano", provider, newProjectMapDisabledConfig(), HeadlessRunOptions{
+		FailOnToolError: true,
+	})
+
+	if result.Status != HeadlessStatusError {
+		t.Fatalf("Status = %q, want error", result.Status)
+	}
+	if result.Error == nil || result.Error.Type != HeadlessErrorTypeToolError {
+		t.Fatalf("Error = %+v, want %s", result.Error, HeadlessErrorTypeToolError)
+	}
+	if result.FailureReason != HeadlessFailureReasonToolError {
+		t.Fatalf("FailureReason = %q, want %q", result.FailureReason, HeadlessFailureReasonToolError)
+	}
+	if result.Response != "final response after delegated failure" {
+		t.Fatalf("Response = %q, want preserved final response", result.Response)
+	}
+	if len(result.ToolCalls) != 1 {
+		t.Fatalf("ToolCalls length = %d, want 1", len(result.ToolCalls))
+	}
+	call := result.ToolCalls[0]
+	if call.Tool != subagent.WaitAgentToolName {
+		t.Fatalf("ToolCalls[0].Tool = %q, want %s", call.Tool, subagent.WaitAgentToolName)
+	}
+	if call.Success {
+		t.Fatalf("wait_agent success = true, want false; output=%q", call.Output)
+	}
+	if !strings.Contains(call.Output, `"status":"error"`) || !strings.Contains(call.Output, "agent not found") {
+		t.Fatalf("wait_agent output = %q, want error status JSON", call.Output)
 	}
 }
 

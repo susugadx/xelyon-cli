@@ -58,6 +58,8 @@ const (
 	HeadlessInputSourcePromptFile = agent.HeadlessInputSourcePromptFile
 	// HeadlessInputSourceStdin は stdin 由来の prompt input source。
 	HeadlessInputSourceStdin = agent.HeadlessInputSourceStdin
+	// DefaultImagePrompt は画像だけが渡された時の既定プロンプト。
+	DefaultImagePrompt = agent.DefaultImagePrompt
 )
 
 // NewHeadlessInput は headless prompt input metadata を生成する。

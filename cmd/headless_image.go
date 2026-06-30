@@ -5,6 +5,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/app"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 type headlessImageInputResolution struct {
@@ -53,6 +54,29 @@ func resolveHeadlessProviderSetupRequiredImageInput(providerName string, model s
 
 func withHeadlessImageInputMetadata(input app.HeadlessInput, imagePath string, providerSupported bool) app.HeadlessInput {
 	return input.WithImage(app.NewHeadlessInputImage(imagePath, "", 0, providerSupported))
+}
+
+func withHeadlessImageInputMetadataForProviderName(input app.HeadlessInput, imagePath string, providerName string) app.HeadlessInput {
+	if imagePath == "" {
+		return input
+	}
+	return withHeadlessImageInputMetadata(input, imagePath, api.SupportsImages(providerName))
+}
+
+func withHeadlessImageInputMetadataForCurrentProvider(input app.HeadlessInput, imagePath string) app.HeadlessInput {
+	if imagePath == "" {
+		return input
+	}
+	return withHeadlessImageInputMetadataForProviderName(input, imagePath, resolveHeadlessImageMetadataProviderName())
+}
+
+func resolveHeadlessImageMetadataProviderName() string {
+	cfg, err := config.LoadConfigReadOnly()
+	if err != nil || cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	cfg.ApplyEnvironmentOverrides()
+	return resolveProviderName(providerFlag, cfg.DefaultProvider)
 }
 
 func newHeadlessUnsupportedImageInputResult(providerName string, model string, input app.HeadlessInput) *app.HeadlessResult {

@@ -17,7 +17,7 @@ type headlessPromptInput struct {
 	input app.HeadlessInput
 }
 
-func resolveHeadlessPromptInput(cmd *cobra.Command, args []string) (headlessPromptInput, error) {
+func resolveHeadlessPromptInput(cmd *cobra.Command, args []string, allowEmptyArgs bool) (headlessPromptInput, error) {
 	if headlessPromptFileFlagChanged(cmd) {
 		input := app.NewHeadlessInput(app.HeadlessInputSourcePromptFile, promptFile, 0)
 		if len(args) > 0 {
@@ -36,9 +36,30 @@ func resolveHeadlessPromptInput(cmd *cobra.Command, args []string) (headlessProm
 	query := strings.Join(args, " ")
 	input := app.NewHeadlessInput(app.HeadlessInputSourceArgs, "", len([]byte(query)))
 	if strings.TrimSpace(query) == "" {
+		if allowEmptyArgs {
+			return headlessPromptInput{query: query, input: input}, nil
+		}
 		return headlessPromptInput{query: query, input: input}, fmt.Errorf("query argument is required in headless mode")
 	}
 	return headlessPromptInput{query: query, input: input}, nil
+}
+
+func newHeadlessPreRunInputMetadata(cmd *cobra.Command, args []string) app.HeadlessInput {
+	var input app.HeadlessInput
+	switch {
+	case headlessPromptFileFlagChanged(cmd):
+		if promptFile == "-" {
+			input = app.NewHeadlessInput(app.HeadlessInputSourceStdin, "", 0)
+		} else {
+			input = app.NewHeadlessInput(app.HeadlessInputSourcePromptFile, promptFile, 0)
+		}
+	case len(args) == 1 && args[0] == "-":
+		input = app.NewHeadlessInput(app.HeadlessInputSourceStdin, "", 0)
+	default:
+		query := strings.Join(args, " ")
+		input = app.NewHeadlessInput(app.HeadlessInputSourceArgs, "", len([]byte(query)))
+	}
+	return withHeadlessImageInputMetadataForCurrentProvider(input, imageFlag)
 }
 
 func headlessPromptFileFlagChanged(cmd *cobra.Command) bool {

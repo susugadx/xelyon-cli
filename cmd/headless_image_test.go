@@ -47,6 +47,36 @@ func TestRootCommand_HeadlessWithImagePassesMetadataAndOptions(t *testing.T) {
 	}
 }
 
+func TestRootCommand_HeadlessImageOnlyUsesDefaultPrompt(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "test-key")
+
+	imageBytes := []byte("fake png data for headless image")
+	imagePath := writeHeadlessImageTestFile(t, "screen.png", imageBytes)
+	called := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+		called = true
+		if query != agent.DefaultImagePrompt {
+			t.Fatalf("query = %q, want default image prompt", query)
+		}
+		if options.Image == nil {
+			t.Fatal("options.Image = nil, want loaded image")
+		}
+		return agent.NewSuccessResult(provider.Name(), model, "ok", nil, 0)
+	}
+
+	parsed, _, stderr, err := executeRootCommandForHeadlessJSONTest(t, []string{"--headless", "--provider", "openai", "--no-update-check", "--image", imagePath}, "")
+	if err != nil {
+		t.Fatalf("Execute() error = %v\nstderr=%s", err, stderr)
+	}
+	if !called {
+		t.Fatal("headless runner was not called")
+	}
+	requireHeadlessInput(t, parsed.Input, agent.HeadlessInputSourceArgs, "", 0)
+	requireHeadlessInputImage(t, parsed.Input, imagePath, "image/png", int64(len(imageBytes)), true)
+}
+
 func TestRootCommand_HeadlessWithUnsupportedImageProviderReturnsJSON(t *testing.T) {
 	withRootCommandTest(t)
 	t.Setenv("HOME", t.TempDir())
@@ -160,6 +190,61 @@ func TestRootCommand_HeadlessImageProviderSetupRequiredSkipsImageLoad(t *testing
 	}
 	if parsed.FailureReason != agent.HeadlessFailureReasonProviderSetupRequired {
 		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonProviderSetupRequired)
+	}
+	requireHeadlessInputImage(t, parsed.Input, imagePath, "", 0, true)
+}
+
+func TestRootCommand_HeadlessImageUnknownProviderConfigErrorIncludesMetadata(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+		t.Fatal("headless runner must not run after provider resolution failure")
+		return nil
+	}
+
+	imagePath := filepath.Join(t.TempDir(), "missing-is-not-read.png")
+	parsed, _, stderr, err := executeRootCommandForHeadlessJSONTest(t, []string{"--headless", "--exit-code-policy", "ci", "--provider", "not-a-provider", "--no-update-check", "--image", imagePath, "describe"}, "")
+	if err == nil {
+		t.Fatal("expected unknown provider error")
+	}
+	requireCommandExitCode(t, err, 3)
+	if strings.Contains(stderr, "Usage:") {
+		t.Fatalf("stderr contains Cobra usage after headless JSON error:\n%s", stderr)
+	}
+	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeConfig {
+		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeConfig)
+	}
+	if parsed.FailureReason != agent.HeadlessFailureReasonConfigError {
+		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonConfigError)
+	}
+	requireHeadlessInputImage(t, parsed.Input, imagePath, "", 0, false)
+}
+
+func TestRootCommand_HeadlessImageModelValidationErrorIncludesMetadata(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GEMINI_API_KEY", "test-key")
+
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+		t.Fatal("headless runner must not run after model validation failure")
+		return nil
+	}
+
+	imagePath := filepath.Join(t.TempDir(), "missing-is-not-read.png")
+	parsed, _, stderr, err := executeRootCommandForHeadlessJSONTest(t, []string{"--headless", "--exit-code-policy", "ci", "--provider", "gemini", "--model", "gemini-2.0-flash-lite", "--no-update-check", "--image", imagePath, "describe"}, "")
+	if err == nil {
+		t.Fatal("expected model validation error")
+	}
+	requireCommandExitCode(t, err, 3)
+	if strings.Contains(stderr, "Usage:") {
+		t.Fatalf("stderr contains Cobra usage after headless JSON error:\n%s", stderr)
+	}
+	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeConfig {
+		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeConfig)
+	}
+	if parsed.FailureReason != agent.HeadlessFailureReasonConfigError {
+		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonConfigError)
 	}
 	requireHeadlessInputImage(t, parsed.Input, imagePath, "", 0, true)
 }

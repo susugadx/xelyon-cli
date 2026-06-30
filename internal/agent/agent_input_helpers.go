@@ -33,7 +33,7 @@ func parseImageInputWithWriter(out io.Writer, input string) (text string, image 
 	// テキスト部分を結合
 	text = strings.Join(textParts, " ")
 	if text == "" {
-		text = "Please analyze this image." // デフォルトメッセージ
+		text = DefaultImagePrompt
 	}
 
 	// 画像読み込み

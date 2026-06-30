@@ -44,6 +44,31 @@ func TestRunHeadlessWithConfigOptions_ImageUsesMultimodalFirstRequest(t *testing
 	}
 }
 
+func TestRunHeadlessWithConfigOptions_ImageOnlyDefaultsPrompt(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	image := &api.ImageData{
+		Path:      "screen.png",
+		MediaType: "image/png",
+		Base64:    "raw-image-base64",
+		Size:      12,
+	}
+	provider := &imageOnceProvider{}
+	result := RunHeadlessWithConfigOptions(context.Background(), "", "test-model", provider, newProjectMapDisabledConfig(), HeadlessRunOptions{
+		Image: image,
+	})
+
+	if result.Status != HeadlessStatusSuccess {
+		t.Fatalf("status = %q, want success: error=%+v", result.Status, result.Error)
+	}
+	if provider.lastMessage != DefaultImagePrompt {
+		t.Fatalf("image prompt = %q, want default image prompt", provider.lastMessage)
+	}
+	if result.Input == nil || result.Input.Bytes != len([]byte(DefaultImagePrompt)) {
+		t.Fatalf("input = %+v, want default prompt byte metadata", result.Input)
+	}
+}
+
 func TestHeadlessImageDocumentationIncludesJSONContract(t *testing.T) {
 	body, err := os.ReadFile("../../docs/commands.md")
 	if err != nil {

@@ -15,7 +15,8 @@ import (
 )
 
 type imageOnceProvider struct {
-	imageCalls int
+	imageCalls  int
+	lastMessage string
 }
 
 func (p *imageOnceProvider) Name() string { return "openai" }
@@ -28,11 +29,12 @@ func (p *imageOnceProvider) ChatWithTools(context.Context, string, []api.Message
 	return "", fmt.Errorf("ChatWithTools should not be called for image one-shot")
 }
 
-func (p *imageOnceProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, _ string, image *api.ImageData, _ string) (string, error) {
+func (p *imageOnceProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, userMessage string, image *api.ImageData, _ string) (string, error) {
 	if image == nil {
 		return "", fmt.Errorf("image is required")
 	}
 	p.imageCalls++
+	p.lastMessage = userMessage
 	return "mock image response", nil
 }
 

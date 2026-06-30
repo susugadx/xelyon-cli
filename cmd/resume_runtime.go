@@ -144,6 +144,9 @@ func selectRuntime(cmd *cobra.Command, cfg *config.Config, mode executionMode) (
 	}
 	if !api.IsProviderSetupRequired(provider) {
 		if err := validateSelectedProviderModel(cfg, provider, model); err != nil {
+			if mode == executionModeHeadless {
+				return interactiveRuntimeSelection{}, newHeadlessRuntimeSelectionConfigError(provider.Name(), model, err)
+			}
 			return interactiveRuntimeSelection{}, err
 		}
 	}

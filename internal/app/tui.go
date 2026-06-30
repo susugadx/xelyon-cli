@@ -70,7 +70,7 @@ func RunTUIWithImageWithConfig(query string, model string, provider api.Provider
 	}
 
 	if query == "" {
-		query = "Please analyze this image."
+		query = agent.DefaultImagePrompt
 	}
 
 	return runTUIWithOptions(model, provider, cfg, autoApprove, tuiRunOptions{

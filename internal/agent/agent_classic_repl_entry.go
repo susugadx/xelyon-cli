@@ -118,7 +118,7 @@ func RunLegacyInteractiveWithImageWithConfig(query string, model string, provide
 	green.Fprintf(env.runtimeUI.Output(), "🖼️  Image loaded: %s (%s)\n", image.Path, api.FormatImageSize(image.Size))
 
 	if query == "" {
-		query = "Please analyze this image."
+		query = DefaultImagePrompt
 	}
 
 	agent.setPromptReader(env.mlReader)

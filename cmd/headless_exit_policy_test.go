@@ -148,6 +148,57 @@ func TestRootCommand_HeadlessPromptInputErrorUsesCIExitPolicy(t *testing.T) {
 	requireCommandExitCode(t, err, 2)
 }
 
+func TestRootCommand_HeadlessMissingProviderCredentialPrintsJSONSetupError(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+
+	headlessCalled := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+		headlessCalled = true
+		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
+	}
+
+	parsed, _, stderr, err := executeRootCommandForHeadlessJSONTest(t, []string{"--headless", "--provider", "openai", "--no-update-check", "hello"}, "")
+	if err == nil {
+		t.Fatal("expected headless execution error")
+	}
+	requireCommandExitCode(t, err, 1)
+	if headlessCalled {
+		t.Fatal("headless runner must not be called without provider credential")
+	}
+	if !rootCmd.SilenceUsage {
+		t.Fatal("rootCmd.SilenceUsage = false, want true after printing headless setup JSON")
+	}
+	if strings.Contains(stderr, "Usage:") {
+		t.Fatalf("stderr contains Cobra usage after headless setup JSON:\n%s", stderr)
+	}
+	if parsed.SchemaVersion != agent.HeadlessSchemaVersion {
+		t.Fatalf("schema_version = %q, want %q", parsed.SchemaVersion, agent.HeadlessSchemaVersion)
+	}
+	if parsed.Status != agent.HeadlessStatusError {
+		t.Fatalf("status = %q, want %q", parsed.Status, agent.HeadlessStatusError)
+	}
+	requireHeadlessInput(t, parsed.Input, agent.HeadlessInputSourceArgs, "", len([]byte("hello")))
+	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeProviderSetupRequired {
+		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeProviderSetupRequired)
+	}
+	if parsed.FailureReason != agent.HeadlessFailureReasonProviderSetupRequired {
+		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonProviderSetupRequired)
+	}
+	if parsed.ExitPolicy != agent.HeadlessExitPolicyLegacy {
+		t.Fatalf("exit_policy = %q, want %q", parsed.ExitPolicy, agent.HeadlessExitPolicyLegacy)
+	}
+	if parsed.RecommendedExitCode != 1 {
+		t.Fatalf("recommended_exit_code = %d, want 1", parsed.RecommendedExitCode)
+	}
+	for _, fragment := range []string{"OPENAI_API_KEY", "xelyon setup"} {
+		if !strings.Contains(parsed.Error.Message, fragment) {
+			t.Fatalf("setup JSON error missing %q:\n%s", fragment, parsed.Error.Message)
+		}
+	}
+}
+
 func TestRootCommand_HeadlessProviderSetupRequiredUsesCIExitPolicy(t *testing.T) {
 	withRootCommandTest(t)
 	t.Setenv("HOME", t.TempDir())
@@ -177,6 +228,88 @@ func TestRootCommand_HeadlessProviderSetupRequiredUsesCIExitPolicy(t *testing.T)
 	}
 	if parsed.ExitPolicy != agent.HeadlessExitPolicyCI {
 		t.Fatalf("exit_policy = %q, want %q", parsed.ExitPolicy, agent.HeadlessExitPolicyCI)
+	}
+	if parsed.RecommendedExitCode != 3 {
+		t.Fatalf("recommended_exit_code = %d, want 3", parsed.RecommendedExitCode)
+	}
+	requireCommandExitCode(t, err, 3)
+}
+
+func TestRootCommand_HeadlessUnknownProviderReturnsConfigJSONWithoutSetupJSON(t *testing.T) {
+	withRootCommandTest(t)
+
+	headlessCalled := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+		headlessCalled = true
+		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
+	}
+
+	parsed, output, stderr, err := executeRootCommandForHeadlessJSONTest(t, []string{"--headless", "--exit-code-policy", "ci", "--provider", "not-a-provider", "--no-update-check", "hello"}, "")
+	if err == nil {
+		t.Fatal("expected unknown provider error")
+	}
+	requireCommandExitCode(t, err, 3)
+	if headlessCalled {
+		t.Fatal("headless runner must not be called with unknown provider")
+	}
+	if strings.Contains(stderr, "Usage:") {
+		t.Fatalf("stderr contains Cobra usage after headless JSON error:\n%s", stderr)
+	}
+	if output == "" {
+		t.Fatal("stdout is empty, want headless JSON")
+	}
+	if parsed.Provider != "not-a-provider" {
+		t.Fatalf("provider = %q, want not-a-provider", parsed.Provider)
+	}
+	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeConfig {
+		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeConfig)
+	}
+	if parsed.FailureReason != agent.HeadlessFailureReasonConfigError {
+		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonConfigError)
+	}
+	if parsed.RecommendedExitCode != 3 {
+		t.Fatalf("recommended_exit_code = %d, want 3", parsed.RecommendedExitCode)
+	}
+	if strings.Contains(output, agent.HeadlessErrorTypeProviderSetupRequired) {
+		t.Fatalf("stdout must not contain provider setup JSON: %q", output)
+	}
+	if !strings.Contains(parsed.Error.Message, "unknown provider") {
+		t.Fatalf("error message = %q, want unknown provider", parsed.Error.Message)
+	}
+}
+
+func TestRootCommand_HeadlessModelValidationErrorUsesConfigJSON(t *testing.T) {
+	withRootCommandTest(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GEMINI_API_KEY", "test-key")
+
+	headlessCalled := false
+	runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
+		headlessCalled = true
+		return agent.NewSuccessResult(provider.Name(), model, "unexpected", nil, 0)
+	}
+
+	parsed, _, stderr, err := executeRootCommandForHeadlessJSONTest(t, []string{"--headless", "--exit-code-policy", "ci", "--provider", "gemini", "--model", "gemini-2.0-flash-lite", "--no-update-check", "hello"}, "")
+	if err == nil {
+		t.Fatal("expected headless model validation error")
+	}
+	if headlessCalled {
+		t.Fatal("headless runner must not be called after model validation error")
+	}
+	if strings.Contains(stderr, "Usage:") {
+		t.Fatalf("stderr contains Cobra usage after headless config JSON:\n%s", stderr)
+	}
+	if parsed.Provider != "Gemini" {
+		t.Fatalf("provider = %q, want Gemini", parsed.Provider)
+	}
+	if parsed.Model != "gemini-2.0-flash-lite" {
+		t.Fatalf("model = %q, want gemini-2.0-flash-lite", parsed.Model)
+	}
+	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeConfig {
+		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeConfig)
+	}
+	if parsed.FailureReason != agent.HeadlessFailureReasonConfigError {
+		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonConfigError)
 	}
 	if parsed.RecommendedExitCode != 3 {
 		t.Fatalf("recommended_exit_code = %d, want 3", parsed.RecommendedExitCode)

@@ -43,6 +43,7 @@ func RunHeadlessWithConfig(ctx context.Context, query string, model string, prov
 // RunHeadlessWithConfigOptions は指定設定と追加ポリシーで Headless モードのクエリを実行する。
 // ctx が Done になるとサブエージェント含め処理を中断する。
 func RunHeadlessWithConfigOptions(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options HeadlessRunOptions) *HeadlessResult {
+	query = defaultHeadlessImagePrompt(query, options)
 	startedAt := time.Now()
 	runner := newHeadlessRunnerWithOptions(query, model, provider, cfg, options)
 	runner.startedAt = startedAt
@@ -53,6 +54,13 @@ func RunHeadlessWithConfigOptions(ctx context.Context, query string, model strin
 		input = input.WithImage(NewHeadlessInputImageFromData(options.Image, provider.SupportsImages()))
 	}
 	return result.WithInput(input)
+}
+
+func defaultHeadlessImagePrompt(query string, options HeadlessRunOptions) string {
+	if strings.TrimSpace(query) == "" && options.Image != nil {
+		return DefaultImagePrompt
+	}
+	return query
 }
 
 func newHeadlessRunner(query, model string, provider api.Provider, cfg *config.Config) *headlessRunner {
@@ -226,7 +234,7 @@ func (r *headlessRunner) executeToolCall(ctx context.Context, tc *tools.ToolCall
 	}
 	output := execResult.Result
 
-	success := isHeadlessToolCallSuccess(execResult)
+	success := isHeadlessToolCallSuccessForTool(tc.Tool, execResult)
 	if r.agent.Stats != nil {
 		r.agent.Stats.AddToolExecution(tc.Tool)
 	}
@@ -262,6 +270,41 @@ func (r *headlessRunner) executeToolCall(ctx context.Context, tc *tools.ToolCall
 // 先頭空白付きの "Error:" を失敗として扱いつつ、文中の "Error:" は許容する。
 func isHeadlessToolCallSuccess(execResult tools.ExecutionResult) bool {
 	return !execResult.Error && !tools.IsErrorResult(execResult.Result)
+}
+
+func isHeadlessToolCallSuccessForTool(toolName string, execResult tools.ExecutionResult) bool {
+	if !isHeadlessToolCallSuccess(execResult) {
+		return false
+	}
+	if toolName == subagent.WaitAgentToolName && headlessWaitAgentResponseHasFailure(execResult.Result) {
+		return false
+	}
+	return true
+}
+
+func headlessWaitAgentResponseHasFailure(output string) bool {
+	var response subagent.WaitResponse
+	if err := json.Unmarshal([]byte(output), &response); err != nil {
+		return false
+	}
+	if isHeadlessWaitAgentFailureStatus(response.Status) {
+		return true
+	}
+	for _, result := range response.Results {
+		if isHeadlessWaitAgentFailureStatus(result.Status) {
+			return true
+		}
+	}
+	return false
+}
+
+func isHeadlessWaitAgentFailureStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "", "completed":
+		return false
+	default:
+		return true
+	}
 }
 
 func (r *headlessRunner) successResult() *HeadlessResult {
