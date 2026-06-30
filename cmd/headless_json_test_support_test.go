@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,27 +15,21 @@ import (
 func executeRootCommandForHeadlessJSONTest(t *testing.T, args []string, stdin string) (agent.HeadlessResult, string, string, error) {
 	t.Helper()
 
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Pipe() error = %v", err)
-	}
-	os.Stdout = w
-
+	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	rootCmd.SetOut(&stderr)
+	rootCmd.SetOut(&stdout)
 	rootCmd.SetErr(&stderr)
 	rootCmd.SetIn(strings.NewReader(stdin))
 	rootCmd.SetArgs(args)
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		rootCmd.SetIn(nil)
+	})
 
 	execErr := rootCmd.Execute()
 
-	_ = w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	output := strings.TrimSpace(buf.String())
+	output := strings.TrimSpace(stdout.String())
 
 	var parsed agent.HeadlessResult
 	if output != "" {

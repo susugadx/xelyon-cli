@@ -72,9 +72,10 @@ type managedSubAgent struct {
 
 // WaitResult は wait_agent の 1 エージェント分の結果です。
 type WaitResult struct {
-	AgentID string `json:"agent_id"`
-	Status  string `json:"status"`
-	Output  string `json:"output"`
+	AgentID       string               `json:"agent_id"`
+	Status        string               `json:"status"`
+	Output        string               `json:"output"`
+	ToolBreakdown []ToolBreakdownEntry `json:"tool_breakdown,omitempty"`
 }
 
 // WaitResponse は wait_agent のレスポンス全体です。

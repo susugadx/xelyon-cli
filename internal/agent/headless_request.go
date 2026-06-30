@@ -26,17 +26,6 @@ func (r *headlessRunner) requestAssistantResponse(ctx context.Context, iteration
 		effectivePrompt = r.agent.normalModeSystemPromptForRequestWithDirectives(reqCtx, r.query, iteration == 0, runtimeDirectives)
 	}
 	requestCtx := r.agent.prepareResponseContextForPrompt(r.agent.requestContext(reqCtx), effectivePrompt)
-	if iteration == 0 && r.options.Image != nil {
-		requestCtx, history := r.agent.providerFacingHistoryExcludingLatestMessageForRequest(requestCtx)
-		response, err := r.provider.ChatWithImage(requestCtx, effectivePrompt, history, r.query, r.options.Image, r.model)
-		if err != nil {
-			return "", err
-		}
-		r.agent.recordResponseContextForPrompt(effectivePrompt)
-		r.agent.markRuntimeDirectivesDelivered(runtimeDirectives)
-		return response, nil
-	}
-
 	requestCtx, history := r.agent.providerFacingHistoryForRequest(requestCtx)
 	response, err := r.provider.ChatWithTools(requestCtx, effectivePrompt, history, r.model)
 	if err != nil {

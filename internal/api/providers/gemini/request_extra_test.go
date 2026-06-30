@@ -78,6 +78,66 @@ func TestBuildGeminiRequests_ServiceTier(t *testing.T) {
 	}
 }
 
+func TestBuildGeminiMultimodalHistoryRequest_KeepsImageAndToolSequence(t *testing.T) {
+	ctx := newGeminiRequestContext(true, "high")
+	cfg := config.FromContext(ctx)
+	req := buildGeminiMultimodalHistoryRequest(
+		ctx,
+		"system",
+		[]api.Message{
+			api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+			{
+				Role: "assistant",
+				ToolCalls: []api.OpenAIToolCall{{
+					ID:       "call_1",
+					Type:     "function",
+					Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"README.md"}`},
+				}},
+			},
+			{Role: "tool", ToolCallID: "call_1", ToolName: "read_file", Content: "README contents"},
+		},
+		"gemini-3.5-flash",
+		[]api.ToolDefinition{{Name: "read_file"}},
+		true,
+		cfg,
+	)
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	contents, ok := body["contents"].([]any)
+	if !ok || len(contents) != 3 {
+		t.Fatalf("contents = %#v, want image user + model functionCall + user functionResponse", body["contents"])
+	}
+	imageParts := contents[0].(map[string]any)["parts"].([]any)
+	if len(imageParts) != 2 {
+		t.Fatalf("image parts = %#v, want inline_data + text", imageParts)
+	}
+	inline, ok := imageParts[0].(map[string]any)["inline_data"].(map[string]any)
+	if !ok || inline["data"] != "aW1hZ2U=" || inline["mime_type"] != "image/png" {
+		t.Fatalf("inline_data = %#v, want image/png payload", imageParts[0])
+	}
+	if imageParts[1].(map[string]any)["text"] != "inspect" {
+		t.Fatalf("image text part = %#v, want inspect", imageParts[1])
+	}
+	functionCall := contents[1].(map[string]any)["parts"].([]any)[0].(map[string]any)["functionCall"].(map[string]any)
+	if functionCall["name"] != "read_file" {
+		t.Fatalf("functionCall = %#v, want read_file", functionCall)
+	}
+	functionResponse := contents[2].(map[string]any)["parts"].([]any)[0].(map[string]any)["functionResponse"].(map[string]any)
+	if functionResponse["name"] != "read_file" || functionResponse["response"].(map[string]any)["result"] != "README contents" {
+		t.Fatalf("functionResponse = %#v, want read_file result", functionResponse)
+	}
+	if _, ok := body["tools"]; !ok {
+		t.Fatalf("tools = nil, want tool definitions on multimodal history request")
+	}
+}
+
 func TestChatWithFunctionCalling_RequestTransformsHistoryAndThinkingConfig(t *testing.T) {
 	var captured map[string]any
 	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {

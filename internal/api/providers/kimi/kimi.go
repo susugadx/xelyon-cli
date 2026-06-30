@@ -99,6 +99,9 @@ func (p *Provider) IsFunctionCallingEnabled() bool {
 
 // ChatWithTools は Provider interface の実装。
 func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, history []api.Message, model string) (string, error) {
+	if err := validateKimiHistoryImages(history); err != nil {
+		return "", err
+	}
 	built := p.buildChatCompletionsRequest(ctx, systemPrompt, history, model)
 	req, err := openaicompat.NewBearerJSONRequest(ctx, p.BaseProvider.APIURL, p.APIKey, built.Request)
 	if err != nil {
@@ -115,27 +118,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 // ChatWithImage は Kimi Chat Completions の multimodal message として画像付きメッセージを送信する。
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	if image == nil || image.Base64 == "" {
-		history = append(history, api.Message{Role: "user", Content: userMessage})
-		return p.ChatWithTools(ctx, systemPrompt, history, model)
-	}
-
-	built, err := p.buildImageChatCompletionsRequest(ctx, systemPrompt, history, userMessage, image, model)
-	if err != nil {
-		return "", err
-	}
-	req, err := openaicompat.NewBearerJSONRequest(ctx, p.BaseProvider.APIURL, p.APIKey, built.Request)
-	if err != nil {
-		return "", err
-	}
-
-	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
-		ImageMode:          true,
-		SpinnerSuffix:      built.SpinnerSuffix,
-		ForceStreaming:     true,
-		RequestErrorPrefix: "Kimi API request failed",
-		StreamHandler:      p.handleStreamingResponse,
-	})
+	history = append(history, api.NewUserMessageWithOptionalImage(userMessage, image))
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
 // SetMCPTools は MCP ツール定義を設定する。

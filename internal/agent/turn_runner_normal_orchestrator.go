@@ -57,10 +57,7 @@ func (o *normalModeTurnOrchestrator) Run() error {
 }
 
 func (o *normalModeTurnOrchestrator) appendNormalModeInputToHistory() {
-	o.runner.agent.History = append(o.runner.agent.History, api.Message{
-		Role:    "user",
-		Content: o.input,
-	})
+	o.runner.agent.History = append(o.runner.agent.History, api.NewUserMessageWithOptionalImage(o.input, o.image))
 }
 
 func (o *normalModeTurnOrchestrator) onHardLimit(_ int) (turnLoopDirective, error) {

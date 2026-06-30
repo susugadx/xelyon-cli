@@ -187,12 +187,5 @@ func (p *headlessHistoryProbeProvider) ChatWithImage(ctx context.Context, system
 }
 
 func cloneHeadlessHistory(history []api.Message) []api.Message {
-	cloned := make([]api.Message, len(history))
-	for i, msg := range history {
-		cloned[i] = msg
-		if len(msg.ToolCalls) > 0 {
-			cloned[i].ToolCalls = append([]api.OpenAIToolCall(nil), msg.ToolCalls...)
-		}
-	}
-	return cloned
+	return api.CloneMessages(history)
 }

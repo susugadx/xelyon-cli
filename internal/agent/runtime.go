@@ -154,9 +154,20 @@ func (r *AgentRuntime) effectiveAutoApprove() bool {
 }
 
 func newSubAgentManager() *subagent.Manager {
+	return newSubAgentManagerWithHeadlessOptions(HeadlessRunOptions{})
+}
+
+func newSubAgentManagerWithHeadlessOptions(options HeadlessRunOptions) *subagent.Manager {
+	return newSubAgentManagerWithHeadlessOptionsAndFactory(options, nil)
+}
+
+func newSubAgentManagerWithHeadlessOptionsAndFactory(options HeadlessRunOptions, providerFactory subagent.ProviderFactory) *subagent.Manager {
 	return subagent.NewManagerWithOptions(subagent.ManagerOptions{
 		RunHeadless: func(ctx context.Context, message, model string, provider api.Provider, cfg *config.Config) *subagent.RunResult {
-			result := RunHeadlessWithConfig(ctx, message, model, provider, cfg)
+			result := RunHeadlessWithConfigOptions(ctx, message, model, provider, cfg, HeadlessRunOptions{
+				FailOnToolError: options.FailOnToolError,
+				ReadOnly:        options.ReadOnly,
+			})
 			if result == nil {
 				return &subagent.RunResult{
 					Status:       "error",
@@ -174,6 +185,7 @@ func newSubAgentManager() *subagent.Manager {
 			subResult.ErrorMessage = errorMessage
 			return subResult
 		},
+		ProviderFactory: providerFactory,
 	})
 }
 

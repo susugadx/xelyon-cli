@@ -152,6 +152,19 @@ func sanitizeKimiRequestMessage(message api.Message) api.Message {
 	return message
 }
 
+func validateKimiHistoryImages(history []api.Message) error {
+	for _, message := range history {
+		image := message.ImageData()
+		if image == nil {
+			continue
+		}
+		if _, err := kimiImageDataURL(image); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (p *Provider) buildImageChatCompletionsRequest(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (kimiImageChatCompletionsBuild, error) {
 	options, thinkingActive, spinnerSuffix := p.buildChatCompletionsRequestOptions(ctx, systemPrompt, model)
 	request, err := buildKimiImageChatCompletionsRequest(options, systemPrompt, api.ActiveContextBlocksFromContext(ctx), history, userMessage, image)
@@ -174,7 +187,13 @@ func buildKimiImageChatCompletionsRequest(options kimiChatCompletionsRequestOpti
 		return kimiMultimodalChatCompletionsRequest{}, err
 	}
 
-	messages := openaicompat.BuildChatMessageInterfacesWithActiveContext(systemPrompt, activeContext, history, sanitizeKimiRequestMessage)
+	messages := openaicompat.BuildChatMessageInterfacesWithActiveContextAndImagePayloadMode(
+		systemPrompt,
+		activeContext,
+		history,
+		sanitizeKimiRequestMessage,
+		openaicompat.ImagePayloadMultimodal,
+	)
 	messages = append(messages, kimiMultimodalMessage{
 		Role: "user",
 		Content: []kimiMultimodalContent{
@@ -204,6 +223,7 @@ func (o kimiChatCompletionsRequestOptions) openAICompatOptions(messages []api.Me
 		PromptCacheKey:      o.promptCacheKey,
 		ExtraFields:         o.extraFields,
 		FunctionCalling:     o.functionCalling,
+		ImagePayloadMode:    openaicompat.ImagePayloadMultimodal,
 	}
 }
 

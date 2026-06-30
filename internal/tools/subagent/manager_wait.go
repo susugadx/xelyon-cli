@@ -17,15 +17,13 @@ func (m *Manager) Wait(ids []string, timeoutMs int) WaitResponse {
 		sub, ok := m.getAgent(id)
 		if !ok {
 			results[i] = WaitResult{AgentID: id, Status: "error", Output: "agent not found"}
-			status = "error"
+			status = aggregateWaitStatus(status, results[i])
 			continue
 		}
 
 		if timedOut {
 			results[i] = m.snapshotOrTimeout(sub, true)
-			if results[i].Status == "error" {
-				status = "error"
-			}
+			status = aggregateWaitStatus(status, results[i])
 			continue
 		}
 
@@ -42,14 +40,7 @@ func (m *Manager) Wait(ids []string, timeoutMs int) WaitResponse {
 			}
 		}
 
-		switch results[i].Status {
-		case "error":
-			status = "error"
-		case "timeout":
-			if status != "error" {
-				status = "timeout"
-			}
-		}
+		status = aggregateWaitStatus(status, results[i])
 	}
 
 	return WaitResponse{
@@ -79,7 +70,9 @@ func (m *Manager) snapshotOrTimeout(sub *managedSubAgent, timeout bool) WaitResu
 	defer m.mu.Unlock()
 
 	output := ""
+	var toolBreakdown []ToolBreakdownEntry
 	if sub.result != nil {
+		toolBreakdown = cloneToolBreakdown(sub.result.ToolBreakdown)
 		switch {
 		case sub.result.Status == "error" && sub.result.ErrorMessage != "":
 			output = sub.result.ErrorMessage
@@ -91,8 +84,37 @@ func (m *Manager) snapshotOrTimeout(sub *managedSubAgent, timeout bool) WaitResu
 	}
 
 	return WaitResult{
-		AgentID: sub.id,
-		Status:  sub.status,
-		Output:  output,
+		AgentID:       sub.id,
+		Status:        sub.status,
+		Output:        output,
+		ToolBreakdown: toolBreakdown,
 	}
+}
+
+func aggregateWaitStatus(current string, result WaitResult) string {
+	if result.Status == "error" || waitResultHasToolFailure(result) {
+		return "error"
+	}
+	if result.Status == "timeout" && current != "error" {
+		return "timeout"
+	}
+	return current
+}
+
+func waitResultHasToolFailure(result WaitResult) bool {
+	for _, entry := range result.ToolBreakdown {
+		if entry.Failures > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneToolBreakdown(entries []ToolBreakdownEntry) []ToolBreakdownEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	cloned := make([]ToolBreakdownEntry, len(entries))
+	copy(cloned, entries)
+	return cloned
 }

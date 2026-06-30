@@ -253,6 +253,58 @@ func TestBuildChatCompletionsRequest_IncludesActiveContextFromContext(t *testing
 	}
 }
 
+func TestBuildChatCompletionsRequest_SerializesImageHistoryAtOriginalPosition(t *testing.T) {
+	req := New("test-key").buildChatCompletionsRequest(
+		newOpenAITestContext(t, false),
+		"System",
+		[]api.Message{
+			api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+			{Role: "assistant", ToolCalls: []api.OpenAIToolCall{{
+				ID:       "call_1",
+				Type:     "function",
+				Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"README.md"}`},
+			}}},
+			{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+		},
+		"gpt-4-turbo",
+	)
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	messages, ok := body["messages"].([]any)
+	if !ok || len(messages) != 4 {
+		t.Fatalf("messages = %#v, want system + image + assistant tool call + tool result", body["messages"])
+	}
+	imageMessage, ok := messages[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image message = %#v, want object", messages[1])
+	}
+	content, ok := imageMessage["content"].([]any)
+	if !ok || len(content) != 2 {
+		t.Fatalf("image content = %#v, want text + image_url", imageMessage["content"])
+	}
+	imagePart, ok := content[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image part = %#v, want object", content[1])
+	}
+	imageURL, ok := imagePart["image_url"].(map[string]any)
+	if !ok || imageURL["url"] != "data:image/png;base64,aW1hZ2U=" {
+		t.Fatalf("image_url = %#v, want data URL", imagePart["image_url"])
+	}
+	if messages[2].(map[string]any)["tool_calls"] == nil {
+		t.Fatalf("assistant message = %#v, want tool_calls preserved", messages[2])
+	}
+	if messages[3].(map[string]any)["tool_call_id"] != "call_1" {
+		t.Fatalf("tool result message = %#v, want call_1", messages[3])
+	}
+}
+
 func TestChatWithCompletions_ToolUseDisabledOmitsToolFields(t *testing.T) {
 	t.Setenv("OPENAI_FUNCTION_CALLING", "1")
 

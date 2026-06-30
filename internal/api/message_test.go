@@ -26,6 +26,34 @@ func TestMultimodalMessage_ToMessage(t *testing.T) {
 	if msg.Content != "Test message" {
 		t.Errorf("ToMessage() Content = %v, want 'Test message'", msg.Content)
 	}
+	if !msg.HasImage() {
+		t.Fatal("ToMessage() should preserve runtime image state")
+	}
+	image := msg.ImageData()
+	if image == nil || image.Base64 != "dGVzdA==" || image.MediaType != "image/png" {
+		t.Fatalf("ToMessage() image = %+v, want image/png dGVzdA==", image)
+	}
+}
+
+func TestMessageImageStateIsRuntimeOnly(t *testing.T) {
+	msg := NewUserImageMessage("describe", &ImageData{
+		Path:      "/test/image.png",
+		MediaType: "image/png",
+		Base64:    "dGVzdA==",
+	})
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("json.Marshal(Message) error = %v", err)
+	}
+
+	payload := string(data)
+	if strings.Contains(payload, "dGVzdA==") || strings.Contains(payload, "image/png") || strings.Contains(payload, "image") {
+		t.Fatalf("marshaled Message leaked runtime image state: %s", payload)
+	}
+	if !msg.HasImage() {
+		t.Fatal("Message should keep runtime image state after marshal")
+	}
 }
 
 func TestMultimodalMessage_HasImage_WithImage(t *testing.T) {

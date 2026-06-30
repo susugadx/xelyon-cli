@@ -2,6 +2,7 @@ package deepseek
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -33,6 +34,37 @@ func TestBuildChatCompletionsRequest_IncludesActiveContextFromContext(t *testing
 	}
 	if req.Messages[2].Role != "user" || req.Messages[2].Content != "Hello" {
 		t.Fatalf("Messages[2] = %#v, want original history message", req.Messages[2])
+	}
+}
+
+func TestBuildChatCompletionsRequest_KeepsImageHistoryTextOnly(t *testing.T) {
+	req, _ := New("test-key").buildChatCompletionsRequest(
+		api.WithToolUseDisabled(context.Background()),
+		"System",
+		[]api.Message{
+			api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+		},
+		"deepseek-v4-flash",
+	)
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	messages, ok := body["messages"].([]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("messages = %#v, want system + image history", body["messages"])
+	}
+	imageMessage, ok := messages[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image message = %#v, want object", messages[1])
+	}
+	if imageMessage["content"] != "inspect" {
+		t.Fatalf("image message content = %#v, want text-only content", imageMessage["content"])
 	}
 }
 

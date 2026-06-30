@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,6 +132,227 @@ func TestRunHeadlessWithConfig_SummaryFinalChecksPassed(t *testing.T) {
 	}
 	if got, want := result.Summary.FinalChecks, []HeadlessFinalCheckSummary{{
 		Command:  `test "$XELYON_CHANGED_FILES" = "target.txt"`,
+		ExitCode: 0,
+		Status:   "passed",
+	}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Summary.FinalChecks = %+v, want %+v", got, want)
+	}
+}
+
+func TestRunHeadlessWithConfig_FinalChecksUseGitDirtyAndUntrackedFiles(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	dir := testSubDir(t)
+	runHeadlessSummaryGit(t, dir, "init")
+	runHeadlessSummaryGit(t, dir, "config", "user.email", "test@example.com")
+	runHeadlessSummaryGit(t, dir, "config", "user.name", "Test User")
+	writeTestFile(t, filepath.Join(dir, "tracked.txt"), "old\n")
+	runHeadlessSummaryGit(t, dir, "add", "tracked.txt")
+	runHeadlessSummaryGit(t, dir, "commit", "-m", "initial")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.FinalChecks.Commands = []string{`case " $XELYON_CHANGED_FILES " in *" tracked.txt "* ) ;; *) exit 2;; esac; case " $XELYON_CHANGED_FILES " in *" untracked.txt "* ) ;; *) exit 3;; esac`}
+	cfg.FinalChecks.Timeout = 10
+
+	provider := &sequenceMockProvider{
+		name: "test-provider",
+		responses: []string{
+			fmt.Sprintf(`{"tool":"bash","args":{"command":%q}}`, "printf changed > tracked.txt; printf new > untracked.txt"),
+			"done",
+		},
+	}
+
+	result := RunHeadlessWithConfig(context.Background(), "mutate via bash", "test-model", provider, cfg)
+
+	if result.Status != HeadlessStatusSuccess {
+		t.Fatalf("Status = %q, want success: %+v", result.Status, result.Error)
+	}
+	if result.Summary == nil {
+		t.Fatal("Summary = nil, want changed_files and final_checks")
+	}
+	for _, want := range []string{"tracked.txt", "untracked.txt"} {
+		if !slices.Contains(result.Summary.ChangedFiles, want) {
+			t.Fatalf("Summary.ChangedFiles = %v, want %q", result.Summary.ChangedFiles, want)
+		}
+	}
+	if got, want := result.Summary.FinalChecks, []HeadlessFinalCheckSummary{{
+		Command:  cfg.FinalChecks.Commands[0],
+		ExitCode: 0,
+		Status:   "passed",
+	}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Summary.FinalChecks = %+v, want %+v", got, want)
+	}
+}
+
+func TestRunHeadlessWithConfig_FinalChecksIgnorePreexistingGitDirtyFiles(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	dir := testSubDir(t)
+	runHeadlessSummaryGit(t, dir, "init")
+	runHeadlessSummaryGit(t, dir, "config", "user.email", "test@example.com")
+	runHeadlessSummaryGit(t, dir, "config", "user.name", "Test User")
+	writeTestFile(t, filepath.Join(dir, "tracked.txt"), "old\n")
+	writeTestFile(t, filepath.Join(dir, "preexisting.txt"), "clean\n")
+	runHeadlessSummaryGit(t, dir, "add", "tracked.txt", "preexisting.txt")
+	runHeadlessSummaryGit(t, dir, "commit", "-m", "initial")
+	writeTestFile(t, filepath.Join(dir, "preexisting.txt"), "dirty before run\n")
+	writeTestFile(t, filepath.Join(dir, "preexisting-untracked.txt"), "local before run\n")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.FinalChecks.Commands = []string{strings.Join([]string{
+		`case " $XELYON_CHANGED_FILES " in *" tracked.txt "* ) ;; *) exit 2;; esac`,
+		`case " $XELYON_CHANGED_FILES " in *" untracked.txt "* ) ;; *) exit 3;; esac`,
+		`case " $XELYON_CHANGED_FILES " in *" preexisting.txt "* ) exit 4;; esac`,
+		`case " $XELYON_CHANGED_FILES " in *" preexisting-untracked.txt "* ) exit 5;; esac`,
+	}, "; ")}
+	cfg.FinalChecks.Timeout = 10
+
+	provider := &sequenceMockProvider{
+		name: "test-provider",
+		responses: []string{
+			fmt.Sprintf(`{"tool":"bash","args":{"command":%q}}`, "printf changed > tracked.txt; printf new > untracked.txt"),
+			"done",
+		},
+	}
+
+	result := RunHeadlessWithConfig(context.Background(), "mutate via bash", "test-model", provider, cfg)
+
+	if result.Status != HeadlessStatusSuccess {
+		t.Fatalf("Status = %q, want success: %+v", result.Status, result.Error)
+	}
+	if result.Summary == nil {
+		t.Fatal("Summary = nil, want changed_files and final_checks")
+	}
+	for _, want := range []string{"tracked.txt", "untracked.txt"} {
+		if !slices.Contains(result.Summary.ChangedFiles, want) {
+			t.Fatalf("Summary.ChangedFiles = %v, want %q", result.Summary.ChangedFiles, want)
+		}
+	}
+	for _, unwanted := range []string{"preexisting.txt", "preexisting-untracked.txt"} {
+		if slices.Contains(result.Summary.ChangedFiles, unwanted) {
+			t.Fatalf("Summary.ChangedFiles = %v, want no preexisting file %q", result.Summary.ChangedFiles, unwanted)
+		}
+	}
+}
+
+func TestRunHeadlessWithConfig_FinalChecksIncludePreexistingDirtyFileChangedDuringRun(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	dir := testSubDir(t)
+	runHeadlessSummaryGit(t, dir, "init")
+	runHeadlessSummaryGit(t, dir, "config", "user.email", "test@example.com")
+	runHeadlessSummaryGit(t, dir, "config", "user.name", "Test User")
+	writeTestFile(t, filepath.Join(dir, "preexisting.txt"), "clean\n")
+	runHeadlessSummaryGit(t, dir, "add", "preexisting.txt")
+	runHeadlessSummaryGit(t, dir, "commit", "-m", "initial")
+	writeTestFile(t, filepath.Join(dir, "preexisting.txt"), "dirty before run\n")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.FinalChecks.Commands = []string{`case " $XELYON_CHANGED_FILES " in *" preexisting.txt "* ) ;; *) exit 2;; esac`}
+	cfg.FinalChecks.Timeout = 10
+
+	provider := &sequenceMockProvider{
+		name: "test-provider",
+		responses: []string{
+			fmt.Sprintf(`{"tool":"bash","args":{"command":%q}}`, "printf dirty-after-run > preexisting.txt"),
+			"done",
+		},
+	}
+
+	result := RunHeadlessWithConfig(context.Background(), "mutate existing dirty file via bash", "test-model", provider, cfg)
+
+	if result.Status != HeadlessStatusSuccess {
+		t.Fatalf("Status = %q, want success: %+v", result.Status, result.Error)
+	}
+	if result.Summary == nil {
+		t.Fatal("Summary = nil, want changed_files and final_checks")
+	}
+	if !slices.Contains(result.Summary.ChangedFiles, "preexisting.txt") {
+		t.Fatalf("Summary.ChangedFiles = %v, want preexisting.txt after run mutation", result.Summary.ChangedFiles)
+	}
+}
+
+func TestRunHeadlessWithConfig_FinalChecksIncludePreexistingUntrackedFileDeletedDuringRun(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	dir := testSubDir(t)
+	runHeadlessSummaryGit(t, dir, "init")
+	runHeadlessSummaryGit(t, dir, "config", "user.email", "test@example.com")
+	runHeadlessSummaryGit(t, dir, "config", "user.name", "Test User")
+	writeTestFile(t, filepath.Join(dir, "tracked.txt"), "clean\n")
+	runHeadlessSummaryGit(t, dir, "add", "tracked.txt")
+	runHeadlessSummaryGit(t, dir, "commit", "-m", "initial")
+	writeTestFile(t, filepath.Join(dir, "preexisting-untracked.txt"), "local before run\n")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.FinalChecks.Commands = []string{`case " $XELYON_CHANGED_FILES " in *" preexisting-untracked.txt "* ) ;; *) exit 2;; esac`}
+	cfg.FinalChecks.Timeout = 10
+
+	provider := &sequenceMockProvider{
+		name: "test-provider",
+		responses: []string{
+			fmt.Sprintf(`{"tool":"bash","args":{"command":%q}}`, "rm preexisting-untracked.txt"),
+			"done",
+		},
+	}
+
+	result := RunHeadlessWithConfig(context.Background(), "delete local file via bash", "test-model", provider, cfg)
+
+	if result.Status != HeadlessStatusSuccess {
+		t.Fatalf("Status = %q, want success: %+v", result.Status, result.Error)
+	}
+	if result.Summary == nil {
+		t.Fatal("Summary = nil, want changed_files and final_checks")
+	}
+	if !slices.Contains(result.Summary.ChangedFiles, "preexisting-untracked.txt") {
+		t.Fatalf("Summary.ChangedFiles = %v, want deleted preexisting-untracked.txt", result.Summary.ChangedFiles)
+	}
+	if got, want := result.Summary.FinalChecks, []HeadlessFinalCheckSummary{{
+		Command:  cfg.FinalChecks.Commands[0],
+		ExitCode: 0,
+		Status:   "passed",
+	}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Summary.FinalChecks = %+v, want %+v", got, want)
+	}
+}
+
+func TestRunHeadlessWithConfig_FinalChecksIncludePreexistingDirtyFileRestoredDuringRun(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	dir := testSubDir(t)
+	runHeadlessSummaryGit(t, dir, "init")
+	runHeadlessSummaryGit(t, dir, "config", "user.email", "test@example.com")
+	runHeadlessSummaryGit(t, dir, "config", "user.name", "Test User")
+	writeTestFile(t, filepath.Join(dir, "preexisting.txt"), "clean\n")
+	runHeadlessSummaryGit(t, dir, "add", "preexisting.txt")
+	runHeadlessSummaryGit(t, dir, "commit", "-m", "initial")
+	writeTestFile(t, filepath.Join(dir, "preexisting.txt"), "dirty before run\n")
+
+	cfg := newProjectMapDisabledConfig()
+	cfg.FinalChecks.Commands = []string{`case " $XELYON_CHANGED_FILES " in *" preexisting.txt "* ) ;; *) exit 2;; esac`}
+	cfg.FinalChecks.Timeout = 10
+
+	provider := &sequenceMockProvider{
+		name: "test-provider",
+		responses: []string{
+			fmt.Sprintf(`{"tool":"bash","args":{"command":%q}}`, "printf 'clean\\n' > preexisting.txt"),
+			"done",
+		},
+	}
+
+	result := RunHeadlessWithConfig(context.Background(), "restore dirty file via bash", "test-model", provider, cfg)
+
+	if result.Status != HeadlessStatusSuccess {
+		t.Fatalf("Status = %q, want success: %+v", result.Status, result.Error)
+	}
+	if result.Summary == nil {
+		t.Fatal("Summary = nil, want changed_files and final_checks")
+	}
+	if !slices.Contains(result.Summary.ChangedFiles, "preexisting.txt") {
+		t.Fatalf("Summary.ChangedFiles = %v, want restored preexisting.txt", result.Summary.ChangedFiles)
+	}
+	if got, want := result.Summary.FinalChecks, []HeadlessFinalCheckSummary{{
+		Command:  cfg.FinalChecks.Commands[0],
 		ExitCode: 0,
 		Status:   "passed",
 	}}; !reflect.DeepEqual(got, want) {
@@ -404,6 +628,15 @@ func TestHeadlessSummaryChangedFilesFromLedger(t *testing.T) {
 	got := headlessSummaryChangedFiles(agent)
 	if want := []string{filepath.Join("nested", "changed.go")}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("headlessSummaryChangedFiles() = %v, want %v", got, want)
+	}
+}
+
+func runHeadlessSummaryGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmdArgs := append([]string{"-C", dir}, args...)
+	output, err := exec.Command("git", cmdArgs...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
 	}
 }
 

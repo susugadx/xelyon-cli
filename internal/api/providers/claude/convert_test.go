@@ -56,6 +56,42 @@ func TestConvertToAnthropicMessages_NormalUserAssistant(t *testing.T) {
 	}
 }
 
+func TestConvertToAnthropicMessages_ImageUserMessageKeepsToolSequence(t *testing.T) {
+	history := []api.Message{
+		api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+		{
+			Role: "assistant",
+			ToolCalls: []api.OpenAIToolCall{{
+				ID:       "toolu_01ABC",
+				Type:     "function",
+				Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"README.md"}`},
+			}},
+		},
+		{Role: "tool", ToolCallID: "toolu_01ABC", Content: "README contents"},
+	}
+
+	result := ConvertToAnthropicMessages(history)
+
+	if len(result) != 3 {
+		t.Fatalf("len(result) = %d, want image user + assistant tool_use + user tool_result", len(result))
+	}
+	if result[0].Role != "user" || len(result[0].Content) != 2 {
+		t.Fatalf("result[0] = %#v, want image+text user message", result[0])
+	}
+	if result[0].Content[0].Type != "image" || result[0].Content[0].Source == nil || result[0].Content[0].Source.Data != "aW1hZ2U=" {
+		t.Fatalf("image block = %#v, want base64 image", result[0].Content[0])
+	}
+	if result[0].Content[1].Type != "text" || result[0].Content[1].Text != "inspect" {
+		t.Fatalf("text block = %#v, want inspect text", result[0].Content[1])
+	}
+	if result[1].Role != "assistant" || result[1].Content[0].Type != "tool_use" || result[1].Content[0].ID != "toolu_01ABC" {
+		t.Fatalf("result[1] = %#v, want assistant tool_use", result[1])
+	}
+	if result[2].Role != "user" || result[2].Content[0].Type != "tool_result" || result[2].Content[0].ToolUseID != "toolu_01ABC" {
+		t.Fatalf("result[2] = %#v, want user tool_result", result[2])
+	}
+}
+
 func TestConvertToAnthropicMessages_ToolRoleConversion(t *testing.T) {
 	history := []api.Message{
 		{Role: "user", Content: "Read a file"},

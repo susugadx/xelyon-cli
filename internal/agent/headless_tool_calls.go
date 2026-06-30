@@ -117,6 +117,11 @@ func headlessWaitAgentResponseHasFailure(output string) bool {
 		if isHeadlessWaitAgentFailureStatus(result.Status) {
 			return true
 		}
+		for _, entry := range result.ToolBreakdown {
+			if entry.Failures > 0 {
+				return true
+			}
+		}
 	}
 	return false
 }

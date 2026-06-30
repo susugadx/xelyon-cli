@@ -18,9 +18,9 @@ const (
 
 var headlessCommandExitStatusRe = regexp.MustCompile(`(?m)^Error:\s+exit status\s+(-?\d+)`)
 
-func buildHeadlessSummary(agent *Agent, commands []HeadlessCommandSummary, finalChecks []HeadlessFinalCheckSummary) *HeadlessSummary {
+func buildHeadlessSummary(agent *Agent, gitBaseline headlessGitChangedFilesBaseline, commands []HeadlessCommandSummary, finalChecks []HeadlessFinalCheckSummary) *HeadlessSummary {
 	summary := HeadlessSummary{
-		ChangedFiles: headlessSummaryChangedFiles(agent),
+		ChangedFiles: headlessSummaryChangedFilesWithGitBaseline(agent, gitBaseline),
 		Commands:     cloneHeadlessCommandSummaries(commands),
 		FinalChecks:  cloneHeadlessFinalCheckSummaries(finalChecks),
 	}
@@ -34,7 +34,7 @@ func (r *headlessRunner) attachSummary(result *HeadlessResult) *HeadlessResult {
 	if r == nil || result == nil {
 		return result
 	}
-	result.Summary = buildHeadlessSummary(r.agent, r.commands, r.finalChecks)
+	result.Summary = buildHeadlessSummary(r.agent, r.gitChangedFilesBaseline, r.commands, r.finalChecks)
 	return result
 }
 
@@ -42,7 +42,7 @@ func (r *headlessRunner) runFinalChecksIfNeeded(ctx context.Context) {
 	if r == nil || r.agent == nil {
 		return
 	}
-	changedFiles := headlessSummaryChangedFiles(r.agent)
+	changedFiles := headlessSummaryChangedFilesWithGitBaseline(r.agent, r.gitChangedFilesBaseline)
 	if len(changedFiles) == 0 || len(r.agent.cfg().FinalChecks.Commands) == 0 {
 		return
 	}
@@ -58,10 +58,41 @@ func (r *headlessRunner) runFinalChecksIfNeeded(ctx context.Context) {
 }
 
 func headlessSummaryChangedFiles(agent *Agent) []string {
+	return headlessSummaryChangedFilesWithGitBaseline(agent, headlessGitChangedFilesBaseline{})
+}
+
+func headlessSummaryChangedFilesWithGitBaseline(agent *Agent, gitBaseline headlessGitChangedFilesBaseline) []string {
 	if agent == nil || agent.Runtime == nil || agent.Runtime.TaskLedger == nil {
 		return nil
 	}
-	return agent.Runtime.TaskLedger.Snapshot().ChangedFiles.Paths()
+	ledgerFiles := agent.Runtime.TaskLedger.Snapshot().ChangedFiles.Paths()
+	if agent.Runtime.Options.ReadOnly {
+		return ledgerFiles
+	}
+	gitFiles, ok := headlessGitChangedFilesSinceBaseline(gitBaseline)
+	if !ok {
+		return ledgerFiles
+	}
+	return mergeHeadlessChangedFiles(ledgerFiles, gitFiles)
+}
+
+func mergeHeadlessChangedFiles(groups ...[]string) []string {
+	seen := make(map[string]struct{})
+	var merged []string
+	for _, group := range groups {
+		for _, path := range group {
+			path = strings.TrimSpace(path)
+			if path == "" {
+				continue
+			}
+			if _, ok := seen[path]; ok {
+				continue
+			}
+			seen[path] = struct{}{}
+			merged = append(merged, path)
+		}
+	}
+	return merged
 }
 
 func newHeadlessCommandSummary(toolCall *tools.ToolCall, execResult tools.ExecutionResult) (HeadlessCommandSummary, bool) {

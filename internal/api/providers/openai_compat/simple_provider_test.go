@@ -121,6 +121,65 @@ func TestSimpleProviderBuildChatCompletionsRequestOmitsToolsWhenRequestDisablesT
 	}
 }
 
+func TestSimpleProviderBuildChatCompletionsRequestKeepsImageHistoryTextOnlyWhenUnsupported(t *testing.T) {
+	provider := NewSimpleProvider("test-key", SimpleProviderSpec{
+		ProviderKey:    "compat-test",
+		DisplayName:    "Compat Test",
+		DefaultURL:     "https://example.test/v1/chat/completions",
+		SupportsImages: false,
+	})
+
+	req := provider.BuildChatCompletionsRequest(context.Background(), "system prompt", []api.Message{
+		api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+	}, "compat-model")
+	body := decodeCompatRequest(t, req)
+	messages, ok := body["messages"].([]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("messages = %#v, want system + image history", body["messages"])
+	}
+	imageMessage, ok := messages[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image message = %#v, want object", messages[1])
+	}
+	if imageMessage["content"] != "inspect" {
+		t.Fatalf("image history content = %#v, want text-only content", imageMessage["content"])
+	}
+}
+
+func TestSimpleProviderBuildChatCompletionsRequestSendsImageHistoryWhenSupported(t *testing.T) {
+	provider := NewSimpleProvider("test-key", SimpleProviderSpec{
+		ProviderKey:    "compat-test",
+		DisplayName:    "Compat Test",
+		DefaultURL:     "https://example.test/v1/chat/completions",
+		SupportsImages: true,
+	})
+
+	req := provider.BuildChatCompletionsRequest(context.Background(), "system prompt", []api.Message{
+		api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+	}, "compat-model")
+	body := decodeCompatRequest(t, req)
+	messages, ok := body["messages"].([]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("messages = %#v, want system + image history", body["messages"])
+	}
+	imageMessage, ok := messages[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image message = %#v, want object", messages[1])
+	}
+	parts, ok := imageMessage["content"].([]any)
+	if !ok || len(parts) != 2 {
+		t.Fatalf("image content = %#v, want text + image_url parts", imageMessage["content"])
+	}
+	imagePart, ok := parts[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image part = %#v, want object", parts[1])
+	}
+	imageURL, ok := imagePart["image_url"].(map[string]any)
+	if !ok || imageURL["url"] != "data:image/png;base64,aW1hZ2U=" {
+		t.Fatalf("image_url = %#v, want data URL", imagePart["image_url"])
+	}
+}
+
 func decodeCompatRequest(t *testing.T, req ChatCompletionsRequest) map[string]any {
 	t.Helper()
 	payload, err := json.Marshal(req)

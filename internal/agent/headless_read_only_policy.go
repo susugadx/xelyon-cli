@@ -13,7 +13,8 @@ import (
 
 func newHeadlessAgentRuntime(cfg *config.Config, options HeadlessRunOptions) *AgentRuntime {
 	runtime := &AgentRuntime{
-		Config: headlessRuntimeConfigForOptions(cfg, options),
+		Config:          headlessRuntimeConfigForOptions(cfg, options),
+		SubAgentManager: newSubAgentManagerWithHeadlessOptions(options),
 	}
 	if options.ReadOnly {
 		runtime.Options.ReadOnly = true

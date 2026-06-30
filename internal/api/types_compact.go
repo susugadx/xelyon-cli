@@ -1,6 +1,9 @@
 package api
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // このファイルは OpenAI Compact API / Responses API で使用される型を定義します。
 // CompactCapable インターフェースで使用されるため、api パッケージに配置されています。
@@ -102,11 +105,31 @@ func ConvertHistoryToInputItems(history []Message) []InputItem {
 			items = append(items, InputItem{
 				Type:    "message",
 				Role:    msg.Role,
-				Content: msg.Content,
+				Content: inputContentForMessage(msg),
 			})
 		}
 	}
 	return items
+}
+
+func inputContentForMessage(msg Message) any {
+	image := msg.ImageData()
+	if image == nil {
+		return msg.Content
+	}
+
+	parts := make([]InputContentPart, 0, 2)
+	if strings.TrimSpace(msg.Content) != "" {
+		parts = append(parts, InputContentPart{
+			Type: "input_text",
+			Text: msg.Content,
+		})
+	}
+	parts = append(parts, InputContentPart{
+		Type:     "input_image",
+		ImageURL: fmt.Sprintf("data:%s;base64,%s", image.MediaType, image.Base64),
+	})
+	return parts
 }
 
 func normalizeOpenAIResponsesReplayItemsForMessage(msg Message, replayItems []InputItem) []InputItem {

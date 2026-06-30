@@ -39,7 +39,7 @@ func (p *Provider) chatWithResponsesResult(ctx context.Context, systemPrompt str
 		Debug:        os.Getenv("XELYON_DEBUG_AZURE") == "1",
 		DebugWriter:  api.ErrorWriterFromContext(ctx),
 		HasPreviousResponseID: func() bool {
-			return chainPolicy.HasReusablePrevious(p.HasCachedResponseID())
+			return chainPolicy.HasReusablePreviousForHistory(p.HasCachedResponseID(), history)
 		},
 		ClearPreviousResponseID: func() {
 			p.ClearResponseID()

@@ -77,7 +77,7 @@ func (p *Provider) chatWithResponses(ctx context.Context, systemPrompt string, h
 		Debug:        os.Getenv("XELYON_DEBUG_OPENAI") == "1",
 		DebugWriter:  errOut,
 		HasPreviousResponseID: func() bool {
-			return chainPolicy.HasReusablePrevious(p.lastResponseID != "")
+			return chainPolicy.HasReusablePreviousForHistory(p.lastResponseID != "", history)
 		},
 		ClearPreviousResponseID: func() {
 			p.lastResponseID = ""

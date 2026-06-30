@@ -57,7 +57,7 @@ type InitialInputOptions struct {
 func BuildChatRequest(options ChatRequestOptions) Request {
 	reqBody := BuildBaseRequest(options.Base)
 	developerMsg := BuildDeveloperMessage(options.SystemPrompt)
-	previousResponseID := PreviousResponseIDForRequestContext(options.RequestContext, options.PreviousResponseID, options.ActiveContext)
+	previousResponseID := PreviousResponseIDForChatRequest(options.RequestContext, options.PreviousResponseID, options.ActiveContext, options.History)
 
 	if previousResponseID != "" && len(options.History) > 0 {
 		lastMsg := options.History[len(options.History)-1]

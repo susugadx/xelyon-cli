@@ -381,6 +381,13 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 		return "", functionCallingPolicy.UnsupportedError()
 	}
 
+	if api.MessagesHaveImage(history) {
+		if debug {
+			fmt.Fprintln(errOut, "[DEBUG Gemini] Mode: Multimodal history")
+		}
+		return p.chatWithMultimodalHistory(ctx, systemPrompt, history, model, functionCallingPolicy.Enabled(), cfg)
+	}
+
 	// request mode で Function Calling を制御（デフォルト: 有効）
 	useFunctionCalling := api.ShouldSendToolPayload(ctx, functionCallingPolicy.Enabled())
 

@@ -18,6 +18,7 @@ func cloneMessage(msg Message) Message {
 	cloned.providerState.anthropicContentBlocks = CloneAnthropicContentBlocks(msg.providerState.anthropicContentBlocks)
 	cloned.providerState.anthropicThinkingBlocks = cloneAnthropicThinkingBlocks(msg.providerState.anthropicThinkingBlocks)
 	cloned.providerState.openAIResponsesItems = CloneInputItems(msg.providerState.openAIResponsesItems)
+	cloned.providerState.image = cloneImageData(msg.providerState.image)
 	return cloned
 }
 

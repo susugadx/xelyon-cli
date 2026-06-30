@@ -25,17 +25,21 @@ func (p *imageOnceProvider) SupportsImages() bool { return true }
 
 func (p *imageOnceProvider) IsFunctionCallingEnabled() bool { return true }
 
-func (p *imageOnceProvider) ChatWithTools(context.Context, string, []api.Message, string) (string, error) {
-	return "", fmt.Errorf("ChatWithTools should not be called for image one-shot")
+func (p *imageOnceProvider) ChatWithTools(_ context.Context, _ string, history []api.Message, _ string) (string, error) {
+	if len(history) == 0 {
+		return "", fmt.Errorf("history is required")
+	}
+	last := history[len(history)-1]
+	if !last.HasImage() {
+		return "", fmt.Errorf("image-bearing message is required")
+	}
+	p.imageCalls++
+	p.lastMessage = last.Content
+	return "mock image response", nil
 }
 
 func (p *imageOnceProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, userMessage string, image *api.ImageData, _ string) (string, error) {
-	if image == nil {
-		return "", fmt.Errorf("image is required")
-	}
-	p.imageCalls++
-	p.lastMessage = userMessage
-	return "mock image response", nil
+	return "", fmt.Errorf("ChatWithImage should not be called for image one-shot: %q image=%v", userMessage, image != nil)
 }
 
 func TestRunOnceWithImageWithConfig_UnsupportedProviderReturnsError(t *testing.T) {
@@ -76,7 +80,7 @@ func TestRunOnceWithImageWithConfig_ExecutesSingleTurn(t *testing.T) {
 		t.Fatalf("RunOnceWithImageWithConfig() error = %v", err)
 	}
 	if provider.imageCalls != 1 {
-		t.Fatalf("ChatWithImage() called %d times, want 1", provider.imageCalls)
+		t.Fatalf("ChatWithTools image calls = %d, want 1", provider.imageCalls)
 	}
 }
 
@@ -109,7 +113,7 @@ func TestRunOnceWithImageWithConfig_QuietSuppressesStatusOutput(t *testing.T) {
 		t.Fatalf("RunOnceWithImageWithConfig() error = %v", err)
 	}
 	if provider.imageCalls != 1 {
-		t.Fatalf("ChatWithImage() called %d times, want 1", provider.imageCalls)
+		t.Fatalf("ChatWithTools image calls = %d, want 1", provider.imageCalls)
 	}
 
 	var buf bytes.Buffer

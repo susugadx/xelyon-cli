@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func TestRunHeadlessWithConfigOptions_ImageUsesMultimodalFirstRequest(t *testing
 		t.Fatalf("status = %q, want success: error=%+v", result.Status, result.Error)
 	}
 	if provider.imageCalls != 1 {
-		t.Fatalf("ChatWithImage() called %d times, want 1", provider.imageCalls)
+		t.Fatalf("ChatWithTools image calls = %d, want 1", provider.imageCalls)
 	}
 	if result.Input == nil || result.Input.Image == nil {
 		t.Fatalf("input.image = nil, result=%+v", result)
@@ -41,6 +42,77 @@ func TestRunHeadlessWithConfigOptions_ImageUsesMultimodalFirstRequest(t *testing
 	}
 	if strings.Contains(jsonOutput, image.Base64) {
 		t.Fatalf("headless JSON leaked raw image base64: %s", jsonOutput)
+	}
+}
+
+type headlessImageToolLoopProvider struct {
+	histories [][]api.Message
+	responses []string
+	index     int
+}
+
+func (p *headlessImageToolLoopProvider) Name() string { return "openai" }
+
+func (p *headlessImageToolLoopProvider) SupportsImages() bool { return true }
+
+func (p *headlessImageToolLoopProvider) IsFunctionCallingEnabled() bool { return true }
+
+func (p *headlessImageToolLoopProvider) ChatWithTools(_ context.Context, _ string, history []api.Message, _ string) (string, error) {
+	p.histories = append(p.histories, api.CloneMessages(history))
+	if p.index >= len(p.responses) {
+		return "done", nil
+	}
+	response := p.responses[p.index]
+	p.index++
+	return response, nil
+}
+
+func (p *headlessImageToolLoopProvider) ChatWithImage(context.Context, string, []api.Message, string, *api.ImageData, string) (string, error) {
+	return "", fmt.Errorf("ChatWithImage should not be called for headless image")
+}
+
+func TestRunHeadlessWithConfigOptions_ImageToolContinuationKeepsImageAndToolResult(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	image := &api.ImageData{
+		Path:      "screen.png",
+		MediaType: "image/png",
+		Base64:    "raw-image-base64",
+		Size:      12,
+	}
+	provider := &headlessImageToolLoopProvider{
+		responses: []string{
+			`{"tool":"bash","args":{"command":"printf ok"}}`,
+			"done",
+		},
+	}
+
+	result := RunHeadlessWithConfigOptions(context.Background(), "describe image", "test-model", provider, newProjectMapDisabledConfig(), HeadlessRunOptions{
+		Image: image,
+	})
+
+	if result.Status != HeadlessStatusSuccess {
+		t.Fatalf("status = %q, want success: error=%+v", result.Status, result.Error)
+	}
+	if len(provider.histories) != 2 {
+		t.Fatalf("provider histories = %d, want initial request and continuation", len(provider.histories))
+	}
+	first := provider.histories[0]
+	if len(first) != 1 || !first[0].HasImage() || first[0].Content != "describe image" {
+		t.Fatalf("first history = %#v, want image-bearing user message", first)
+	}
+	second := provider.histories[1]
+	if len(second) < 3 {
+		t.Fatalf("second history = %#v, want image message + assistant tool call + tool result", second)
+	}
+	if !second[0].HasImage() {
+		t.Fatalf("second history[0] lost image state: %#v", second[0])
+	}
+	if second[1].Role != "assistant" || len(second[1].ToolCalls) == 0 {
+		t.Fatalf("second history[1] = %#v, want assistant tool call", second[1])
+	}
+	if second[2].Role != "tool" || !strings.Contains(second[2].Content, "ok") {
+		t.Fatalf("second history[2] = %#v, want bash tool result", second[2])
 	}
 }
 

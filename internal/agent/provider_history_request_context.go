@@ -14,17 +14,6 @@ func (a *Agent) providerFacingHistoryForRequest(ctx context.Context) (context.Co
 	return a.providerFacingHistoryForRequestFromRaw(ctx, a.cloneRawHistoryForProviderProjection())
 }
 
-func (a *Agent) providerFacingHistoryExcludingLatestMessageForRequest(ctx context.Context) (context.Context, []api.Message) {
-	if a == nil {
-		return ctx, nil
-	}
-	raw := a.cloneRawHistoryForProviderProjection()
-	if len(raw) > 0 {
-		raw = raw[:len(raw)-1]
-	}
-	return a.providerFacingHistoryForRequestFromRaw(ctx, raw)
-}
-
 func (a *Agent) providerFacingHistoryForRequestFromRaw(ctx context.Context, raw []api.Message) (context.Context, []api.Message) {
 	result, rawOutputContext := a.providerHistoryProjectionForRequest(ctx, raw)
 	a.recordLastProviderHistoryProjectionReport(result.Report)

@@ -200,23 +200,17 @@ func TestRootCommand_HeadlessErrorReturnsErrorAfterPrintingJSON(t *testing.T) {
 		return agent.NewToolLoopLimitResult(provider.Name(), model, 10, nil, 0)
 	}
 
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
+	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	rootCmd.SetOut(&stderr)
+	rootCmd.SetOut(&stdout)
 	rootCmd.SetErr(&stderr)
 	t.Cleanup(func() {
-		os.Stdout = oldStdout
 		rootCmd.SetOut(nil)
 		rootCmd.SetErr(nil)
 	})
 
 	rootCmd.SetArgs([]string{"--headless", "--provider", "ollama", "--no-update-check", "hello"})
 	execErr := rootCmd.Execute()
-
-	_ = w.Close()
-	os.Stdout = oldStdout
 
 	if execErr == nil {
 		t.Fatal("expected headless error status to return command error")
@@ -231,9 +225,7 @@ func TestRootCommand_HeadlessErrorReturnsErrorAfterPrintingJSON(t *testing.T) {
 		t.Fatalf("stderr contains Cobra usage after headless error JSON:\n%s", stderr.String())
 	}
 
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	output := strings.TrimSpace(buf.String())
+	output := strings.TrimSpace(stdout.String())
 
 	var parsed agent.HeadlessResult
 	if err := json.Unmarshal([]byte(output), &parsed); err != nil {

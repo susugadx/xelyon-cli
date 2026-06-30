@@ -14,20 +14,21 @@ import (
 )
 
 type headlessRunner struct {
-	agent             *Agent
-	provider          api.Provider
-	model             string
-	query             string
-	options           HeadlessRunOptions
-	startedAt         time.Time
-	toolCalls         []ToolCallResult
-	commands          []HeadlessCommandSummary
-	finalChecks       []HeadlessFinalCheckSummary
-	finalReply        string
-	initErr           error
-	cancelledErr      error
-	finalCheckFailed  bool
-	readOnlyViolation bool
+	agent                   *Agent
+	provider                api.Provider
+	model                   string
+	query                   string
+	options                 HeadlessRunOptions
+	startedAt               time.Time
+	toolCalls               []ToolCallResult
+	commands                []HeadlessCommandSummary
+	finalChecks             []HeadlessFinalCheckSummary
+	finalReply              string
+	initErr                 error
+	cancelledErr            error
+	finalCheckFailed        bool
+	readOnlyViolation       bool
+	gitChangedFilesBaseline headlessGitChangedFilesBaseline
 }
 
 // RunHeadlessWithConfig は指定設定で Headless モードのクエリを実行する。
@@ -70,6 +71,7 @@ func newHeadlessRunnerWithOptions(query, model string, provider api.Provider, cf
 	if !options.ReadOnly {
 		configureRuntimeAuditLoggerFromEnv(runtime, io.Discard, false)
 	}
+	gitBaseline := newHeadlessGitChangedFilesBaseline(runtime.InvocationCWD, options.ReadOnly)
 
 	agent := NewAgentWithRuntime(model, provider, true, runtime)
 	agent.setAutoApprove(true) // Headlessモードは自動承認（SafetyLow以外）
@@ -96,18 +98,16 @@ func newHeadlessRunnerWithOptions(query, model string, provider api.Provider, cf
 	agent.registry().SetExcludedTools(excludedTools)
 
 	// 初期ユーザーメッセージをHistoryに追加
-	agent.History = append(agent.History, api.Message{
-		Role:    "user",
-		Content: query,
-	})
+	agent.History = append(agent.History, api.NewUserMessageWithOptionalImage(query, options.Image))
 
 	return &headlessRunner{
-		agent:    agent,
-		provider: provider,
-		model:    model,
-		query:    query,
-		options:  options,
-		initErr:  initErr,
+		agent:                   agent,
+		provider:                provider,
+		model:                   model,
+		query:                   query,
+		options:                 options,
+		initErr:                 initErr,
+		gitChangedFilesBaseline: gitBaseline,
 	}
 }
 

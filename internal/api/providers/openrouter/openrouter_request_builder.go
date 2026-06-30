@@ -22,13 +22,14 @@ type openRouterClaudeToolChoice struct {
 
 func (p *Provider) buildOpenAITextChatPayload(ctx context.Context, systemPrompt string, history []api.Message, model string) ([]byte, error) {
 	options := openaicompat.ChatCompletionsRequestOptions{
-		Model:         model,
-		SystemPrompt:  systemPrompt,
-		ActiveContext: api.ActiveContextBlocksFromContext(ctx),
-		History:       history,
-		MaxTokens:     api.GetMaxOutputTokens(ctx, "openrouter", model),
-		Stream:        true,
-		IncludeUsage:  true,
+		Model:            model,
+		SystemPrompt:     systemPrompt,
+		ActiveContext:    api.ActiveContextBlocksFromContext(ctx),
+		History:          history,
+		MaxTokens:        api.GetMaxOutputTokens(ctx, "openrouter", model),
+		Stream:           true,
+		IncludeUsage:     true,
+		ImagePayloadMode: openaicompat.ImagePayloadMultimodal,
 	}
 
 	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
@@ -50,7 +51,13 @@ func (p *Provider) buildOpenAIImageChatPayload(ctx context.Context, systemPrompt
 		{Type: "image_url", ImageURL: &ImageURL{URL: imageURL}},
 	}
 
-	messages := openaicompat.BuildChatMessageInterfacesWithActiveContext(systemPrompt, api.ActiveContextBlocksFromContext(ctx), history, nil)
+	messages := openaicompat.BuildChatMessageInterfacesWithActiveContextAndImagePayloadMode(
+		systemPrompt,
+		api.ActiveContextBlocksFromContext(ctx),
+		history,
+		nil,
+		openaicompat.ImagePayloadMultimodal,
+	)
 	messages = append(messages, MultimodalMessage{
 		Role:    "user",
 		Content: content,

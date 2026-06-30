@@ -43,20 +43,6 @@ func (r *TurnRunner) requestNormalModeResponse(input string, image *api.ImageDat
 	effectivePrompt := a.normalModeSystemPromptForRequestWithDirectives(r.ctx, input, iteration == 0, runtimeDirectives)
 
 	requestCtx := a.prepareResponseContextForPrompt(a.requestContext(r.ctx), effectivePrompt)
-	if iteration == 0 && image != nil {
-		requestCtx, history := a.providerFacingHistoryExcludingLatestMessageForRequest(requestCtx)
-		response, err := a.CurrentProvider.ChatWithImage(
-			requestCtx, effectivePrompt, history, input, image, a.CurrentModel,
-		)
-		if err != nil {
-			a.ui().StopSpinner()
-			return "", fmt.Errorf("API call failed: %w", err)
-		}
-		a.recordResponseContextForPrompt(effectivePrompt)
-		a.markRuntimeDirectivesDelivered(runtimeDirectives)
-		return response, nil
-	}
-
 	requestCtx, history := a.providerFacingHistoryForRequest(requestCtx)
 	response, err := a.CurrentProvider.ChatWithTools(
 		requestCtx,

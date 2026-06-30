@@ -3,6 +3,8 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -122,7 +124,13 @@ func writeHeadlessResult(cmd *cobra.Command, result *app.HeadlessResult, policy 
 	if err != nil {
 		return err
 	}
-	fmt.Println(jsonOutput)
+	output := io.Writer(os.Stdout)
+	if cmd != nil {
+		output = cmd.OutOrStdout()
+	}
+	if _, err := fmt.Fprintln(output, jsonOutput); err != nil {
+		return err
+	}
 	if result.Status == app.HeadlessStatusError {
 		if cmd != nil {
 			cmd.SilenceUsage = true

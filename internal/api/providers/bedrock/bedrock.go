@@ -335,32 +335,8 @@ func (p *Provider) buildBedrockClaudeMessagesRequest(ctx context.Context, system
 
 // ChatWithImage は画像付きメッセージで会話を行う
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	p.lastContentBlocks = nil
-
-	// 画像がない場合は通常の ChatWithTools を使用
-	if image == nil || image.Base64 == "" {
-		history = append(history, api.Message{Role: "user", Content: userMessage})
-		return p.ChatWithTools(ctx, systemPrompt, history, model)
-	}
-
-	req := p.resolveBedrockRequestContext(ctx, model)
-	switch req.route {
-	case bedrockRouteClaudeMessages:
-		return p.chatWithClaudeImage(ctx, systemPrompt, history, userMessage, image, req)
-	case bedrockRouteConverseStream:
-		return p.chatWithConverseStream(ctx, systemPrompt, history, userMessage, image, req)
-	default:
-		return "", fmt.Errorf("unsupported bedrock route %q for model=%q catalog_model=%q", req.route, req.model, req.catalogModel)
-	}
-}
-
-func (p *Provider) chatWithClaudeImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, req bedrockRequestContext) (string, error) {
-	if err := ensureBedrockClaudeMessagesRoute(req); err != nil {
-		return "", err
-	}
-
-	reqBody := p.buildBedrockClaudeImageRequest(ctx, systemPrompt, history, userMessage, image, req)
-	return p.invokeClaudeMessagesStream(ctx, req.model, reqBody)
+	history = append(history, api.NewUserMessageWithOptionalImage(userMessage, image))
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
 func (p *Provider) buildBedrockClaudeImageRequest(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, req bedrockRequestContext) BedrockClaudeMultimodalRequest {

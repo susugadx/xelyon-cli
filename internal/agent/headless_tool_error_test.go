@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
@@ -16,6 +17,47 @@ type headlessToolErrorUsageProvider struct {
 	responses     []string
 	callCount     int
 	usageCallback api.UsageCallback
+}
+
+type strictSubAgentFailureProvider struct {
+	mu          sync.Mutex
+	parentStep  int
+	childStep   int
+	toolFailure string
+}
+
+func (p *strictSubAgentFailureProvider) Name() string { return "strict-subagent-test" }
+
+func (p *strictSubAgentFailureProvider) SupportsImages() bool { return false }
+
+func (p *strictSubAgentFailureProvider) IsFunctionCallingEnabled() bool { return true }
+
+func (p *strictSubAgentFailureProvider) ChatWithTools(_ context.Context, _ string, history []api.Message, _ string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if len(history) > 0 && history[0].Content == "sub task" {
+		if p.childStep == 0 {
+			p.childStep++
+			return p.toolFailure, nil
+		}
+		return "sub-agent final response after failed tool", nil
+	}
+
+	switch p.parentStep {
+	case 0:
+		p.parentStep++
+		return fmt.Sprintf(`{"tool":"%s","args":{"message":"sub task","task_type":"edit"}}`, subagent.SpawnAgentToolName), nil
+	case 1:
+		p.parentStep++
+		return fmt.Sprintf(`{"tool":"%s","args":{"ids":"[\"sub-001\"]"}}`, subagent.WaitAgentToolName), nil
+	default:
+		return "parent final response", nil
+	}
+}
+
+func (p *strictSubAgentFailureProvider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
 func (p *headlessToolErrorUsageProvider) Name() string { return "openai" }
@@ -98,7 +140,7 @@ func TestRunHeadlessWithConfigOptions_FailOnToolErrorPromotesSuccessResult(t *te
 	})
 
 	if result.Status != HeadlessStatusError {
-		t.Fatalf("Status = %q, want error", result.Status)
+		t.Fatalf("Status = %q, want error: error=%+v tool_calls=%+v response=%q", result.Status, result.Error, result.ToolCalls, result.Response)
 	}
 	if result.Error == nil || result.Error.Type != HeadlessErrorTypeToolError {
 		t.Fatalf("Error = %+v, want %s", result.Error, HeadlessErrorTypeToolError)
@@ -148,6 +190,11 @@ func TestHeadlessWaitAgentResponseHasFailure(t *testing.T) {
 			want:   true,
 		},
 		{
+			name:   "nested tool breakdown failure",
+			output: `{"results":[{"agent_id":"sub-001","status":"completed","output":"done","tool_breakdown":[{"tool":"str_replace","success":0,"failures":1}]}],"status":"completed"}`,
+			want:   true,
+		},
+		{
 			name:   "timeout",
 			output: `{"results":[{"agent_id":"sub-001","status":"timeout","output":""}],"status":"timeout"}`,
 			want:   true,
@@ -183,7 +230,7 @@ func TestRunHeadlessWithConfigOptions_FailOnToolErrorPromotesWaitAgentErrorStatu
 	})
 
 	if result.Status != HeadlessStatusError {
-		t.Fatalf("Status = %q, want error", result.Status)
+		t.Fatalf("Status = %q, want error: error=%+v tool_calls=%+v response=%q", result.Status, result.Error, result.ToolCalls, result.Response)
 	}
 	if result.Error == nil || result.Error.Type != HeadlessErrorTypeToolError {
 		t.Fatalf("Error = %+v, want %s", result.Error, HeadlessErrorTypeToolError)
@@ -206,6 +253,50 @@ func TestRunHeadlessWithConfigOptions_FailOnToolErrorPromotesWaitAgentErrorStatu
 	}
 	if !strings.Contains(call.Output, `"status":"error"`) || !strings.Contains(call.Output, "agent not found") {
 		t.Fatalf("wait_agent output = %q, want error status JSON", call.Output)
+	}
+}
+
+func TestSubAgentManagerWithHeadlessOptions_FailOnToolErrorPropagatesToSubAgent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XELYON_EDIT_TOOL", "str_replace")
+
+	dir := testSubDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "target.txt"), []byte("actual content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	provider := &strictSubAgentFailureProvider{
+		toolFailure: fmt.Sprintf(`{"tool":"str_replace","args":{"path":%q,"old_str":"missing content","new_str":"updated content"}}`, "target.txt"),
+	}
+	manager := newSubAgentManagerWithHeadlessOptionsAndFactory(HeadlessRunOptions{FailOnToolError: true}, func(string) (api.Provider, error) {
+		return provider, nil
+	})
+
+	id, err := manager.Spawn(context.Background(), "sub task", "edit", "gpt-5.4-nano", "", provider, newProjectMapDisabledConfig())
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	response := manager.Wait([]string{id}, 0)
+
+	if response.Status != "error" {
+		t.Fatalf("Wait().Status = %q, want error: response=%+v", response.Status, response)
+	}
+	if len(response.Results) != 1 {
+		t.Fatalf("Wait().Results = %+v, want one result", response.Results)
+	}
+	result := response.Results[0]
+	if result.Status != "error" {
+		t.Fatalf("result.Status = %q, want error: result=%+v", result.Status, result)
+	}
+	if len(result.ToolBreakdown) != 1 {
+		t.Fatalf("result.ToolBreakdown = %+v, want one failed tool", result.ToolBreakdown)
+	}
+	breakdown := result.ToolBreakdown[0]
+	if breakdown.Tool != "str_replace" || breakdown.Failures != 1 || breakdown.Success != 0 {
+		t.Fatalf("tool breakdown = %+v, want str_replace failure", breakdown)
+	}
+	if !strings.Contains(result.Output, "tool calls failed") {
+		t.Fatalf("result.Output = %q, want strict tool failure message", result.Output)
 	}
 }
 

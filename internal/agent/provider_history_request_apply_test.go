@@ -514,14 +514,16 @@ func TestImageRequestAppliesProviderHistoryReductionToPastHistoryWhenRuntimeGate
 	}
 
 	assertProviderRequestHistoryReductionApplied(t, agent, provider, oldRead, "")
-	if len(provider.capturedHistory) != 6 {
-		t.Fatalf("image provider history length = %d, want only projected past history", len(provider.capturedHistory))
+	if len(provider.capturedHistory) != 7 {
+		t.Fatalf("image provider history length = %d, want projected past history + current image message", len(provider.capturedHistory))
 	}
-	if strings.Contains(strings.Join(providerHistoryMessageContents(provider.capturedHistory), "\n"), "describe image") {
-		t.Fatalf("image provider history should exclude current prompt, got %#v", provider.capturedHistory)
+	latest := provider.capturedHistory[len(provider.capturedHistory)-1]
+	if latest.Content != "describe image" || !latest.HasImage() {
+		t.Fatalf("latest provider history = %#v, want current image message", latest)
 	}
-	if !strings.Contains(provider.imageUserMessage, "describe image") {
-		t.Fatalf("image userMessage = %q, want current prompt", provider.imageUserMessage)
+	pastContents := strings.Join(providerHistoryMessageContents(provider.capturedHistory[:len(provider.capturedHistory)-1]), "\n")
+	if strings.Contains(pastContents, "describe image") {
+		t.Fatalf("past provider history should not contain current prompt, got %#v", provider.capturedHistory)
 	}
 }
 
