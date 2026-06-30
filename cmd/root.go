@@ -86,9 +86,7 @@ Examples:
 			resolvedOutputFormat, err := resolveOutputFormat(outputFormat, headless)
 			if err != nil {
 				if headless {
-					result := app.NewHeadlessUsageErrorResult("", "", err.Error()).
-						WithInput(newHeadlessPreRunInputMetadata(cmd, args))
-					return writeHeadlessResult(cmd, result, resolvedExitPolicy)
+					return writeHeadlessUsageErrorResult(cmd, args, err, resolvedExitPolicy)
 				}
 				return commandErrorForExitPolicy(err, resolvedExitPolicy, 2)
 			}
@@ -96,9 +94,7 @@ Examples:
 			mode, err := resolveExecutionMode(args, resolvedOutputFormat)
 			if err != nil {
 				if resolvedOutputFormat == outputFormatJSON {
-					result := app.NewHeadlessUsageErrorResult("", "", err.Error()).
-						WithInput(newHeadlessPreRunInputMetadata(cmd, args))
-					return writeHeadlessResult(cmd, result, resolvedExitPolicy)
+					return writeHeadlessUsageErrorResult(cmd, args, err, resolvedExitPolicy)
 				}
 				return commandErrorForExitPolicy(err, resolvedExitPolicy, 2)
 			}
@@ -123,55 +119,7 @@ Examples:
 
 			switch mode {
 			case executionModeHeadless:
-				promptInput, err := resolveHeadlessPromptInput(cmd, args, imageFlag != "")
-				if err != nil {
-					promptInput.input = withHeadlessImageInputMetadataForCurrentProvider(promptInput.input, imageFlag)
-					result := app.NewHeadlessUsageErrorResult("", "", err.Error()).WithInput(promptInput.input)
-					return writeHeadlessResult(cmd, result, resolvedExitPolicy)
-				}
-				runtime, err := loadRuntimeSelectionForMode(cmd, mode)
-				if err != nil {
-					var setupErr *headlessProviderSetupRequiredError
-					if errors.As(err, &setupErr) {
-						imageSetupResolution := resolveHeadlessProviderSetupRequiredImageInput(setupErr.provider, setupErr.model, promptInput.input, imageFlag)
-						promptInput.input = imageSetupResolution.input
-						if imageSetupResolution.result != nil {
-							return writeHeadlessResult(cmd, imageSetupResolution.result, resolvedExitPolicy)
-						}
-						result := app.NewHeadlessProviderSetupRequiredResult(setupErr.provider, setupErr.model, setupErr.message).
-							WithInput(promptInput.input)
-						return writeHeadlessResult(cmd, result, resolvedExitPolicy)
-					}
-					var configErr *headlessRuntimeSelectionConfigError
-					if errors.As(err, &configErr) {
-						promptInput.input = withHeadlessImageInputMetadataForProviderName(promptInput.input, imageFlag, configErr.provider)
-						result := app.NewHeadlessConfigErrorResult(configErr.provider, configErr.model, configErr.message).
-							WithInput(promptInput.input)
-						return writeHeadlessResult(cmd, result, resolvedExitPolicy)
-					}
-					promptInput.input = withHeadlessImageInputMetadataForCurrentProvider(promptInput.input, imageFlag)
-					result := app.NewHeadlessConfigErrorResult("", "", err.Error()).WithInput(promptInput.input)
-					return writeHeadlessResult(cmd, result, resolvedExitPolicy)
-				}
-				options := app.HeadlessRunOptions{
-					FailOnToolError: failOnToolError,
-					ReadOnly:        readOnly || dryRun,
-				}
-				imageResolution := resolveHeadlessImageInput(runtime.provider, runtime.model, promptInput.input, imageFlag)
-				promptInput.input = imageResolution.input
-				if imageResolution.result != nil {
-					return writeHeadlessResult(cmd, imageResolution.result, resolvedExitPolicy)
-				}
-				options.Image = imageResolution.image
-				if strings.TrimSpace(promptInput.query) == "" && options.Image != nil {
-					promptInput.query = app.DefaultImagePrompt
-				}
-				result := runHeadless(cmd.Context(), promptInput.query, runtime.model, runtime.provider, runtime.cfg, options)
-				if result == nil {
-					result = app.NewHeadlessConfigErrorResult(runtime.provider.Name(), runtime.model, "headless run returned nil result")
-				}
-				result.WithInput(promptInput.input)
-				return writeHeadlessResult(cmd, result, resolvedExitPolicy)
+				return runHeadlessMode(cmd, args, resolvedExitPolicy)
 			case executionModeOnce:
 				runtime, err := loadRuntimeSelectionForMode(cmd, mode)
 				if err != nil {
@@ -221,37 +169,6 @@ Examples:
 	return cmd
 }
 
-type headlessProviderSetupRequiredError struct {
-	provider string
-	model    string
-	message  string
-}
-
-func (e *headlessProviderSetupRequiredError) Error() string {
-	return e.message
-}
-
-type headlessRuntimeSelectionConfigError struct {
-	provider string
-	model    string
-	message  string
-}
-
-func (e *headlessRuntimeSelectionConfigError) Error() string {
-	return e.message
-}
-
-func newHeadlessRuntimeSelectionConfigError(provider string, model string, err error) error {
-	if err == nil {
-		return nil
-	}
-	return &headlessRuntimeSelectionConfigError{
-		provider: provider,
-		model:    model,
-		message:  err.Error(),
-	}
-}
-
 type commandExitCodeError struct {
 	message string
 	code    int
@@ -297,28 +214,6 @@ func resolveProviderForExecutionMode(cmd *cobra.Command, providerName string, mo
 		return nil, newHeadlessRuntimeSelectionConfigError(providerName, model, err)
 	}
 	return nil, err
-}
-
-func writeHeadlessResult(cmd *cobra.Command, result *app.HeadlessResult, policy app.HeadlessExitPolicy) error {
-	result, err := app.ApplyHeadlessExitPolicy(result, policy)
-	if err != nil {
-		return err
-	}
-	jsonOutput, err := result.ToJSON()
-	if err != nil {
-		return err
-	}
-	fmt.Println(jsonOutput)
-	if result.Status == app.HeadlessStatusError {
-		if cmd != nil {
-			cmd.SilenceUsage = true
-		}
-		return &commandExitCodeError{
-			message: "headless execution failed",
-			code:    result.RecommendedExitCode,
-		}
-	}
-	return nil
 }
 
 func configureRootCommand(rootCmd *cobra.Command) {

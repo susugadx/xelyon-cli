@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -226,86 +223,5 @@ func TestRootCommand_PromptFileRequiresHeadlessJSONMode(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--prompt-file can only be used") {
 		t.Fatalf("error = %v, want --prompt-file mode error", err)
-	}
-}
-
-func executeRootCommandForHeadlessJSONTest(t *testing.T, args []string, stdin string) (agent.HeadlessResult, string, string, error) {
-	t.Helper()
-
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Pipe() error = %v", err)
-	}
-	os.Stdout = w
-
-	var stderr bytes.Buffer
-	rootCmd.SetOut(&stderr)
-	rootCmd.SetErr(&stderr)
-	rootCmd.SetIn(strings.NewReader(stdin))
-	rootCmd.SetArgs(args)
-
-	execErr := rootCmd.Execute()
-
-	_ = w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	_, _ = io.Copy(&buf, r)
-	output := strings.TrimSpace(buf.String())
-
-	var parsed agent.HeadlessResult
-	if output != "" {
-		if err := json.Unmarshal([]byte(output), &parsed); err != nil {
-			t.Fatalf("stdout is not headless JSON: %v\noutput=%q", err, output)
-		}
-	}
-	return parsed, output, stderr.String(), execErr
-}
-
-func requireHeadlessInput(t *testing.T, input *agent.HeadlessInput, source agent.HeadlessInputSource, path string, bytes int) {
-	t.Helper()
-	if input == nil {
-		t.Fatal("input = nil")
-	}
-	if input.Source != source {
-		t.Fatalf("input.source = %q, want %q", input.Source, source)
-	}
-	if input.PromptFile != path {
-		t.Fatalf("input.prompt_file = %q, want %q", input.PromptFile, path)
-	}
-	if input.Bytes != bytes {
-		t.Fatalf("input.bytes = %d, want %d", input.Bytes, bytes)
-	}
-}
-
-func requireHeadlessConfigError(t *testing.T, parsed agent.HeadlessResult, stderr string, err error) {
-	t.Helper()
-	if err == nil {
-		t.Fatal("expected headless execution error")
-	}
-	if !strings.Contains(err.Error(), "headless execution failed") {
-		t.Fatalf("error = %v, want headless execution failed", err)
-	}
-	if strings.Contains(stderr, "Usage:") {
-		t.Fatalf("stderr contains Cobra usage after headless JSON error:\n%s", stderr)
-	}
-	if parsed.SchemaVersion != agent.HeadlessSchemaVersion {
-		t.Fatalf("schema_version = %q, want %q", parsed.SchemaVersion, agent.HeadlessSchemaVersion)
-	}
-	if parsed.Status != agent.HeadlessStatusError {
-		t.Fatalf("status = %q, want %q", parsed.Status, agent.HeadlessStatusError)
-	}
-	if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeConfig {
-		t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeConfig)
-	}
-	if parsed.FailureReason != agent.HeadlessFailureReasonUsageError {
-		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonUsageError)
-	}
-	if parsed.ExitPolicy != agent.HeadlessExitPolicyLegacy {
-		t.Fatalf("exit_policy = %q, want %q", parsed.ExitPolicy, agent.HeadlessExitPolicyLegacy)
-	}
-	if parsed.RecommendedExitCode != 1 {
-		t.Fatalf("recommended_exit_code = %d, want 1", parsed.RecommendedExitCode)
 	}
 }

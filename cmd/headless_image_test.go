@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -247,35 +246,4 @@ func TestRootCommand_HeadlessImageModelValidationErrorIncludesMetadata(t *testin
 		t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonConfigError)
 	}
 	requireHeadlessInputImage(t, parsed.Input, imagePath, "", 0, true)
-}
-
-func requireHeadlessInputImage(t *testing.T, input *agent.HeadlessInput, path string, mimeType string, bytes int64, providerSupported bool) {
-	t.Helper()
-	if input == nil {
-		t.Fatal("input = nil")
-	}
-	if input.Image == nil {
-		t.Fatal("input.image = nil")
-	}
-	if input.Image.Path != path {
-		t.Fatalf("input.image.path = %q, want %q", input.Image.Path, path)
-	}
-	if input.Image.MIMEType != mimeType {
-		t.Fatalf("input.image.mime_type = %q, want %q", input.Image.MIMEType, mimeType)
-	}
-	if input.Image.Bytes != bytes {
-		t.Fatalf("input.image.bytes = %d, want %d", input.Image.Bytes, bytes)
-	}
-	if input.Image.ProviderSupported != providerSupported {
-		t.Fatalf("input.image.provider_supported = %t, want %t", input.Image.ProviderSupported, providerSupported)
-	}
-}
-
-func writeHeadlessImageTestFile(t *testing.T, name string, body []byte) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(path, body, 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-	return path
 }

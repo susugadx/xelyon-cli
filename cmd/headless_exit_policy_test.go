@@ -412,14 +412,3 @@ func TestRootCommand_InvalidExitCodePolicyReturnsCommandError(t *testing.T) {
 		t.Fatalf("invalid exit-code-policy error carries exit code %d, want normal command error", exitErr.ExitCode())
 	}
 }
-
-func requireCommandExitCode(t *testing.T, err error, want int) {
-	t.Helper()
-	var exitErr exitCodeCarrier
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("error = %T, want exit code carrier", err)
-	}
-	if exitErr.ExitCode() != want {
-		t.Fatalf("ExitCode() = %d, want %d", exitErr.ExitCode(), want)
-	}
-}
