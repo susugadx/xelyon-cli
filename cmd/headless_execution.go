@@ -110,8 +110,12 @@ func writeHeadlessProviderSetupRequiredError(cmd *cobra.Command, setupErr *headl
 }
 
 func writeHeadlessUsageErrorResult(cmd *cobra.Command, args []string, err error, policy app.HeadlessExitPolicy) error {
+	return writeHeadlessUsageErrorResultWithInput(cmd, newHeadlessPreRunInputMetadata(cmd, args), err, policy)
+}
+
+func writeHeadlessUsageErrorResultWithInput(cmd *cobra.Command, input app.HeadlessInput, err error, policy app.HeadlessExitPolicy) error {
 	result := app.NewHeadlessUsageErrorResult("", "", err.Error()).
-		WithInput(newHeadlessPreRunInputMetadata(cmd, args))
+		WithInput(input)
 	return writeHeadlessResult(cmd, result, policy)
 }
 
@@ -134,6 +138,7 @@ func writeHeadlessResult(cmd *cobra.Command, result *app.HeadlessResult, policy 
 	if result.Status == app.HeadlessStatusError {
 		if cmd != nil {
 			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
 		}
 		return &commandExitCodeError{
 			message: "headless execution failed",

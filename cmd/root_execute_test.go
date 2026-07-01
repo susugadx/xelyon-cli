@@ -1,116 +1,21 @@
 package cmd
 
 import (
-	"context"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
-
-	"github.com/susugadx/xelyon-cli/internal/agent"
-	"github.com/susugadx/xelyon-cli/internal/api"
-	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-func TestExecute_HelperProcess(t *testing.T) {
-	mode := os.Getenv("GO_WANT_XELYON_ROOT_EXECUTE_HELPER")
-	if mode == "" {
-		return
-	}
-
-	resetRootFlagsForTest()
-	var args []string
-	switch mode {
-	case "unknown_flag", "1":
-		args = []string{"--unknown-flag"}
-	case "unknown_flag_ci":
-		args = []string{"--exit-code-policy", "ci", "--unknown-flag"}
-	case "unknown_flag_then_ci":
-		args = []string{"--unknown-flag", "--exit-code-policy", "ci"}
-	case "unknown_flag_then_ci_equals":
-		args = []string{"--unknown-flag", "--exit-code-policy=ci"}
-	case "unknown_shorthand_flag_ci":
-		args = []string{"--exit-code-policy", "ci", "-z"}
-	case "missing_flag_argument_ci":
-		args = []string{"--exit-code-policy", "ci", "--provider"}
-	case "headless_usage_ci":
-		args = []string{"--headless", "--exit-code-policy", "ci", "--provider", "ollama", "--no-update-check"}
-	case "headless_tool_error_ci":
-		runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
-			if !options.FailOnToolError {
-				t.Fatal("FailOnToolError = false, want true")
-			}
-			result := agent.NewErrorResult(provider.Name(), model, agent.HeadlessErrorTypeToolError, "one or more tool calls failed", 0)
-			result.ToolCalls = []agent.ToolCallResult{{
-				Tool:    "str_replace",
-				Args:    map[string]string{"path": "target.txt"},
-				Output:  "Error: old_str not found",
-				Success: false,
-			}}
-			return result
-		}
-		args = []string{"--headless", "--fail-on-tool-error", "--exit-code-policy", "ci", "--provider", "ollama", "--no-update-check", "hello"}
-	case "headless_read_only_violation_ci":
-		runHeadless = func(ctx context.Context, query string, model string, provider api.Provider, cfg *config.Config, options agent.HeadlessRunOptions) *agent.HeadlessResult {
-			if !options.FailOnToolError {
-				t.Fatal("FailOnToolError = false, want true")
-			}
-			if !options.ReadOnly {
-				t.Fatal("ReadOnly = false, want true")
-			}
-			result := agent.NewErrorResult(provider.Name(), model, agent.HeadlessErrorTypeReadOnlyViolation, "one or more tool calls were denied by read-only mode", 0)
-			result.ToolCalls = []agent.ToolCallResult{{
-				Tool:    "write_file",
-				Args:    map[string]string{"path": "target.txt"},
-				Output:  "Error: read-only mode denied write-capable tool: write_file",
-				Success: false,
-			}}
-			return result
-		}
-		args = []string{"--headless", "--read-only", "--fail-on-tool-error", "--exit-code-policy", "ci", "--provider", "ollama", "--no-update-check", "hello"}
-	case "root_usage_ci":
-		args = []string{"--exit-code-policy", "ci", "--output-format", "yaml", "--no-update-check", "hello"}
-	case "invalid_exit_policy":
-		args = []string{"--exit-code-policy", "strict", "--no-update-check", "hello"}
-	default:
-		t.Fatalf("unknown helper mode %q", mode)
-	}
-	os.Args = append([]string{os.Args[0]}, args...)
-	Execute()
-}
-
 func TestExecute_ExitsOnError(t *testing.T) {
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable() error = %v", err)
+	result := runRootExecuteHelper(t, "unknown_flag")
+	if result.exitCode != 1 {
+		t.Fatalf("exit code = %d, want 1", result.exitCode)
 	}
-
-	cmd := exec.Command(exe, "-test.run=TestExecute_HelperProcess")
-	cmd.Env = append(os.Environ(), "GO_WANT_XELYON_ROOT_EXECUTE_HELPER=unknown_flag")
-
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("expected Execute() helper to exit with non-zero status")
-	}
-
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("error = %T, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() != 1 {
-		t.Fatalf("exit code = %d, want 1", exitErr.ExitCode())
-	}
-	if !strings.Contains(string(output), "unknown flag") {
-		t.Fatalf("combined output = %q, want cobra error message", string(output))
+	if !strings.Contains(result.combinedOutput(), "unknown flag") {
+		t.Fatalf("combined output = %q, want cobra error message", result.combinedOutput())
 	}
 }
 
 func TestExecute_ExitsWithCIUsageCodeForCobraUsageErrors(t *testing.T) {
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable() error = %v", err)
-	}
-
 	tests := []struct {
 		name         string
 		helperMode   string
@@ -125,166 +30,270 @@ func TestExecute_ExitsWithCIUsageCodeForCobraUsageErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := exec.Command(exe, "-test.run=TestExecute_HelperProcess")
-			cmd.Env = append(os.Environ(), "GO_WANT_XELYON_ROOT_EXECUTE_HELPER="+tt.helperMode)
+			result := runRootExecuteHelper(t, tt.helperMode)
+			if result.exitCode != 2 {
+				t.Fatalf("exit code = %d, want 2\noutput=%s", result.exitCode, result.combinedOutput())
+			}
+			if !strings.Contains(result.combinedOutput(), tt.wantFragment) {
+				t.Fatalf("combined output = %q, want %q", result.combinedOutput(), tt.wantFragment)
+			}
+		})
+	}
+}
 
-			output, err := cmd.CombinedOutput()
-			if err == nil {
-				t.Fatal("expected Execute() helper to exit with non-zero status")
-			}
+func TestExecute_EmitsHeadlessJSONForCobraUsageErrors(t *testing.T) {
+	tests := []struct {
+		name              string
+		helperMode        string
+		wantErrorFragment string
+	}{
+		{name: "headless unknown flag", helperMode: "headless_unknown_flag_ci"},
+		{name: "headless unknown flag policy after parse error", helperMode: "headless_unknown_flag_ci_policy_after"},
+		{name: "headless false after parse error", helperMode: "headless_unknown_flag_ci_headless_false_after"},
+		{name: "headless unknown flag before subcommand word", helperMode: "headless_unknown_flag_ci_before_doctor"},
+		{name: "headless before unknown shorthand cluster", helperMode: "headless_unknown_shorthand_cluster_ci", wantErrorFragment: "unknown shorthand flag"},
+		{name: "json output text after parse error", helperMode: "json_unknown_flag_ci_text_after"},
+		{name: "json uppercase output format", helperMode: "json_unknown_flag_ci_uppercase"},
+		{name: "json whitespace output format policy after parse error", helperMode: "json_unknown_flag_ci_whitespace_policy_after"},
+	}
 
-			exitErr, ok := err.(*exec.ExitError)
-			if !ok {
-				t.Fatalf("error = %T, want *exec.ExitError", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runRootExecuteHelper(t, tt.helperMode)
+			wantErrorFragment := tt.wantErrorFragment
+			if wantErrorFragment == "" {
+				wantErrorFragment = "unknown flag"
 			}
-			if exitErr.ExitCode() != 2 {
-				t.Fatalf("exit code = %d, want 2\noutput=%s", exitErr.ExitCode(), string(output))
+			if result.exitCode != 2 {
+				t.Fatalf("exit code = %d, want 2\nstdout=%s\nstderr=%s", result.exitCode, result.stdout, result.stderr)
 			}
-			if !strings.Contains(string(output), tt.wantFragment) {
-				t.Fatalf("combined output = %q, want %q", string(output), tt.wantFragment)
+			for _, fragment := range []string{
+				`"schema_version": "xelyon.headless.v1"`,
+				`"failure_reason": "usage_error"`,
+				`"exit_policy": "ci"`,
+				`"recommended_exit_code": 2`,
+				wantErrorFragment,
+			} {
+				if !strings.Contains(result.stdout, fragment) {
+					t.Fatalf("stdout = %q, want %q", result.stdout, fragment)
+				}
+			}
+			if strings.Contains(result.stderr, "Usage:") {
+				t.Fatalf("stderr contains Cobra usage after headless JSON error:\n%s", result.stderr)
+			}
+			if !strings.Contains(result.stderr, "headless execution failed") {
+				t.Fatalf("stderr = %q, want headless execution failed", result.stderr)
+			}
+		})
+	}
+}
+
+func TestExecute_DoesNotEmitHeadlessJSONForUnparsedHeadlessFlags(t *testing.T) {
+	tests := []struct {
+		name         string
+		helperMode   string
+		wantFragment string
+	}{
+		{name: "explicit false headless before parse error", helperMode: "headless_false_unknown_flag", wantFragment: "unknown flag"},
+		{name: "headless only after parse error", helperMode: "unknown_flag_then_headless", wantFragment: "unknown flag"},
+		{name: "quiet shorthand cluster before headless", helperMode: "quiet_cluster_then_headless", wantFragment: "unknown shorthand flag"},
+		{name: "auto approve shorthand cluster before headless", helperMode: "auto_approve_cluster_then_headless", wantFragment: "unknown shorthand flag"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runRootExecuteHelper(t, tt.helperMode)
+			if result.exitCode != 1 {
+				t.Fatalf("exit code = %d, want 1\nstdout=%s\nstderr=%s", result.exitCode, result.stdout, result.stderr)
+			}
+			if strings.Contains(result.stdout, `"schema_version": "xelyon.headless.v1"`) {
+				t.Fatalf("stdout contains headless JSON for non-headless parse error:\n%s", result.stdout)
+			}
+			if !strings.Contains(result.stderr, "Usage:") {
+				t.Fatalf("stderr = %q, want Cobra usage", result.stderr)
+			}
+			if !strings.Contains(result.stderr, tt.wantFragment) {
+				t.Fatalf("stderr = %q, want %q", result.stderr, tt.wantFragment)
+			}
+		})
+	}
+}
+
+func TestExecute_KeepsSubcommandFlagParseErrorsText(t *testing.T) {
+	tests := []struct {
+		name       string
+		helperMode string
+		wantFlag   string
+	}{
+		{name: "headless before doctor", helperMode: "headless_before_doctor", wantFlag: "--headless"},
+		{name: "json before doctor", helperMode: "json_before_doctor", wantFlag: "--output-format"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runRootExecuteHelper(t, tt.helperMode)
+			if result.exitCode != 1 {
+				t.Fatalf("exit code = %d, want 1\nstdout=%s\nstderr=%s", result.exitCode, result.stdout, result.stderr)
+			}
+			if strings.Contains(result.stdout, `"schema_version": "xelyon.headless.v1"`) {
+				t.Fatalf("stdout contains headless JSON for subcommand flag error:\n%s", result.stdout)
+			}
+			if !strings.Contains(result.stderr, "Usage:") {
+				t.Fatalf("stderr = %q, want Cobra usage", result.stderr)
+			}
+			if !strings.Contains(result.stderr, "unknown flag: "+tt.wantFlag) {
+				t.Fatalf("stderr = %q, want unknown flag %s", result.stderr, tt.wantFlag)
+			}
+		})
+	}
+}
+
+func TestExecute_PreservesHeadlessUsageErrorInputMetadata(t *testing.T) {
+	tests := []struct {
+		name          string
+		helperMode    string
+		wantFragments []string
+	}{
+		{
+			name:       "prompt file after invalid flag",
+			helperMode: "headless_unknown_flag_ci_prompt_file_after",
+			wantFragments: []string{
+				`"source": "prompt_file"`,
+				`"prompt_file": "prompt.md"`,
+			},
+		},
+		{
+			name:       "image after invalid flag",
+			helperMode: "headless_unknown_flag_ci_image_after",
+			wantFragments: []string{
+				`"source": "args"`,
+				`"image": {`,
+				`"path": "screen.png"`,
+				`"provider_supported": true`,
+			},
+		},
+		{
+			name:       "attached shorthand image after invalid flag",
+			helperMode: "headless_unknown_flag_ci_image_attached_shorthand",
+			wantFragments: []string{
+				`"source": "args"`,
+				`"bytes": 6`,
+				`"image": {`,
+				`"path": "screen.png"`,
+				`"provider_supported": true`,
+			},
+		},
+		{
+			name:       "equals shorthand image after invalid flag",
+			helperMode: "headless_unknown_flag_ci_image_equals_shorthand",
+			wantFragments: []string{
+				`"source": "args"`,
+				`"bytes": 6`,
+				`"image": {`,
+				`"path": "screen.png"`,
+				`"provider_supported": false`,
+			},
+		},
+		{
+			name:       "valid shorthand cluster with model before invalid flag",
+			helperMode: "headless_unknown_flag_ci_model_cluster",
+			wantFragments: []string{
+				`"source": "args"`,
+				`"bytes": 6`,
+			},
+		},
+		{
+			name:       "valid shorthand cluster with image before invalid flag",
+			helperMode: "headless_unknown_flag_ci_image_cluster",
+			wantFragments: []string{
+				`"source": "args"`,
+				`"bytes": 6`,
+				`"image": {`,
+				`"path": "screen.png"`,
+				`"provider_supported": true`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runRootExecuteHelper(t, tt.helperMode)
+			if result.exitCode != 2 {
+				t.Fatalf("exit code = %d, want 2\nstdout=%s\nstderr=%s", result.exitCode, result.stdout, result.stderr)
+			}
+			if !strings.Contains(result.stdout, `"schema_version": "xelyon.headless.v1"`) {
+				t.Fatalf("stdout = %q, want headless JSON", result.stdout)
+			}
+			for _, fragment := range tt.wantFragments {
+				if !strings.Contains(result.stdout, fragment) {
+					t.Fatalf("stdout = %q, want %q", result.stdout, fragment)
+				}
+			}
+			if strings.Contains(result.stderr, "Usage:") {
+				t.Fatalf("stderr contains Cobra usage after headless JSON error:\n%s", result.stderr)
 			}
 		})
 	}
 }
 
 func TestExecute_ExitsWithHeadlessRecommendedCode(t *testing.T) {
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable() error = %v", err)
+	result := runRootExecuteHelper(t, "headless_usage_ci")
+	if result.exitCode != 2 {
+		t.Fatalf("exit code = %d, want 2\noutput=%s", result.exitCode, result.combinedOutput())
 	}
-
-	cmd := exec.Command(exe, "-test.run=TestExecute_HelperProcess")
-	cmd.Env = append(os.Environ(), "GO_WANT_XELYON_ROOT_EXECUTE_HELPER=headless_usage_ci")
-
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("expected Execute() helper to exit with non-zero status")
+	if !strings.Contains(result.combinedOutput(), `"failure_reason": "usage_error"`) {
+		t.Fatalf("combined output = %q, want usage_error JSON", result.combinedOutput())
 	}
-
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("error = %T, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() != 2 {
-		t.Fatalf("exit code = %d, want 2\noutput=%s", exitErr.ExitCode(), string(output))
-	}
-	if !strings.Contains(string(output), `"failure_reason": "usage_error"`) {
-		t.Fatalf("combined output = %q, want usage_error JSON", string(output))
-	}
-	if !strings.Contains(string(output), `"recommended_exit_code": 2`) {
-		t.Fatalf("combined output = %q, want recommended_exit_code 2", string(output))
+	if !strings.Contains(result.combinedOutput(), `"recommended_exit_code": 2`) {
+		t.Fatalf("combined output = %q, want recommended_exit_code 2", result.combinedOutput())
 	}
 }
 
 func TestExecute_ExitsWithHeadlessToolErrorRecommendedCode(t *testing.T) {
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable() error = %v", err)
+	result := runRootExecuteHelper(t, "headless_tool_error_ci")
+	if result.exitCode != 4 {
+		t.Fatalf("exit code = %d, want 4\noutput=%s", result.exitCode, result.combinedOutput())
 	}
-
-	cmd := exec.Command(exe, "-test.run=TestExecute_HelperProcess")
-	cmd.Env = append(os.Environ(), "GO_WANT_XELYON_ROOT_EXECUTE_HELPER=headless_tool_error_ci")
-
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("expected Execute() helper to exit with non-zero status")
+	if !strings.Contains(result.combinedOutput(), `"failure_reason": "tool_error"`) {
+		t.Fatalf("combined output = %q, want tool_error JSON", result.combinedOutput())
 	}
-
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("error = %T, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() != 4 {
-		t.Fatalf("exit code = %d, want 4\noutput=%s", exitErr.ExitCode(), string(output))
-	}
-	if !strings.Contains(string(output), `"failure_reason": "tool_error"`) {
-		t.Fatalf("combined output = %q, want tool_error JSON", string(output))
-	}
-	if !strings.Contains(string(output), `"recommended_exit_code": 4`) {
-		t.Fatalf("combined output = %q, want recommended_exit_code 4", string(output))
+	if !strings.Contains(result.combinedOutput(), `"recommended_exit_code": 4`) {
+		t.Fatalf("combined output = %q, want recommended_exit_code 4", result.combinedOutput())
 	}
 }
 
 func TestExecute_ExitsWithHeadlessReadOnlyViolationRecommendedCode(t *testing.T) {
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable() error = %v", err)
+	result := runRootExecuteHelper(t, "headless_read_only_violation_ci")
+	if result.exitCode != 8 {
+		t.Fatalf("exit code = %d, want 8\noutput=%s", result.exitCode, result.combinedOutput())
 	}
-
-	cmd := exec.Command(exe, "-test.run=TestExecute_HelperProcess")
-	cmd.Env = append(os.Environ(), "GO_WANT_XELYON_ROOT_EXECUTE_HELPER=headless_read_only_violation_ci")
-
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("expected Execute() helper to exit with non-zero status")
+	if !strings.Contains(result.combinedOutput(), `"failure_reason": "read_only_violation"`) {
+		t.Fatalf("combined output = %q, want read_only_violation JSON", result.combinedOutput())
 	}
-
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("error = %T, want *exec.ExitError", err)
+	if !strings.Contains(result.combinedOutput(), `"recommended_exit_code": 8`) {
+		t.Fatalf("combined output = %q, want recommended_exit_code 8", result.combinedOutput())
 	}
-	if exitErr.ExitCode() != 8 {
-		t.Fatalf("exit code = %d, want 8\noutput=%s", exitErr.ExitCode(), string(output))
-	}
-	if !strings.Contains(string(output), `"failure_reason": "read_only_violation"`) {
-		t.Fatalf("combined output = %q, want read_only_violation JSON", string(output))
-	}
-	if !strings.Contains(string(output), `"recommended_exit_code": 8`) {
-		t.Fatalf("combined output = %q, want recommended_exit_code 8", string(output))
-	}
-	if strings.Contains(string(output), "Usage:") {
-		t.Fatalf("combined output contains Cobra usage after headless JSON error:\n%s", string(output))
+	if strings.Contains(result.combinedOutput(), "Usage:") {
+		t.Fatalf("combined output contains Cobra usage after headless JSON error:\n%s", result.combinedOutput())
 	}
 }
 
 func TestExecute_ExitsWithCIUsageCodeForRootErrors(t *testing.T) {
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable() error = %v", err)
+	result := runRootExecuteHelper(t, "root_usage_ci")
+	if result.exitCode != 2 {
+		t.Fatalf("exit code = %d, want 2\noutput=%s", result.exitCode, result.combinedOutput())
 	}
-
-	cmd := exec.Command(exe, "-test.run=TestExecute_HelperProcess")
-	cmd.Env = append(os.Environ(), "GO_WANT_XELYON_ROOT_EXECUTE_HELPER=root_usage_ci")
-
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("expected Execute() helper to exit with non-zero status")
-	}
-
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("error = %T, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() != 2 {
-		t.Fatalf("exit code = %d, want 2\noutput=%s", exitErr.ExitCode(), string(output))
-	}
-	if !strings.Contains(string(output), "invalid --output-format") {
-		t.Fatalf("combined output = %q, want output-format error", string(output))
+	if !strings.Contains(result.combinedOutput(), "invalid --output-format") {
+		t.Fatalf("combined output = %q, want output-format error", result.combinedOutput())
 	}
 }
 
 func TestExecute_InvalidExitPolicyKeepsLegacyErrorCode(t *testing.T) {
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable() error = %v", err)
+	result := runRootExecuteHelper(t, "invalid_exit_policy")
+	if result.exitCode != 1 {
+		t.Fatalf("exit code = %d, want 1\noutput=%s", result.exitCode, result.combinedOutput())
 	}
-
-	cmd := exec.Command(exe, "-test.run=TestExecute_HelperProcess")
-	cmd.Env = append(os.Environ(), "GO_WANT_XELYON_ROOT_EXECUTE_HELPER=invalid_exit_policy")
-
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatal("expected Execute() helper to exit with non-zero status")
-	}
-
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("error = %T, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() != 1 {
-		t.Fatalf("exit code = %d, want 1\noutput=%s", exitErr.ExitCode(), string(output))
-	}
-	if !strings.Contains(string(output), "invalid --exit-code-policy") {
-		t.Fatalf("combined output = %q, want exit policy error", string(output))
+	if !strings.Contains(result.combinedOutput(), "invalid --exit-code-policy") {
+		t.Fatalf("combined output = %q, want exit policy error", result.combinedOutput())
 	}
 }

@@ -71,12 +71,16 @@ func withHeadlessImageInputMetadataForCurrentProvider(input app.HeadlessInput, i
 }
 
 func resolveHeadlessImageMetadataProviderName() string {
+	return resolveHeadlessImageMetadataProviderNameForFlag(providerFlag)
+}
+
+func resolveHeadlessImageMetadataProviderNameForFlag(providerFlagValue string) string {
 	cfg, err := config.LoadConfigReadOnly()
 	if err != nil || cfg == nil {
 		cfg = config.DefaultConfig()
 	}
 	cfg.ApplyEnvironmentOverrides()
-	return resolveProviderName(providerFlag, cfg.DefaultProvider)
+	return resolveProviderName(providerFlagValue, cfg.DefaultProvider)
 }
 
 func newHeadlessUnsupportedImageInputResult(providerName string, model string, input app.HeadlessInput) *app.HeadlessResult {

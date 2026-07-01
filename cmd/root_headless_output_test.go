@@ -221,8 +221,14 @@ func TestRootCommand_HeadlessErrorReturnsErrorAfterPrintingJSON(t *testing.T) {
 	if !rootCmd.SilenceUsage {
 		t.Fatal("rootCmd.SilenceUsage = false, want true after printing headless error JSON")
 	}
+	if !rootCmd.SilenceErrors {
+		t.Fatal("rootCmd.SilenceErrors = false, want true after printing headless error JSON")
+	}
 	if strings.Contains(stderr.String(), "Usage:") {
 		t.Fatalf("stderr contains Cobra usage after headless error JSON:\n%s", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "Error:") {
+		t.Fatalf("stderr contains Cobra error after headless error JSON:\n%s", stderr.String())
 	}
 
 	output := strings.TrimSpace(stdout.String())

@@ -21,10 +21,12 @@ func executeRootCommandForHeadlessJSONTest(t *testing.T, args []string, stdin st
 	rootCmd.SetErr(&stderr)
 	rootCmd.SetIn(strings.NewReader(stdin))
 	rootCmd.SetArgs(args)
+	rootExecutionArgs = append(rootExecutionArgs[:0], args...)
 	t.Cleanup(func() {
 		rootCmd.SetOut(nil)
 		rootCmd.SetErr(nil)
 		rootCmd.SetIn(nil)
+		rootExecutionArgs = nil
 	})
 
 	execErr := rootCmd.Execute()
