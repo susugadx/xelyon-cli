@@ -412,3 +412,66 @@ func TestRootCommand_InvalidExitCodePolicyReturnsCommandError(t *testing.T) {
 		t.Fatalf("invalid exit-code-policy error carries exit code %d, want normal command error", exitErr.ExitCode())
 	}
 }
+
+func TestRootCommand_HeadlessInvalidExitCodePolicyReturnsJSONUsageError(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "headless",
+			args: []string{"--headless", "--exit-code-policy", "strict", "--provider", "ollama", "--no-update-check", "hello"},
+		},
+		{
+			name: "output format json",
+			args: []string{"--output-format", "json", "--exit-code-policy", "strict", "--provider", "ollama", "--no-update-check", "hello"},
+		},
+		{
+			name: "output format uppercase json",
+			args: []string{"--output-format", "JSON", "--exit-code-policy", "strict", "--provider", "ollama", "--no-update-check", "hello"},
+		},
+		{
+			name: "output format whitespace json",
+			args: []string{"--output-format", " json ", "--exit-code-policy", "strict", "--provider", "ollama", "--no-update-check", "hello"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withRootCommandTest(t)
+			t.Setenv("HOME", t.TempDir())
+
+			parsed, output, stderr, err := executeRootCommandForHeadlessJSONTest(t, tt.args, "")
+
+			if err == nil {
+				t.Fatal("expected headless validation error")
+			}
+			requireCommandExitCode(t, err, 1)
+			if output == "" {
+				t.Fatal("stdout is empty, want headless JSON")
+			}
+			if strings.Contains(stderr, "Usage:") {
+				t.Fatalf("stderr contains Cobra usage after headless JSON error:\n%s", stderr)
+			}
+			if parsed.Status != agent.HeadlessStatusError {
+				t.Fatalf("status = %q, want %q", parsed.Status, agent.HeadlessStatusError)
+			}
+			if parsed.Error == nil || parsed.Error.Type != agent.HeadlessErrorTypeConfig {
+				t.Fatalf("error = %+v, want %s", parsed.Error, agent.HeadlessErrorTypeConfig)
+			}
+			if !strings.Contains(parsed.Error.Message, "invalid --exit-code-policy") {
+				t.Fatalf("error message = %q, want invalid --exit-code-policy", parsed.Error.Message)
+			}
+			if parsed.FailureReason != agent.HeadlessFailureReasonUsageError {
+				t.Fatalf("failure_reason = %q, want %q", parsed.FailureReason, agent.HeadlessFailureReasonUsageError)
+			}
+			if parsed.ExitPolicy != agent.HeadlessExitPolicyLegacy {
+				t.Fatalf("exit_policy = %q, want %q", parsed.ExitPolicy, agent.HeadlessExitPolicyLegacy)
+			}
+			if parsed.RecommendedExitCode != 1 {
+				t.Fatalf("recommended_exit_code = %d, want 1", parsed.RecommendedExitCode)
+			}
+			requireHeadlessInput(t, parsed.Input, agent.HeadlessInputSourceArgs, "", len([]byte("hello")))
+		})
+	}
+}

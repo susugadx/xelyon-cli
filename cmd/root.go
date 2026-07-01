@@ -80,6 +80,9 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			resolvedExitPolicy, err := app.ParseHeadlessExitPolicy(exitCodePolicy)
 			if err != nil {
+				if shouldWriteHeadlessJSONForExitPolicyError(outputFormat, headless) {
+					return writeHeadlessUsageErrorResult(cmd, args, err, app.HeadlessExitPolicyLegacy)
+				}
 				return err
 			}
 
@@ -193,6 +196,14 @@ func commandErrorForExitPolicy(err error, policy app.HeadlessExitPolicy, code in
 		message: err.Error(),
 		code:    code,
 	}
+}
+
+func shouldWriteHeadlessJSONForExitPolicyError(flagOutputFormat string, headless bool) bool {
+	if headless {
+		return true
+	}
+	resolvedOutputFormat, err := resolveOutputFormat(flagOutputFormat, false)
+	return err == nil && resolvedOutputFormat == outputFormatJSON
 }
 
 func resolveProviderForExecutionMode(cmd *cobra.Command, providerName string, mode executionMode, model string) (api.Provider, error) {
