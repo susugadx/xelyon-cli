@@ -30,20 +30,21 @@ func (p *imageCapableChatProvider) SupportsImages() bool { return true }
 
 func (p *imageCapableChatProvider) IsFunctionCallingEnabled() bool { return true }
 
-func (p *imageCapableChatProvider) ChatWithTools(context.Context, string, []api.Message, string) (string, error) {
+func (p *imageCapableChatProvider) ChatWithTools(_ context.Context, systemPrompt string, history []api.Message, _ string) (string, error) {
+	if len(history) > 0 && history[len(history)-1].HasImage() {
+		last := history[len(history)-1]
+		p.imageCalls++
+		p.lastSystemPrompt = systemPrompt
+		p.lastMessage = last.Content
+		p.lastImage = last.ImageData()
+		return "image response", nil
+	}
 	p.chatCalls++
 	return "text response", nil
 }
 
 func (p *imageCapableChatProvider) ChatWithImage(_ context.Context, systemPrompt string, _ []api.Message, userMessage string, image *api.ImageData, _ string) (string, error) {
-	if image == nil {
-		return "", fmt.Errorf("image is required")
-	}
-	p.imageCalls++
-	p.lastSystemPrompt = systemPrompt
-	p.lastMessage = userMessage
-	p.lastImage = image
-	return "image response", nil
+	return "", fmt.Errorf("ChatWithImage should not be called: prompt=%q message=%q image=%v", systemPrompt, userMessage, image != nil)
 }
 
 func TestChatWrapper_UsesTextPath(t *testing.T) {

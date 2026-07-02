@@ -24,16 +24,15 @@ func (p *runtimeDirectiveLifecycleProvider) SupportsImages() bool { return true 
 
 func (p *runtimeDirectiveLifecycleProvider) IsFunctionCallingEnabled() bool { return true }
 
-func (p *runtimeDirectiveLifecycleProvider) ChatWithTools(_ context.Context, systemPrompt string, _ []api.Message, _ string) (string, error) {
+func (p *runtimeDirectiveLifecycleProvider) ChatWithTools(_ context.Context, systemPrompt string, history []api.Message, _ string) (string, error) {
+	if len(history) > 0 && history[len(history)-1].HasImage() {
+		p.imageCalls++
+	}
 	return p.nextResponse(systemPrompt)
 }
 
 func (p *runtimeDirectiveLifecycleProvider) ChatWithImage(_ context.Context, systemPrompt string, _ []api.Message, _ string, image *api.ImageData, _ string) (string, error) {
-	if image == nil {
-		return "", errors.New("image is required")
-	}
-	p.imageCalls++
-	return p.nextResponse(systemPrompt)
+	return "", errors.New("ChatWithImage should not be called")
 }
 
 func (p *runtimeDirectiveLifecycleProvider) nextResponse(systemPrompt string) (string, error) {
@@ -94,6 +93,7 @@ func TestRuntimeDirectivesStayPendingUntilImageProviderCallSucceeds(t *testing.T
 	agent.queueRuntimeDirective(strReplaceLoopRuntimeDirective)
 	runner := newTurnRunner(agent, context.Background())
 	image := &api.ImageData{Base64: "dGVzdA==", MediaType: "image/png", Path: "test.png", Size: 4}
+	agent.History = append(agent.History, api.NewUserImageMessage("retry image edit", image))
 
 	if _, err := runner.requestNormalModeResponse("retry image edit", image, 0); err == nil {
 		t.Fatal("first image request should return provider error")

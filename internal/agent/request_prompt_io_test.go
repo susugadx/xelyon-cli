@@ -109,3 +109,48 @@ func TestRequestToolPromptContext_IgnoresRequestDeadlineAndUsesExplicitCancel(t 
 		t.Fatalf("tool prompt context err = %v, want context.Canceled", err)
 	}
 }
+
+func TestFinalCheckParentContext_IgnoresRequestDeadlineAndUsesExplicitCancel(t *testing.T) {
+	requestCtx, cancelRequest := context.WithTimeout(
+		context.WithValue(context.Background(), requestPromptContextKey{}, "final-check-request"),
+		time.Nanosecond,
+	)
+	defer cancelRequest()
+	<-requestCtx.Done()
+
+	explicitCancelCtx, cancelExplicit := context.WithCancel(context.Background())
+	defer cancelExplicit()
+
+	agent := &Agent{
+		agentRequestState: agentRequestState{
+			requestPromptCancelCtx: explicitCancelCtx,
+		},
+	}
+	finalCheckCtx := agent.finalCheckParentContext(requestCtx)
+
+	if _, ok := finalCheckCtx.Deadline(); ok {
+		t.Fatal("final check context should not inherit request deadline")
+	}
+	if err := finalCheckCtx.Err(); err != nil {
+		t.Fatalf("final check context should stay active after request deadline, got %v", err)
+	}
+	if got := finalCheckCtx.Value(requestPromptContextKey{}); got != "final-check-request" {
+		t.Fatalf("final check context marker = %v, want final-check-request", got)
+	}
+	select {
+	case <-finalCheckCtx.Done():
+		t.Fatal("final check context should not be cancelled by request deadline")
+	default:
+	}
+
+	cancelExplicit()
+
+	select {
+	case <-finalCheckCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("final check context should be cancelled by explicit request cancel")
+	}
+	if err := finalCheckCtx.Err(); err != context.Canceled {
+		t.Fatalf("final check context err = %v, want context.Canceled", err)
+	}
+}

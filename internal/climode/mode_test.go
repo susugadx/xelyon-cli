@@ -50,12 +50,12 @@ func TestRequestResolve(t *testing.T) {
 		{name: "positional query is implicit once", request: Request{OutputFormat: OutputFormatText, HasQuery: true}, want: ModeOnce},
 		{name: "explicit once", request: Request{OutputFormat: OutputFormatText, HasQuery: true, Once: true}, want: ModeOnce},
 		{name: "json is headless", request: Request{OutputFormat: OutputFormatJSON, HasQuery: true}, want: ModeHeadless},
+		{name: "json image is headless", request: Request{OutputFormat: OutputFormatJSON, HasQuery: true, HasImage: true}, want: ModeHeadless},
 		{name: "resume without query", request: Request{OutputFormat: OutputFormatText, Resume: true}, want: ModeResume},
 		{name: "image implicit once", request: Request{OutputFormat: OutputFormatText, HasImage: true}, want: ModeOnceImage},
 		{name: "interactive image", request: Request{OutputFormat: OutputFormatText, HasQuery: true, HasImage: true, Interactive: true}, want: ModeInteractiveImage},
 		{name: "quiet requires once", request: Request{OutputFormat: OutputFormatText, Quiet: true}, wantErr: "--quiet can only be used with one-shot execution"},
 		{name: "once requires query or image", request: Request{OutputFormat: OutputFormatText, Once: true}, wantErr: "query argument is required"},
-		{name: "image disallowed in json", request: Request{OutputFormat: OutputFormatJSON, HasImage: true}, wantErr: "--image cannot be used"},
 	}
 
 	for _, tt := range tests {

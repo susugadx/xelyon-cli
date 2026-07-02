@@ -166,6 +166,52 @@ func TestConvertHistoryToInputItems_ToolReplayNormalizesEmptyOutput(t *testing.T
 	}
 }
 
+func TestConvertHistoryToInputItems_ImageAndToolSequence(t *testing.T) {
+	history := []Message{
+		NewUserImageMessage("describe this", &ImageData{
+			MediaType: "image/png",
+			Base64:    "aW1hZ2U=",
+		}),
+		{
+			Role: "assistant",
+			ToolCalls: []OpenAIToolCall{{
+				ID:       "call_1",
+				Type:     "function",
+				Function: OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"README.md"}`},
+			}},
+		},
+		{Role: "tool", ToolCallID: "call_1", Content: "contents"},
+	}
+
+	items := ConvertHistoryToInputItems(history)
+
+	if len(items) != 3 {
+		t.Fatalf("len(items) = %d, want image message/function_call/function_call_output", len(items))
+	}
+	if items[0].Type != "message" || items[0].Role != "user" {
+		t.Fatalf("items[0] = %#v, want user message", items[0])
+	}
+	parts, ok := items[0].Content.([]InputContentPart)
+	if !ok {
+		t.Fatalf("items[0].Content = %T, want []InputContentPart", items[0].Content)
+	}
+	if len(parts) != 2 {
+		t.Fatalf("len(image parts) = %d, want text+image", len(parts))
+	}
+	if parts[0].Type != "input_text" || parts[0].Text != "describe this" {
+		t.Fatalf("parts[0] = %#v, want input_text", parts[0])
+	}
+	if parts[1].Type != "input_image" || parts[1].ImageURL != "data:image/png;base64,aW1hZ2U=" {
+		t.Fatalf("parts[1] = %#v, want input_image data URL", parts[1])
+	}
+	if items[1].Type != "function_call" || items[1].CallID != "call_1" {
+		t.Fatalf("items[1] = %#v, want function_call", items[1])
+	}
+	if items[2].Type != "function_call_output" || items[2].CallID != "call_1" || items[2].Output != "contents" {
+		t.Fatalf("items[2] = %#v, want function_call_output", items[2])
+	}
+}
+
 func TestReplaceOpenAIResponsesFunctionCallArguments(t *testing.T) {
 	msg := Message{Role: "assistant"}
 	msg.SetOpenAIResponsesInputItems([]InputItem{

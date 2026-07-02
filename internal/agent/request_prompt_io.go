@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/uiruntime"
 )
@@ -14,46 +13,7 @@ func (a *Agent) requestPromptIO(ctx context.Context) uiruntime.PromptIO {
 }
 
 func (a *Agent) requestToolPromptContext(requestCtx context.Context) context.Context {
-	if requestCtx == nil {
-		requestCtx = context.Background()
-	}
-	if a == nil || a.requestPromptCancelCtx == nil {
-		return requestCtx
-	}
-	return requestPromptContext{
-		values: context.WithoutCancel(requestCtx),
-		cancel: a.requestPromptCancelCtx,
-	}
-}
-
-type requestPromptContext struct {
-	values context.Context
-	cancel context.Context
-}
-
-func (c requestPromptContext) Deadline() (time.Time, bool) {
-	return time.Time{}, false
-}
-
-func (c requestPromptContext) Done() <-chan struct{} {
-	if c.cancel == nil {
-		return nil
-	}
-	return c.cancel.Done()
-}
-
-func (c requestPromptContext) Err() error {
-	if c.cancel == nil {
-		return nil
-	}
-	return c.cancel.Err()
-}
-
-func (c requestPromptContext) Value(key any) any {
-	if c.values == nil {
-		return nil
-	}
-	return c.values.Value(key)
+	return a.requestCancelOnlyContext(requestCtx)
 }
 
 // beginRequestPromptCancellationScope は request 中 prompt の明示キャンセル範囲を開始する。

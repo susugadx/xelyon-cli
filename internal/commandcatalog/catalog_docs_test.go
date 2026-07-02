@@ -28,3 +28,30 @@ func TestAttachLimitDocumentationConsistency(t *testing.T) {
 		})
 	}
 }
+
+func TestHeadlessCIDocumentationIncludesPullRequestDelta(t *testing.T) {
+	body, err := os.ReadFile("../../docs/ci.md")
+	if err != nil {
+		t.Fatalf("ReadFile(docs/ci.md) error = %v", err)
+	}
+	text := string(body)
+	required := []string{
+		"fetch-depth: 0",
+		"BASE_SHA",
+		"HEAD_SHA",
+		"git merge-base",
+		"MERGE_BASE",
+		"git diff --name-status \"${MERGE_BASE}\" \"${HEAD_SHA}\"",
+		"git diff --find-renames \"${MERGE_BASE}\" \"${HEAD_SHA}\"",
+		"github.event.pull_request.head.repo.full_name == github.repository",
+		"fork PR",
+		"repository secrets",
+		"skip",
+		"delta を prompt へ渡してください",
+	}
+	for _, want := range required {
+		if !strings.Contains(text, want) {
+			t.Fatalf("docs/ci.md should include %q so read-only PR review has the pull request delta", want)
+		}
+	}
+}

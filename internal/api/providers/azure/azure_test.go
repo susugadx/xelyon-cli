@@ -576,6 +576,60 @@ func TestBuildChatResponsesRequest_ResponseIDChainDisabledSendsFullHistoryWithou
 	}
 }
 
+func TestBuildChatResponsesRequest_ImageHistoryToolContinuationKeepsResponseIDChain(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetProviderModelConfig("azure", config.ProviderModelConfig{
+		DefaultModel: "corp-gpt55-deployment",
+		CatalogModel: "gpt-5.5",
+	})
+
+	p := New("azure-key")
+	p.SetResponseID("resp_image")
+	req := p.buildChatResponsesRequest(
+		azureTestContext(cfg),
+		"system",
+		[]api.Message{
+			api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+			{
+				Role: "assistant",
+				ToolCalls: []api.OpenAIToolCall{{
+					ID:       "call_1",
+					Type:     "function",
+					Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"README.md"}`},
+				}},
+			},
+			{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+		},
+		"corp-gpt55-deployment",
+	)
+
+	if req.PreviousResponseID != "resp_image" {
+		t.Fatalf("PreviousResponseID = %q, want resp_image", req.PreviousResponseID)
+	}
+	if len(req.ContextManagement) != 1 {
+		t.Fatalf("ContextManagement = %#v, want server compaction decision with previous_response_id", req.ContextManagement)
+	}
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	if body["previous_response_id"] != "resp_image" {
+		t.Fatalf("previous_response_id = %#v, want resp_image", body["previous_response_id"])
+	}
+	input, ok := body["input"].([]any)
+	if !ok || len(input) != 1 {
+		t.Fatalf("input = %#v, want trailing tool output only", body["input"])
+	}
+	output, ok := input[0].(map[string]any)
+	if !ok || output["type"] != "function_call_output" || output["call_id"] != "call_1" || output["output"] != "README contents" {
+		t.Fatalf("input[0] = %#v, want function_call_output for call_1", input[0])
+	}
+}
+
 func TestChatWithTools_ResponseIDChainDisabledStartsNewResponseIDChain(t *testing.T) {
 	var body map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

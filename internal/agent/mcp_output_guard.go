@@ -2,8 +2,10 @@ package agent
 
 import (
 	"context"
-	"github.com/susugadx/xelyon-cli/internal/tools"
 	"strings"
+
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
+	"github.com/susugadx/xelyon-cli/internal/tools"
 )
 
 const (
@@ -29,7 +31,7 @@ func (a *Agent) guardMCPToolExecutionResult(ctx context.Context, toolCall *tools
 }
 
 func shouldCompactMCPToolResult(toolCall *tools.ToolCall, result string) bool {
-	if toolCall == nil || !strings.HasPrefix(toolCall.Tool, "mcp_") {
+	if toolCall == nil || !mcpnames.IsExportedToolName(toolCall.Tool) {
 		return false
 	}
 	if len(result) <= mcpRuntimeResultInlineMaxBytes {

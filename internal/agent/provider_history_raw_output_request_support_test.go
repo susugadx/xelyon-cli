@@ -90,6 +90,15 @@ func syncProviderHistoryRawOutputRequestSession(agent *Agent) {
 	}
 }
 
+func providerHistoryProjectionCandidateByToolCallID(report ProviderHistoryProjectionReport, toolCallID string) *ProviderHistoryReductionCandidate {
+	for i := range report.Candidates {
+		if report.Candidates[i].ToolCallID == toolCallID {
+			return &report.Candidates[i]
+		}
+	}
+	return nil
+}
+
 func providerHistoryLargeSafeWebSearchResult() string {
 	return strings.Repeat(`1. OpenAI Responses API guide
 URL: https://example.test/docs/responses?utm_campaign=private#private-fragment

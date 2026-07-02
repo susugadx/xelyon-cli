@@ -17,6 +17,7 @@ import (
 type AnthropicContentBlock struct {
 	Type         string            `json:"type"`                    // "text", "tool_use", "tool_result"
 	Text         string            `json:"text,omitempty"`          // type="text" 用
+	Source       *ImageSource      `json:"source,omitempty"`        // type="image" 用
 	Thinking     string            `json:"thinking,omitempty"`      // type="thinking" 用
 	Signature    string            `json:"signature,omitempty"`     // type="thinking" 用
 	Data         string            `json:"data,omitempty"`          // type="redacted_thinking" 用
@@ -154,18 +155,11 @@ func ConvertToAnthropicMessagesWithThinking(history []api.Message, includeThinki
 					Content: blocks,
 				}
 			} else {
-				textContent := msg.Content
-				if textContent == "" {
-					textContent = "(empty)"
-				}
 				var blocks []AnthropicContentBlock
 				if msg.Role == "assistant" {
 					blocks = appendAnthropicThinkingBlocks(blocks, msg.AnthropicThinkingBlocks(), includeThinking)
 				}
-				blocks = append(blocks, AnthropicContentBlock{
-					Type: "text",
-					Text: textContent,
-				})
+				blocks = append(blocks, anthropicTextAndImageBlocksFromMessage(msg)...)
 				converted = AnthropicMessage{
 					Role:    msg.Role,
 					Content: blocks,
@@ -182,6 +176,36 @@ func ConvertToAnthropicMessagesWithThinking(history []api.Message, includeThinki
 	}
 
 	return result
+}
+
+func anthropicTextAndImageBlocksFromMessage(msg api.Message) []AnthropicContentBlock {
+	image := msg.ImageData()
+	if image == nil {
+		textContent := msg.Content
+		if textContent == "" {
+			textContent = "(empty)"
+		}
+		return []AnthropicContentBlock{{
+			Type: "text",
+			Text: textContent,
+		}}
+	}
+
+	blocks := []AnthropicContentBlock{{
+		Type: "image",
+		Source: &ImageSource{
+			Type:      "base64",
+			MediaType: image.MediaType,
+			Data:      image.Base64,
+		},
+	}}
+	if strings.TrimSpace(msg.Content) != "" {
+		blocks = append(blocks, AnthropicContentBlock{
+			Type: "text",
+			Text: msg.Content,
+		})
+	}
+	return blocks
 }
 
 func anthropicReplayBlocksFromMessage(msg api.Message, includeThinking bool) ([]AnthropicContentBlock, bool) {

@@ -35,9 +35,24 @@ func buildGeminiMultimodalRequest(
 	functionCallingEnabled bool,
 	cfg *config.Config,
 ) GeminiMultimodalRequest {
+	if image != nil {
+		history = append(api.CloneMessages(history), api.NewUserImageMessage(userMessage, image))
+	}
+	return buildGeminiMultimodalHistoryRequest(ctx, systemPrompt, history, model, mcpTools, functionCallingEnabled, cfg)
+}
+
+func buildGeminiMultimodalHistoryRequest(
+	ctx context.Context,
+	systemPrompt string,
+	history []api.Message,
+	model string,
+	mcpTools []api.ToolDefinition,
+	functionCallingEnabled bool,
+	cfg *config.Config,
+) GeminiMultimodalRequest {
 	reqBody := GeminiMultimodalRequest{
 		SystemInstruction: newGeminiSystemInstruction(systemPrompt),
-		Contents:          geminiMultimodalContentsFromMessages(ctx, history, userMessage, image),
+		Contents:          geminiMultimodalContentsFromHistory(ctx, history),
 		ServiceTier:       config.GeminiRequestServiceTier(cfg),
 	}
 
@@ -126,28 +141,12 @@ func geminiTextContentsFromMessages(messages []api.Message) []GeminiContent {
 	return contents
 }
 
-func geminiMultimodalContentsFromMessages(ctx context.Context, history []api.Message, userMessage string, image *api.ImageData) []interface{} {
-	contents := make([]interface{}, 0, len(history)+2)
-	for _, msg := range history {
-		contents = append(contents, geminiContentFromMessage(msg))
+func geminiMultimodalContentsFromHistory(ctx context.Context, history []api.Message) []interface{} {
+	messages := geminiMessagesWithActiveContext(ctx, history)
+	contents := make([]interface{}, 0, len(messages))
+	for _, msg := range messages {
+		contents = append(contents, geminiContentInterfaceFromMessage(msg))
 	}
-	if message, ok := geminiActiveContextMessage(ctx); ok {
-		contents = append(contents, geminiContentFromMessage(message))
-	}
-	contents = append(contents, GeminiMultimodalContent{
-		Role: "user",
-		Parts: []GeminiMultimodalPart{
-			{
-				InlineData: &GeminiInlineData{
-					MimeType: image.MediaType,
-					Data:     image.Base64,
-				},
-			},
-			{
-				Text: userMessage,
-			},
-		},
-	})
 	return contents
 }
 
@@ -161,19 +160,45 @@ func geminiContentFromMessage(msg api.Message) GeminiContent {
 func geminiFunctionCallingContentsFromMessages(messages []api.Message) []interface{} {
 	var contents []interface{}
 	for _, msg := range messages {
-		switch {
-		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
-			contents = append(contents, GeminiGenericContent{
-				Parts: geminiFunctionCallPartsFromMessage(msg),
-				Role:  "model",
-			})
-		case msg.Role == "tool" && msg.ToolCallID != "":
-			contents = append(contents, geminiFunctionResponseContentFromMessage(msg))
-		default:
-			contents = append(contents, geminiContentFromMessage(msg))
-		}
+		contents = append(contents, geminiContentInterfaceFromMessage(msg))
 	}
 	return contents
+}
+
+func geminiContentInterfaceFromMessage(msg api.Message) interface{} {
+	switch {
+	case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
+		return GeminiGenericContent{
+			Parts: geminiFunctionCallPartsFromMessage(msg),
+			Role:  "model",
+		}
+	case msg.Role == "tool" && msg.ToolCallID != "":
+		return geminiFunctionResponseContentFromMessage(msg)
+	case msg.HasImage():
+		return geminiImageContentFromMessage(msg)
+	default:
+		return geminiContentFromMessage(msg)
+	}
+}
+
+func geminiImageContentFromMessage(msg api.Message) GeminiMultimodalContent {
+	image := msg.ImageData()
+	parts := make([]GeminiMultimodalPart, 0, 2)
+	if image != nil {
+		parts = append(parts, GeminiMultimodalPart{
+			InlineData: &GeminiInlineData{
+				MimeType: image.MediaType,
+				Data:     image.Base64,
+			},
+		})
+	}
+	if strings.TrimSpace(msg.Content) != "" {
+		parts = append(parts, GeminiMultimodalPart{Text: msg.Content})
+	}
+	return GeminiMultimodalContent{
+		Role:  geminiContentRole(msg.Role),
+		Parts: parts,
+	}
 }
 
 func geminiFunctionCallPartsFromMessage(msg api.Message) []interface{} {

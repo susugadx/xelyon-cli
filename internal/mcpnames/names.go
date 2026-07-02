@@ -16,3 +16,8 @@ func SanitizePart(name string) string {
 func ExportedToolName(serverName, toolName string) string {
 	return "mcp_" + SanitizePart(serverName) + "_" + SanitizePart(toolName)
 }
+
+// IsExportedToolName は provider/prompt/registry で使う MCP tool 名かを返す。
+func IsExportedToolName(name string) bool {
+	return strings.HasPrefix(name, "mcp_")
+}

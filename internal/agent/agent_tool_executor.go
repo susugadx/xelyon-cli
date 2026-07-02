@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/susugadx/xelyon-cli/internal/tools"
+	toolsubagent "github.com/susugadx/xelyon-cli/internal/tools/subagent"
 	"github.com/susugadx/xelyon-cli/internal/uitoolview"
 )
 
@@ -124,7 +125,7 @@ func (a *Agent) executeImmediateToolResult(ctx context.Context, toolCall *tools.
 	if a == nil || toolCall == nil {
 		return tools.ExecutionResult{}, false
 	}
-	if toolCall.Tool != "wait_agent" {
+	if toolCall.Tool != toolsubagent.WaitAgentToolName {
 		return tools.ExecutionResult{}, false
 	}
 	output, change := a.executeWaitAgentWithLiveView(ctx, toolCall)

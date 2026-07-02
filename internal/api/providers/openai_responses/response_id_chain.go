@@ -52,6 +52,33 @@ func PreviousResponseIDForRequestContext(ctx context.Context, previousResponseID
 	return previousResponseID
 }
 
+// PreviousResponseIDForChatRequest は chat history の最新入力を previous_response_id で省略できる場合だけ ID を返す。
+func PreviousResponseIDForChatRequest(ctx context.Context, previousResponseID string, activeContext []api.ActiveContextBlock, history []api.Message) string {
+	previousResponseID = PreviousResponseIDForRequestContext(ctx, previousResponseID, activeContext)
+	return PreviousResponseIDForChatHistory(previousResponseID, history)
+}
+
+// PreviousResponseIDForChatHistory は chat history の latest input が full payload を必要とする場合だけ ID を落とす。
+func PreviousResponseIDForChatHistory(previousResponseID string, history []api.Message) string {
+	if !ResponseIDChainAllowedForHistory(history) {
+		return ""
+	}
+	return previousResponseID
+}
+
+// ResponseIDChainAllowedForHistory は latest message が full payload を必要としない場合だけ chain 利用を許可する。
+func ResponseIDChainAllowedForHistory(history []api.Message) bool {
+	if len(history) == 0 {
+		return true
+	}
+	return !history[len(history)-1].HasImage()
+}
+
+// HasReusablePreviousForHistory は provider が保持する previous_response_id を今回の history で使ってよいか返す。
+func (p ResponseIDChainPolicy) HasReusablePreviousForHistory(hasCachedResponseID bool, history []api.Message) bool {
+	return p.HasReusablePrevious(hasCachedResponseID) && ResponseIDChainAllowedForHistory(history)
+}
+
 // PreviousResponseIDForActiveContext は active context を送る request では response-id chain を使わない。
 func PreviousResponseIDForActiveContext(previousResponseID string, activeContext []api.ActiveContextBlock) string {
 	if !ResponseIDChainAllowed(activeContext) {

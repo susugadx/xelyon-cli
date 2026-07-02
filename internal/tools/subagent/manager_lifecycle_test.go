@@ -270,6 +270,71 @@ func TestManagerWaitTimeout(t *testing.T) {
 	}
 }
 
+func TestManagerWaitTimeoutThenCompletedToolFailureAggregatesError(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SubAgent.MaxConcurrent = 2
+	provider := &managerTestProvider{name: "openai"}
+	releaseSlow := make(chan struct{})
+	failedDone := make(chan struct{})
+
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, message, _ string, _ api.Provider, _ *config.Config) *RunResult {
+			switch message {
+			case "slow":
+				<-releaseSlow
+				return &RunResult{Status: "completed", Response: "late"}
+			case "failed tool":
+				close(failedDone)
+				return &RunResult{
+					Status:   "completed",
+					Response: "done",
+					ToolBreakdown: []ToolBreakdownEntry{{
+						Tool:     "str_replace",
+						Failures: 1,
+					}},
+				}
+			default:
+				return &RunResult{Status: "completed", Response: "ok"}
+			}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			return &managerTestProvider{name: providerName}, nil
+		},
+	})
+
+	slowID, err := manager.Spawn(context.Background(), "slow", "", "", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn(slow) error = %v", err)
+	}
+	failedID, err := manager.Spawn(context.Background(), "failed tool", "", "", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn(failed tool) error = %v", err)
+	}
+	select {
+	case <-failedDone:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("failed tool sub-agent did not complete in time")
+	}
+
+	response := manager.Wait([]string{slowID, failedID}, 10)
+
+	if response.Status != "error" {
+		t.Fatalf("Wait().Status = %q, want error", response.Status)
+	}
+	if response.Results[0].Status != "timeout" {
+		t.Fatalf("Wait().Results[0].Status = %q, want timeout", response.Results[0].Status)
+	}
+	if response.Results[1].Status != "completed" {
+		t.Fatalf("Wait().Results[1].Status = %q, want completed", response.Results[1].Status)
+	}
+	if len(response.Results[1].ToolBreakdown) != 1 || response.Results[1].ToolBreakdown[0].Failures != 1 {
+		t.Fatalf("Wait().Results[1].ToolBreakdown = %#v, want one failure", response.Results[1].ToolBreakdown)
+	}
+
+	close(releaseSlow)
+	_ = manager.Wait([]string{slowID}, 0)
+}
+
 // TestManagerWaitNotFound は存在しない ID の待機を確認します。
 func TestManagerWaitNotFound(t *testing.T) {
 	manager := NewManager()

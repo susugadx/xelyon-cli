@@ -33,6 +33,10 @@ type persistedCache struct {
 // Save はファイル・ディレクトリキャッシュをディスクに永続化する。
 // searches, negatives はセッション跨ぎで無効になりやすいため永続化しない。
 func (c *ToolCache) Save() error {
+	if c == nil || c.skipPersistence {
+		return nil
+	}
+
 	c.mu.RLock()
 	pc := persistedCache{
 		Files: make(map[string]persistedCacheEntry, len(c.files)),
@@ -73,6 +77,10 @@ func (c *ToolCache) Save() error {
 
 // Load はディスクからキャッシュを復元し、mtime 検証して変更済みエントリを破棄する。
 func (c *ToolCache) Load() error {
+	if c == nil || c.skipPersistence {
+		return nil
+	}
+
 	data, err := os.ReadFile(toolCacheFile)
 	if err != nil {
 		if os.IsNotExist(err) {

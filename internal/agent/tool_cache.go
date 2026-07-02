@@ -8,11 +8,12 @@ import (
 // ToolCache はツール結果のキャッシュ
 // read_file, list_dir の結果をキャッシュしてトークン消費を削減
 type ToolCache struct {
-	files     map[string]cacheEntry
-	dirs      map[string]cacheEntry
-	searches  map[string]cacheEntry
-	negatives map[string]negativeCacheEntry
-	mu        sync.RWMutex
+	files           map[string]cacheEntry
+	dirs            map[string]cacheEntry
+	searches        map[string]cacheEntry
+	negatives       map[string]negativeCacheEntry
+	skipPersistence bool
+	mu              sync.RWMutex
 }
 
 // cacheEntry はキャッシュエントリ
@@ -50,4 +51,11 @@ func NewToolCache() *ToolCache {
 		searches:  make(map[string]cacheEntry),
 		negatives: make(map[string]negativeCacheEntry),
 	}
+}
+
+// NewEphemeralToolCache はディスク永続化しない ToolCache を作成する。
+func NewEphemeralToolCache() *ToolCache {
+	cache := NewToolCache()
+	cache.skipPersistence = true
+	return cache
 }

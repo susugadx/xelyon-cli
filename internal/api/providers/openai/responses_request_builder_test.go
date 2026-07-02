@@ -225,6 +225,42 @@ func TestBuildChatResponsesRequest_ResponseIDChainDisabledSendsFullHistoryWithou
 	}
 }
 
+func TestBuildChatResponsesRequest_ImageHistoryToolContinuationKeepsResponseIDChain(t *testing.T) {
+	ctx := config.WithContext(context.Background(), config.DefaultConfig())
+
+	p := New("test-key")
+	p.SetResponseID("resp_image")
+	req := p.buildChatResponsesRequest(ctx, "system", []api.Message{
+		api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+		{
+			Role: "assistant",
+			ToolCalls: []api.OpenAIToolCall{{
+				ID:       "call_1",
+				Type:     "function",
+				Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"README.md"}`},
+			}},
+		},
+		{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+	}, "gpt-5.5")
+
+	if req.PreviousResponseID != "resp_image" {
+		t.Fatalf("PreviousResponseID = %q, want resp_image", req.PreviousResponseID)
+	}
+	if len(req.ContextManagement) != 1 {
+		t.Fatalf("ContextManagement = %#v, want server compaction decision with previous_response_id", req.ContextManagement)
+	}
+	inputItems, ok := req.Input.([]openairesponses.InputItem)
+	if !ok {
+		t.Fatalf("Input type = %T, want []openairesponses.InputItem", req.Input)
+	}
+	if len(inputItems) != 1 {
+		t.Fatalf("Input length = %d, want trailing tool output only", len(inputItems))
+	}
+	if inputItems[0].Type != "function_call_output" || inputItems[0].CallID != "call_1" || inputItems[0].Output != "README contents" {
+		t.Fatalf("Input[0] = %#v, want function_call_output for call_1", inputItems[0])
+	}
+}
+
 func TestBuildChatResponsesRequest_IncludesServerCompactionContextManagementOnPreviousResponseChain(t *testing.T) {
 	ctx := config.WithContext(context.Background(), config.DefaultConfig())
 	p := New("test-key")

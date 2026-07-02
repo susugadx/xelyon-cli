@@ -90,6 +90,56 @@ func TestChatWithImage_BuildsMultimodalRequest(t *testing.T) {
 	}
 }
 
+func TestBuildChatCompletionsRequest_SerializesImageHistoryAtOriginalPosition(t *testing.T) {
+	t.Setenv("KIMI_FUNCTION_CALLING", "0")
+	p := New("test-key")
+	ctx, _, _ := newKimiTestContext(t, false)
+	built := p.buildChatCompletionsRequest(ctx, "System", []api.Message{
+		api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: kimiTestPNGBase64}),
+		{Role: "assistant", ToolCalls: []api.OpenAIToolCall{{
+			ID:       "call_1",
+			Type:     "function",
+			Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"README.md"}`},
+		}}},
+		{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+	}, "kimi-k2.6")
+
+	payload, err := json.Marshal(built.Request)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	messages, ok := body["messages"].([]any)
+	if !ok || len(messages) != 4 {
+		t.Fatalf("messages = %#v, want system + image + assistant tool call + tool result", body["messages"])
+	}
+	imageMessage, ok := messages[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image message = %#v, want object", messages[1])
+	}
+	content, ok := imageMessage["content"].([]any)
+	if !ok || len(content) != 2 {
+		t.Fatalf("image content = %#v, want text + image_url", imageMessage["content"])
+	}
+	imagePart, ok := content[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image part = %#v, want object", content[1])
+	}
+	imageURL, ok := imagePart["image_url"].(map[string]any)
+	if !ok || imageURL["url"] != "data:image/png;base64,"+kimiTestPNGBase64 {
+		t.Fatalf("image_url = %#v, want data URL", imagePart["image_url"])
+	}
+	if messages[2].(map[string]any)["tool_calls"] == nil {
+		t.Fatalf("assistant message = %#v, want tool_calls preserved", messages[2])
+	}
+	if messages[3].(map[string]any)["tool_call_id"] != "call_1" {
+		t.Fatalf("tool result message = %#v, want call_1", messages[3])
+	}
+}
+
 func TestChatWithImage_IncludesToolsWhenFunctionCallingEnabled(t *testing.T) {
 	t.Setenv("KIMI_FUNCTION_CALLING", "")
 	var captured map[string]any

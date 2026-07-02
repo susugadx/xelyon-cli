@@ -110,21 +110,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 // handleStreamingResponse はストリーミングレスポンスを処理
 
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	p.lastContentBlocks = nil
-
-	// 画像がない場合は通常のChatWithToolsを使用
-	if image == nil || image.Base64 == "" {
-		history = append(history, api.Message{Role: "user", Content: userMessage})
-		return p.ChatWithTools(ctx, systemPrompt, history, model)
-	}
-
-	built := p.buildMultimodalRequest(ctx, systemPrompt, history, userMessage, image, model)
-	result, err := p.executeRequest(ctx, built.Request, built.Model, built.Request.ContextManagement, true)
-	if err != nil {
-		return "", err
-	}
-
-	return p.processResponse(ctx, result)
+	history = append(history, api.NewUserMessageWithOptionalImage(userMessage, image))
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
 // SetMCPTools は MCP ツール定義を設定する（Tool Use用）

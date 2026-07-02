@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
 	"github.com/susugadx/xelyon-cli/internal/toolruntime"
@@ -37,6 +38,38 @@ func TestHandleNormalModeNoToolResponse_FinalChecksNoProgressBreaks(t *testing.T
 	}
 	if !strings.Contains(out.String(), "without any task progress") {
 		t.Fatalf("expected no-progress final checks warning, got %q", out.String())
+	}
+}
+
+func TestHandleNormalModeNoToolResponse_FinalChecksIgnoreRequestDeadline(t *testing.T) {
+	disableColors(t)
+
+	markerFile := filepath.Join(t.TempDir(), "final-check-ran")
+	var out bytes.Buffer
+	cfg := config.DefaultConfig()
+	cfg.FinalChecks.Commands = []string{fmt.Sprintf("touch %q; exit 1", markerFile)}
+	cfg.FinalChecks.Timeout = 10
+
+	agent := newTurnRunnerTestAgent(&sequenceMockProvider{name: "test"}, cfg, "", &out)
+	requestCtx, cancelRequest := context.WithTimeout(context.Background(), time.Nanosecond)
+	defer cancelRequest()
+	<-requestCtx.Done()
+
+	explicitCancelCtx, cancelExplicit := context.WithCancel(context.Background())
+	defer cancelExplicit()
+	agent.requestPromptCancelCtx = explicitCancelCtx
+
+	runner := newTurnRunner(agent, requestCtx)
+	state := newMutatedNormalModeState("/src/main.go")
+
+	if action := runner.handleNormalModeNoToolResponse("Done.", cfg, state); action != normalModeContinue {
+		t.Fatalf("action = %v, want normalModeContinue", action)
+	}
+	if _, err := os.Stat(markerFile); err != nil {
+		t.Fatalf("final check command did not run after request deadline: %v", err)
+	}
+	if !strings.Contains(out.String(), "Final check command failed. Asking AI to fix...") {
+		t.Fatalf("expected final check failure retry path, got %q", out.String())
 	}
 }
 

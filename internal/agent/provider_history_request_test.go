@@ -67,7 +67,7 @@ func TestNormalModeRequestUsesProviderFacingHistoryClone(t *testing.T) {
 	}
 }
 
-func TestImageRequestUsesProjectedPastHistoryAndCurrentPrompt(t *testing.T) {
+func TestImageRequestUsesProjectedHistoryWithCurrentImageMessage(t *testing.T) {
 	disableColors(t)
 
 	var out bytes.Buffer
@@ -84,11 +84,11 @@ func TestImageRequestUsesProjectedPastHistoryAndCurrentPrompt(t *testing.T) {
 		t.Fatalf("chatInternal() error = %v", err)
 	}
 
-	if provider.imageCalls != 1 {
-		t.Fatalf("ChatWithImage calls = %d, want 1", provider.imageCalls)
+	if provider.imageCalls != 0 {
+		t.Fatalf("ChatWithImage calls = %d, want 0", provider.imageCalls)
 	}
-	if len(provider.capturedHistory) != 3 {
-		t.Fatalf("image provider history length = %d, want past history only", len(provider.capturedHistory))
+	if len(provider.capturedHistory) != 4 {
+		t.Fatalf("image provider history length = %d, want past history + current image message", len(provider.capturedHistory))
 	}
 	if provider.capturedHistory[1].Content != "old image-history read_file result" {
 		t.Fatalf("image provider old tool result = %q, want unchanged reduction candidate content", provider.capturedHistory[1].Content)
@@ -96,17 +96,20 @@ func TestImageRequestUsesProjectedPastHistoryAndCurrentPrompt(t *testing.T) {
 	if provider.capturedHistory[2].Content != "previous image context" {
 		t.Fatalf("image provider history[2] = %q, want previous image context", provider.capturedHistory[2].Content)
 	}
-	if provider.imageUserMessage != "describe image" {
-		t.Fatalf("image userMessage = %q, want raw current prompt", provider.imageUserMessage)
+	if provider.capturedHistory[3].Content != "describe image" || !provider.capturedHistory[3].HasImage() {
+		t.Fatalf("image provider current history = %#v, want image-bearing current prompt", provider.capturedHistory[3])
 	}
-	if strings.Contains(provider.imageUserMessage, "[NORMAL MODE]") {
-		t.Fatalf("image userMessage should not contain normal-mode suffix: %q", provider.imageUserMessage)
+	if strings.Contains(provider.capturedHistory[3].Content, "[NORMAL MODE]") {
+		t.Fatalf("image current prompt should not contain normal-mode suffix: %q", provider.capturedHistory[3].Content)
 	}
 	if agent.History[1].Content != "old image-history read_file result" {
 		t.Fatalf("Agent.History[1].Content = %q, want old image-history read_file result", agent.History[1].Content)
 	}
 	if agent.History[2].Content != "previous image context" {
 		t.Fatalf("Agent.History[2].Content = %q, want previous image context", agent.History[2].Content)
+	}
+	if agent.History[3].Content != "describe image" || !agent.History[3].HasImage() {
+		t.Fatalf("Agent.History[3] = %#v, want image-bearing current prompt", agent.History[3])
 	}
 }
 

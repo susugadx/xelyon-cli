@@ -78,6 +78,7 @@ func buildChatResponsesRequestWithProfile(ctx context.Context, profile responses
 	modelIdentity := profile.modelIdentity(ctx, inputs.Model)
 	activeContext := openairesponses.ActiveContextFromContext(ctx)
 	previousResponseID := profile.previousResponseID(ctx, inputs.ResponseID, activeContext)
+	previousResponseID = openairesponses.PreviousResponseIDForChatHistory(previousResponseID, inputs.History)
 	serverCompactionDecision := profile.serverCompactionDecision(ctx, modelIdentity, previousResponseID)
 	return openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
 		Base:               newBaseResponsesRequestOptions(ctx, profile, inputs.SystemPrompt, modelIdentity, serverCompactionDecision, inputs.MCPTools, inputs.ToolChoice, inputs.FunctionCalling),

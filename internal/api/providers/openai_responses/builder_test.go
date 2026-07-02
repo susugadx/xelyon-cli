@@ -165,6 +165,70 @@ func TestBuildChatRequest_ResponseIDChainDisabledForcesFullHistoryWithoutPreviou
 	assertInputMessage(t, input[3], "user", "next turn")
 }
 
+func TestBuildChatRequest_ImageHistoryToolContinuationKeepsPreviousResponseID(t *testing.T) {
+	req := BuildChatRequest(ChatRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: true,
+		},
+		SystemPrompt:       "system",
+		PreviousResponseID: "resp_123",
+		History: []api.Message{
+			api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+			{
+				Role: "assistant",
+				ToolCalls: []api.OpenAIToolCall{{
+					ID:       "call_1",
+					Type:     "function",
+					Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"README.md"}`},
+				}},
+			},
+			{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+		},
+	})
+
+	if req.PreviousResponseID != "resp_123" {
+		t.Fatalf("PreviousResponseID = %q, want resp_123", req.PreviousResponseID)
+	}
+	input := requestInputItems(t, req)
+	if len(input) != 1 {
+		t.Fatalf("len(Input) = %d, want trailing function_call_output only", len(input))
+	}
+	assertInputFunctionCallOutput(t, input[0], "call_1", "README contents")
+}
+
+func TestBuildChatRequest_LatestImageForcesFullInputWithoutPreviousResponseID(t *testing.T) {
+	req := BuildChatRequest(ChatRequestOptions{
+		Base: BaseRequestOptions{
+			Model: NewModelIdentity("gpt-5.4", ""),
+			Store: true,
+		},
+		SystemPrompt:       "system",
+		PreviousResponseID: "resp_123",
+		History: []api.Message{
+			{Role: "user", Content: "before"},
+			api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+		},
+	})
+
+	if req.PreviousResponseID != "" {
+		t.Fatalf("PreviousResponseID = %q, want empty for latest image input", req.PreviousResponseID)
+	}
+	input := requestInputItems(t, req)
+	if len(input) != 3 {
+		t.Fatalf("len(Input) = %d, want developer + prior text + latest image", len(input))
+	}
+	assertInputMessage(t, input[0], "developer", "system")
+	assertInputMessage(t, input[1], "user", "before")
+	parts, ok := input[2].Content.([]InputContentPart)
+	if !ok {
+		t.Fatalf("input[2].Content = %T, want []InputContentPart", input[2].Content)
+	}
+	if len(parts) != 2 || parts[0].Type != "input_text" || parts[1].ImageURL != "data:image/png;base64,aW1hZ2U=" {
+		t.Fatalf("image input parts = %#v, want text+image", parts)
+	}
+}
+
 func TestBuildChatRequest_ActiveContextToolContinuationForcesFullInput(t *testing.T) {
 	req := BuildChatRequest(ChatRequestOptions{
 		Base: BaseRequestOptions{

@@ -84,7 +84,7 @@ func RunOnceWithImageWithConfig(query string, model string, provider api.Provide
 
 	// デフォルトメッセージ
 	if query == "" {
-		query = "Please analyze this image."
+		query = DefaultImagePrompt
 	}
 
 	if !quiet {

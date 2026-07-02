@@ -44,6 +44,11 @@ func TestCloneMessages_DefensiveCopiesNestedState(t *testing.T) {
 			"nested": map[string]any{"keep": []any{"value"}},
 		},
 	}})
+	original[0].SetImageData(&ImageData{
+		Path:      "/test/image.png",
+		MediaType: "image/png",
+		Base64:    "dGVzdA==",
+	})
 	original[1].SetAnthropicThinkingBlocks([]AnthropicThinkingBlock{{
 		Type:      "thinking",
 		Thinking:  "provider private thought",
@@ -62,6 +67,7 @@ func TestCloneMessages_DefensiveCopiesNestedState(t *testing.T) {
 	cloned[0].ToolCalls[0].ThoughtParts[0]["nested"].(map[string]any)["items"].([]any)[0] = "mutated"
 	cloned[0].providerState.anthropicContentBlocks[0].Input["path"] = "mutated.go"
 	cloned[0].providerState.anthropicContentBlocks[0].Input["nested"].(map[string]any)["keep"].([]any)[0] = "mutated"
+	cloned[0].providerState.image.Base64 = "mutated"
 	cloned[1].providerState.anthropicThinkingBlocks[0].Thinking = "mutated thinking"
 
 	if original[0].Content != "calling a tool" {
@@ -84,6 +90,9 @@ func TestCloneMessages_DefensiveCopiesNestedState(t *testing.T) {
 	}
 	if got := original[0].providerState.anthropicContentBlocks[0].Input["nested"].(map[string]any)["keep"].([]any)[0]; got != "value" {
 		t.Fatalf("original nested AnthropicContentBlock input = %q, want value", got)
+	}
+	if got := original[0].ImageData().Base64; got != "dGVzdA==" {
+		t.Fatalf("original image Base64 = %q, want dGVzdA==", got)
 	}
 	if got := original[1].providerState.anthropicThinkingBlocks[0].Thinking; got != "provider private thought" {
 		t.Fatalf("original AnthropicThinkingBlocks Thinking = %q, want provider private thought", got)

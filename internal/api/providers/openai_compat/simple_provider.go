@@ -81,13 +81,14 @@ func (p *SimpleProvider) buildChatCompletionsRequest(ctx context.Context, system
 	providerKey := p.spec.ProviderKey
 	model = api.ResolveProviderRequestModel(ctx, model, providerKey)
 	options := ChatCompletionsRequestOptions{
-		Model:         model,
-		SystemPrompt:  systemPrompt,
-		ActiveContext: api.ActiveContextBlocksFromContext(ctx),
-		History:       history,
-		MaxTokens:     api.GetMaxOutputTokens(ctx, providerKey, model),
-		Stream:        true,
-		IncludeUsage:  true,
+		Model:            model,
+		SystemPrompt:     systemPrompt,
+		ActiveContext:    api.ActiveContextBlocksFromContext(ctx),
+		History:          history,
+		MaxTokens:        api.GetMaxOutputTokens(ctx, providerKey, model),
+		Stream:           true,
+		IncludeUsage:     true,
+		ImagePayloadMode: imagePayloadModeForSupport(p.SupportsImages()),
 	}
 
 	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
@@ -98,6 +99,13 @@ func (p *SimpleProvider) buildChatCompletionsRequest(ctx context.Context, system
 	}
 
 	return BuildChatCompletionsRequest(options)
+}
+
+func imagePayloadModeForSupport(supportsImages bool) ImagePayloadMode {
+	if supportsImages {
+		return ImagePayloadMultimodal
+	}
+	return ImagePayloadTextOnly
 }
 
 // BuildChatCompletionsRequest は preview / diagnostics 用に送信前 payload を構築する。
@@ -157,7 +165,7 @@ func (p *SimpleProvider) ChatWithImage(ctx context.Context, systemPrompt string,
 	if image != nil && image.Base64 != "" && !p.SupportsImages() && p.spec.ImageUnsupportedWarning != "" {
 		color.New(color.FgYellow).Fprintln(api.OutputWriterFromContext(ctx), p.spec.ImageUnsupportedWarning)
 	}
-	history = append(history, api.Message{Role: "user", Content: userMessage})
+	history = append(history, api.NewUserMessageWithOptionalImage(userMessage, image))
 	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 

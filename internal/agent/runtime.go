@@ -19,6 +19,8 @@ type RuntimeOptions struct {
 	EnableCurrentTaskStateContext         bool
 	EnableProviderHistoryRehydrateContext bool
 	EnableProviderHistoryReduction        bool
+	ReadOnly                              bool
+	SkipDevArtifactCleanup                bool
 	ProviderHistoryReductionMode          ProviderHistoryReductionMode
 	ProviderHistoryReductionModeSet       bool
 	ProviderHistoryRawOutputArtifacts     config.ProviderHistoryRawOutputArtifactsConfig
@@ -152,9 +154,20 @@ func (r *AgentRuntime) effectiveAutoApprove() bool {
 }
 
 func newSubAgentManager() *subagent.Manager {
+	return newSubAgentManagerWithHeadlessOptions(HeadlessRunOptions{})
+}
+
+func newSubAgentManagerWithHeadlessOptions(options HeadlessRunOptions) *subagent.Manager {
+	return newSubAgentManagerWithHeadlessOptionsAndFactory(options, nil)
+}
+
+func newSubAgentManagerWithHeadlessOptionsAndFactory(options HeadlessRunOptions, providerFactory subagent.ProviderFactory) *subagent.Manager {
 	return subagent.NewManagerWithOptions(subagent.ManagerOptions{
 		RunHeadless: func(ctx context.Context, message, model string, provider api.Provider, cfg *config.Config) *subagent.RunResult {
-			result := RunHeadlessWithConfig(ctx, message, model, provider, cfg)
+			result := RunHeadlessWithConfigOptions(ctx, message, model, provider, cfg, HeadlessRunOptions{
+				FailOnToolError: options.FailOnToolError,
+				ReadOnly:        options.ReadOnly,
+			})
 			if result == nil {
 				return &subagent.RunResult{
 					Status:       "error",
@@ -172,6 +185,7 @@ func newSubAgentManager() *subagent.Manager {
 			subResult.ErrorMessage = errorMessage
 			return subResult
 		},
+		ProviderFactory: providerFactory,
 	})
 }
 
@@ -235,10 +249,10 @@ func registerRuntimeSubAgentTools(runtime *AgentRuntime) {
 	if !runtime.Config.SubAgent.Enabled {
 		return
 	}
-	if !runtime.Registry.HasTool("spawn_agent") {
+	if !runtime.Registry.HasTool(subagent.SpawnAgentToolName) {
 		runtime.Registry.Register(subagent.NewSpawnAgentTool(runtime.SubAgentManager))
 	}
-	if !runtime.Registry.HasTool("wait_agent") {
+	if !runtime.Registry.HasTool(subagent.WaitAgentToolName) {
 		runtime.Registry.Register(subagent.NewWaitAgentTool(runtime.SubAgentManager))
 	}
 }

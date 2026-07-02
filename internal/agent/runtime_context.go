@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 	"github.com/susugadx/xelyon-cli/internal/token"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 	"github.com/susugadx/xelyon-cli/internal/uiruntime"
@@ -48,7 +49,7 @@ func (a *Agent) estimateToolDefinitionTokens() int {
 
 func (a *Agent) countToolsByType() (builtin, mcp int) {
 	for _, def := range a.registry().GetToolDefinitions() {
-		if strings.HasPrefix(def.Name, "mcp_") {
+		if mcpnames.IsExportedToolName(def.Name) {
 			mcp++
 		} else {
 			builtin++

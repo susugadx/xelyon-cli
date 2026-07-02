@@ -109,6 +109,92 @@ func TestBuildChatCompletionsRequest_SerializesMCPEmptySchema(t *testing.T) {
 	}
 }
 
+func TestBuildChatCompletionsRequest_SerializesImageMessageAtHistoryPosition(t *testing.T) {
+	req := BuildChatCompletionsRequest(ChatCompletionsRequestOptions{
+		Model:        "provider/model",
+		SystemPrompt: "system",
+		History: []api.Message{
+			api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+			{
+				Role: "assistant",
+				ToolCalls: []api.OpenAIToolCall{{
+					ID:       "call_1",
+					Type:     "function",
+					Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"README.md"}`},
+				}},
+			},
+			{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+		},
+		Stream:           true,
+		ImagePayloadMode: ImagePayloadMultimodal,
+	})
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	messages, ok := body["messages"].([]any)
+	if !ok || len(messages) != 4 {
+		t.Fatalf("messages = %#v, want system + image + assistant tool call + tool result", body["messages"])
+	}
+	imageMessage, ok := messages[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image message = %#v, want object", messages[1])
+	}
+	parts, ok := imageMessage["content"].([]any)
+	if !ok || len(parts) != 2 {
+		t.Fatalf("image content = %#v, want text+image_url", imageMessage["content"])
+	}
+	if parts[0].(map[string]any)["text"] != "inspect" {
+		t.Fatalf("parts[0] = %#v, want inspect text", parts[0])
+	}
+	imageURL := parts[1].(map[string]any)["image_url"].(map[string]any)["url"]
+	if imageURL != "data:image/png;base64,aW1hZ2U=" {
+		t.Fatalf("image url = %v, want data URL", imageURL)
+	}
+	if messages[2].(map[string]any)["tool_calls"] == nil {
+		t.Fatalf("assistant message = %#v, want tool_calls preserved", messages[2])
+	}
+	if messages[3].(map[string]any)["tool_call_id"] != "call_1" {
+		t.Fatalf("tool result message = %#v, want call_1", messages[3])
+	}
+}
+
+func TestBuildChatCompletionsRequest_DefaultsImageHistoryToTextOnly(t *testing.T) {
+	req := BuildChatCompletionsRequest(ChatCompletionsRequestOptions{
+		Model:        "provider/model",
+		SystemPrompt: "system",
+		History: []api.Message{
+			api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+		},
+		Stream: true,
+	})
+
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	messages, ok := body["messages"].([]any)
+	if !ok || len(messages) != 2 {
+		t.Fatalf("messages = %#v, want system + image history", body["messages"])
+	}
+	imageMessage, ok := messages[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image message = %#v, want object", messages[1])
+	}
+	if imageMessage["content"] != "inspect" {
+		t.Fatalf("image message content = %#v, want text-only content", imageMessage["content"])
+	}
+}
+
 func TestBuildChatMessages_StandardMessagesPayloadUnchanged(t *testing.T) {
 	messages := BuildChatMessages("system", []api.Message{
 		{Role: "user", Content: "hello"},

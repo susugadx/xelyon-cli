@@ -37,18 +37,27 @@ func (a *Agent) skillRouterInputWithOptions(ctx context.Context, taskText string
 	}
 	ctx, cancel := context.WithTimeout(ctx, skillRouterSignalTotalTimeout)
 	defer cancel()
+	readOnly := opts.readOnly || a.runtimeReadOnly()
 
 	input := router.Input{
 		TaskText:              taskText,
 		Command:               opts.command,
 		RequestedMode:         opts.requestedMode,
-		ReadOnly:              opts.readOnly,
+		ReadOnly:              readOnly,
 		PromptCatalogMaxItems: promptSkillCatalogMaxEntries,
+	}
+	if readOnly {
+		input.SignalDiagnostics = []string{"read-only mode; skipped git status signals"}
+		return input
 	}
 	paths, diagnostics := collectSkillRouterTouchedPaths(ctx, a.invocationCWD())
 	input.TouchedPaths = paths
 	input.SignalDiagnostics = diagnostics
 	return input
+}
+
+func (a *Agent) runtimeReadOnly() bool {
+	return a != nil && a.Runtime != nil && a.Runtime.Options.ReadOnly
 }
 
 func collectSkillRouterTouchedPaths(ctx context.Context, cwd string) ([]string, []string) {
@@ -150,6 +159,9 @@ func (a *Agent) skillUsageLedgerStoreForAll(enabled bool) *usageledger.Store {
 }
 
 func (a *Agent) recordSkillRecommendation(rec router.Recommendation) {
+	if a.runtimeReadOnly() {
+		return
+	}
 	cfg := a.cfg()
 	if cfg == nil || !cfg.Skills.Router.UsageLedger {
 		return
@@ -191,6 +203,9 @@ func (a *Agent) recordSkillActivationFromToolResult(toolCall *tools.ToolCall, re
 }
 
 func (a *Agent) recordSkillActivation(name string) {
+	if a.runtimeReadOnly() {
+		return
+	}
 	cfg := a.cfg()
 	if cfg == nil || !cfg.Skills.Router.UsageLedger {
 		return

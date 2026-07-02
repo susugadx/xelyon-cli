@@ -37,13 +37,13 @@ func (p *blockingTUIImageProvider) SupportsImages() bool { return true }
 
 func (p *blockingTUIImageProvider) IsFunctionCallingEnabled() bool { return true }
 
-func (p *blockingTUIImageProvider) ChatWithTools(context.Context, string, []api.Message, string) (string, error) {
-	return "", fmt.Errorf("ChatWithTools should not be called for initial TUI image")
-}
-
-func (p *blockingTUIImageProvider) ChatWithImage(ctx context.Context, _ string, _ []api.Message, _ string, image *api.ImageData, _ string) (string, error) {
-	if image == nil {
-		return "", fmt.Errorf("image is required")
+func (p *blockingTUIImageProvider) ChatWithTools(ctx context.Context, _ string, history []api.Message, _ string) (string, error) {
+	if len(history) == 0 {
+		return "", fmt.Errorf("history is required")
+	}
+	last := history[len(history)-1]
+	if !last.HasImage() {
+		return "", fmt.Errorf("image-bearing history message is required")
 	}
 	if p.calls.Add(1) == 1 {
 		close(p.started)
@@ -54,6 +54,10 @@ func (p *blockingTUIImageProvider) ChatWithImage(ctx context.Context, _ string, 
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}
+}
+
+func (p *blockingTUIImageProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, userMessage string, image *api.ImageData, _ string) (string, error) {
+	return "", fmt.Errorf("ChatWithImage should not be called for initial TUI image: %q image=%v", userMessage, image != nil)
 }
 
 func runBlockingStartupSubmission(t *testing.T, startup *tui.StartupSubmission, provider *blockingTUIImageProvider) tea.Msg {

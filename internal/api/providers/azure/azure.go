@@ -88,14 +88,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 // ChatWithImage は Azure OpenAI Responses API で画像付きメッセージを処理する。
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	if image == nil || image.Base64 == "" {
-		history = append(history, api.Message{Role: "user", Content: userMessage})
-		return p.ChatWithTools(ctx, systemPrompt, history, model)
-	}
-
-	model = api.ResolveProviderRequestModel(ctx, model, "azure")
-	p.responsesLocalSkip = false
-	return p.chatWithImageResponses(ctx, systemPrompt, history, userMessage, image, model)
+	history = append(history, api.NewUserMessageWithOptionalImage(userMessage, image))
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
 // HasCachedResponseID は Responses API のキャッシュ済み response ID があるか返す。

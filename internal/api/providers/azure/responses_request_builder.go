@@ -22,6 +22,7 @@ func (p *Provider) buildChatResponsesRequest(ctx context.Context, systemPrompt s
 	activeContext := openairesponses.ActiveContextFromContext(ctx)
 	previousResponseID := azurePreviousResponseIDForRequest(ctx, p.GetResponseID())
 	previousResponseID = openairesponses.PreviousResponseIDForRequestContext(ctx, previousResponseID, activeContext)
+	previousResponseID = openairesponses.PreviousResponseIDForChatHistory(previousResponseID, history)
 	serverCompactionDecision := openairesponses.ResolveServerCompactionDecision(ctx, "azure", modelIdentity, previousResponseID)
 	return openairesponses.BuildChatRequest(openairesponses.ChatRequestOptions{
 		Base:               p.newBaseResponsesRequestOptions(ctx, modelIdentity, serverCompactionDecision),

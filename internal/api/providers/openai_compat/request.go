@@ -25,6 +25,7 @@ type ChatCompletionsRequest struct {
 	PromptCacheKey       string             `json:"prompt_cache_key,omitempty"`
 	PromptCacheRetention string             `json:"prompt_cache_retention,omitempty"`
 	ExtraFields          map[string]any     `json:"-"`
+	ImagePayloadMode     ImagePayloadMode   `json:"-"`
 }
 
 // FunctionCallingOptions は OpenAI 互換 Function Calling 設定を表す。
@@ -52,10 +53,21 @@ type ChatCompletionsRequestOptions struct {
 	PromptCacheKey       string
 	PromptCacheRetention string
 	ExtraFields          map[string]any
+	ImagePayloadMode     ImagePayloadMode
 }
 
 // ToolChoicePolicy は provider ごとの tool_choice 方針を表す。
 type ToolChoicePolicy func(toolName *string) any
+
+// ImagePayloadMode は OpenAI 互換 payload に履歴画像を含めるかを表す。
+type ImagePayloadMode int
+
+const (
+	// ImagePayloadTextOnly は画像 state を JSON に出さず、message content だけを送る。
+	ImagePayloadTextOnly ImagePayloadMode = iota
+	// ImagePayloadMultimodal は画像対応 provider 向けに image_url content part を送る。
+	ImagePayloadMultimodal
+)
 
 var chatCompletionsStandardFields = map[string]struct{}{
 	"model":                  {},
@@ -93,6 +105,7 @@ func BuildChatCompletionsRequest(options ChatCompletionsRequestOptions) ChatComp
 		PromptCacheKey:       options.PromptCacheKey,
 		PromptCacheRetention: options.PromptCacheRetention,
 		ExtraFields:          cloneExtraFields(options.ExtraFields),
+		ImagePayloadMode:     options.ImagePayloadMode,
 	}
 	if options.MaxCompletionTokens > 0 {
 		req.MaxCompletionTokens = options.MaxCompletionTokens
@@ -122,19 +135,38 @@ func (r *ChatCompletionsRequest) ApplyFunctionCalling(options FunctionCallingOpt
 
 // MarshalJSON は標準 payload に provider 固有 extra fields を衝突検出つきで混ぜる。
 func (r ChatCompletionsRequest) MarshalJSON() ([]byte, error) {
-	type requestAlias ChatCompletionsRequest
-	base, err := json.Marshal(requestAlias(r))
-	if err != nil {
-		return nil, err
+	body := map[string]any{
+		"model":    r.Model,
+		"messages": chatCompletionsMessagePayloads(r.Messages, r.ImagePayloadMode),
+		"stream":   r.Stream,
+	}
+	if r.MaxTokens > 0 {
+		body["max_tokens"] = r.MaxTokens
+	}
+	if r.MaxCompletionTokens > 0 {
+		body["max_completion_tokens"] = r.MaxCompletionTokens
+	}
+	if r.StreamOptions != nil {
+		body["stream_options"] = r.StreamOptions
+	}
+	if r.ReasoningEffort != "" {
+		body["reasoning_effort"] = r.ReasoningEffort
+	}
+	if len(r.Tools) > 0 {
+		body["tools"] = r.Tools
+	}
+	if r.ToolChoice != nil {
+		body["tool_choice"] = r.ToolChoice
+	}
+	if r.PromptCacheKey != "" {
+		body["prompt_cache_key"] = r.PromptCacheKey
+	}
+	if r.PromptCacheRetention != "" {
+		body["prompt_cache_retention"] = r.PromptCacheRetention
 	}
 
 	if len(r.ExtraFields) == 0 {
-		return base, nil
-	}
-
-	var body map[string]any
-	if err := json.Unmarshal(base, &body); err != nil {
-		return nil, err
+		return json.Marshal(body)
 	}
 	for key, value := range r.ExtraFields {
 		if _, ok := chatCompletionsStandardFields[key]; ok {
@@ -143,6 +175,67 @@ func (r ChatCompletionsRequest) MarshalJSON() ([]byte, error) {
 		body[key] = value
 	}
 	return json.Marshal(body)
+}
+
+func chatCompletionsMessagePayloads(messages []api.Message, imageMode ImagePayloadMode) []any {
+	if messages == nil {
+		return nil
+	}
+	payloads := make([]any, 0, len(messages))
+	for _, message := range messages {
+		if imageMode == ImagePayloadMultimodal && message.HasImage() {
+			payloads = append(payloads, chatCompletionsImageMessagePayload(message))
+			continue
+		}
+		payloads = append(payloads, message)
+	}
+	return payloads
+}
+
+type chatCompletionsImageMessage struct {
+	Role             string               `json:"role"`
+	Content          []chatContentPart    `json:"content"`
+	ReasoningContent string               `json:"reasoning_content,omitempty"`
+	ToolCallID       string               `json:"tool_call_id,omitempty"`
+	ToolCalls        []api.OpenAIToolCall `json:"tool_calls,omitempty"`
+	ToolName         string               `json:"tool_name,omitempty"`
+}
+
+type chatContentPart struct {
+	Type     string        `json:"type"`
+	Text     string        `json:"text,omitempty"`
+	ImageURL *chatImageURL `json:"image_url,omitempty"`
+}
+
+type chatImageURL struct {
+	URL string `json:"url"`
+}
+
+func chatCompletionsImageMessagePayload(message api.Message) chatCompletionsImageMessage {
+	image := message.ImageData()
+	parts := make([]chatContentPart, 0, 2)
+	if message.Content != "" {
+		parts = append(parts, chatContentPart{
+			Type: "text",
+			Text: message.Content,
+		})
+	}
+	if image != nil {
+		parts = append(parts, chatContentPart{
+			Type: "image_url",
+			ImageURL: &chatImageURL{
+				URL: fmt.Sprintf("data:%s;base64,%s", image.MediaType, image.Base64),
+			},
+		})
+	}
+	return chatCompletionsImageMessage{
+		Role:             message.Role,
+		Content:          parts,
+		ReasoningContent: message.ReasoningContent,
+		ToolCallID:       message.ToolCallID,
+		ToolCalls:        message.ToolCalls,
+		ToolName:         message.ToolName,
+	}
 }
 
 // BuildChatMessages は system prompt と履歴から OpenAI 互換 messages を構築する。
@@ -164,6 +257,11 @@ func BuildChatMessagesWithActiveContext(systemPrompt string, activeContext []api
 // BuildChatMessageInterfacesWithActiveContext は multimodal message を後続で追加する OpenAI 互換 payload 用の messages を構築する。
 // transform は履歴メッセージだけに適用する。
 func BuildChatMessageInterfacesWithActiveContext(systemPrompt string, activeContext []api.ActiveContextBlock, history []api.Message, transform func(api.Message) api.Message) []any {
+	return BuildChatMessageInterfacesWithActiveContextAndImagePayloadMode(systemPrompt, activeContext, history, transform, ImagePayloadTextOnly)
+}
+
+// BuildChatMessageInterfacesWithActiveContextAndImagePayloadMode は履歴画像の projection 方針を指定して messages を構築する。
+func BuildChatMessageInterfacesWithActiveContextAndImagePayloadMode(systemPrompt string, activeContext []api.ActiveContextBlock, history []api.Message, transform func(api.Message) api.Message, imageMode ImagePayloadMode) []any {
 	prefix := BuildChatMessagesWithActiveContext(systemPrompt, activeContext, nil)
 	result := make([]any, 0, len(prefix)+len(history))
 	for _, message := range prefix {
@@ -172,6 +270,10 @@ func BuildChatMessageInterfacesWithActiveContext(systemPrompt string, activeCont
 	for _, message := range history {
 		if transform != nil {
 			message = transform(message)
+		}
+		if imageMode == ImagePayloadMultimodal && message.HasImage() {
+			result = append(result, chatCompletionsImageMessagePayload(message))
+			continue
 		}
 		result = append(result, message)
 	}

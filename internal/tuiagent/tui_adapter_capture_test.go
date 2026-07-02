@@ -139,7 +139,7 @@ func TestTUIAdapter_ChatWithImagePathReturnsLoadError(t *testing.T) {
 	}
 }
 
-func TestTUIAdapter_ChatWithImageUsesImageProvider(t *testing.T) {
+func TestTUIAdapter_ChatWithImageSendsImageHistoryToProvider(t *testing.T) {
 	disableColors(t)
 	t.Setenv("HOME", t.TempDir())
 
@@ -162,8 +162,11 @@ func TestTUIAdapter_ChatWithImageUsesImageProvider(t *testing.T) {
 		t.Fatalf("Chat() error = %v", err)
 	}
 
-	if provider.imageCalls != 1 {
-		t.Fatalf("provider.imageCalls = %d, want 1", provider.imageCalls)
+	if provider.imageHistoryCalls != 1 {
+		t.Fatalf("provider.imageHistoryCalls = %d, want 1", provider.imageHistoryCalls)
+	}
+	if provider.lastMessage != "describe" {
+		t.Fatalf("provider.lastMessage = %q, want describe", provider.lastMessage)
 	}
 	if adapter.IsProcessing() {
 		t.Fatal("Chat() should reset processing flag after image request")

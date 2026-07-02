@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/investigation"
+	"github.com/susugadx/xelyon-cli/internal/mcpnames"
 	"github.com/susugadx/xelyon-cli/internal/toolmeta"
 	"github.com/susugadx/xelyon-cli/internal/tools"
 )
@@ -120,5 +121,5 @@ func helpSurfaceSummary(surface investigation.Surface) string {
 }
 
 func isMCPToolDefinition(def tools.ToolDefinition) bool {
-	return strings.HasPrefix(def.Name, "mcp_")
+	return mcpnames.IsExportedToolName(def.Name)
 }

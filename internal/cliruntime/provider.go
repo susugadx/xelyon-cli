@@ -203,7 +203,16 @@ func HasExplicitCLIModelSelection(modelFlag string) bool {
 
 // LoadConfigSelection は config.yaml、環境変数、CLI flag override を合成した runtime config を返す。
 func LoadConfigSelection(errWriter io.Writer, overrides ConfigOverrides) *config.Config {
-	cfg, err := config.LoadConfig()
+	return loadConfigSelection(errWriter, overrides, config.LoadConfig)
+}
+
+// LoadConfigSelectionReadOnly は config bootstrap を行わずに runtime config を返す。
+func LoadConfigSelectionReadOnly(errWriter io.Writer, overrides ConfigOverrides) *config.Config {
+	return loadConfigSelection(errWriter, overrides, config.LoadConfigReadOnly)
+}
+
+func loadConfigSelection(errWriter io.Writer, overrides ConfigOverrides, load func() (*config.Config, error)) *config.Config {
+	cfg, err := load()
 	if err != nil {
 		if errWriter != nil {
 			fmt.Fprintf(errWriter, "Warning: Failed to load config: %v\n", err)

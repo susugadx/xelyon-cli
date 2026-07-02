@@ -72,6 +72,7 @@ func (p *Provider) buildChatCompletionsRequest(ctx context.Context, systemPrompt
 		IncludeUsage:         true,
 		PromptCacheKey:       BuildPromptCacheKey(model, systemPrompt),
 		PromptCacheRetention: "24h",
+		ImagePayloadMode:     openaicompat.ImagePayloadMultimodal,
 	}
 
 	// Function Calling: ツール定義を追加（環境変数で無効化可能）
@@ -149,57 +150,4 @@ func decodeOpenAICompatUsage(raw json.RawMessage) (*api.Usage, error) {
 // handleNonStreamingResponse は非ストリーミングレスポンスを処理（フォールバック）
 func (p *Provider) handleNonStreamingResponse(ctx context.Context, resp *http.Response, spinner *uiruntime.Spinner) (string, error) {
 	return api.HandleNonStreamingResponse(ctx, resp, spinner)
-}
-
-// chatWithImageCompletions は Completions API で画像付きメッセージを処理
-func (p *Provider) chatWithImageCompletions(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	cfg := config.FromContext(ctx)
-
-	messages := openaicompat.BuildChatMessageInterfacesWithActiveContext(systemPrompt, api.ActiveContextBlocksFromContext(ctx), history, nil)
-
-	// Data URL形式で画像を埋め込む
-	dataURL := fmt.Sprintf("data:%s;base64,%s", image.MediaType, image.Base64)
-
-	// 画像付きユーザーメッセージを追加
-	multimodalMessage := MultimodalMessage{
-		Role: "user",
-		Content: []ContentPart{
-			{
-				Type: "image_url",
-				ImageURL: &ImageURL{
-					URL: dataURL,
-				},
-			},
-			{
-				Type: "text",
-				Text: userMessage,
-			},
-		},
-	}
-	messages = append(messages, multimodalMessage)
-
-	reqBody := MultimodalRequest{
-		Model:                model,
-		Messages:             messages,
-		MaxTokens:            api.GetMaxOutputTokens(ctx, "openai", model),
-		Stream:               true,
-		PromptCacheKey:       BuildPromptCacheKey(model, systemPrompt),
-		PromptCacheRetention: "24h",
-	}
-
-	// Extended Thinking 適用
-	if api.IsThinkingEnabled(ctx) {
-		reqBody.ReasoningEffort = LevelToReasoningEffort(cfg.Thinking.Level)
-	}
-
-	req, err := openaicompat.NewBearerJSONRequest(ctx, p.APIURL, p.APIKey, reqBody)
-	if err != nil {
-		return "", err
-	}
-
-	return openaicompat.RunChatCompletions(ctx, p, req, openaicompat.ChatCompletionsRunOptions{
-		ImageMode:        true,
-		StreamHandler:    p.handleStreamingResponse,
-		NonStreamHandler: p.handleNonStreamingResponse,
-	})
 }

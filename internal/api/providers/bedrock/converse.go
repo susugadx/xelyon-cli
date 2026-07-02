@@ -24,6 +24,9 @@ func (p *Provider) chatWithConverseStream(ctx context.Context, systemPrompt stri
 	if image != nil && image.Base64 != "" {
 		return "", fmt.Errorf("bedrock ConverseStream route does not support image input yet: model=%q catalog_model=%q", req.model, req.catalogModel)
 	}
+	if api.MessagesHaveImage(history) {
+		return "", fmt.Errorf("bedrock ConverseStream route does not support image input yet: model=%q catalog_model=%q", req.model, req.catalogModel)
+	}
 	if p.converseClient == nil {
 		return "", fmt.Errorf("bedrock ConverseStream client is not configured")
 	}
@@ -180,6 +183,9 @@ func convertToConverseMessages(history []api.Message) ([]types.Message, error) {
 			lastWasToolResults = false
 			continue
 		case "user":
+			if msg.HasImage() {
+				return nil, fmt.Errorf("bedrock ConverseStream route does not support image input yet")
+			}
 			content := converseTextContent(msg.Content)
 			if len(content) == 0 {
 				lastWasToolResults = false

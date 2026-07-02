@@ -19,6 +19,8 @@ type providerHistoryProjectionResult struct {
 	Report  ProviderHistoryProjectionReport
 }
 
+const providerHistoryProjectionReadOnlyReason = "provider_history_projection_read_only"
+
 func (a *Agent) providerFacingHistory() []api.Message {
 	if a == nil {
 		return nil
@@ -99,7 +101,7 @@ func (a *Agent) buildProviderHistoryProjectionFromRawForTokenBudget(raw []api.Me
 	policy := providerHistoryReductionPolicyForRuntime(a.Runtime)
 	policy.SideEffects = providerhistory.ProjectionSideEffectsReadOnly
 	policy = a.providerHistoryProjectionPolicy(policy)
-	policy.RawOutputApplyDisabledReason = "provider_history_projection_read_only"
+	policy.RawOutputApplyDisabledReason = providerHistoryProjectionReadOnlyReason
 	return a.buildProviderHistoryProjectionFromRawResolvedPolicy(policy, raw)
 }
 
@@ -107,6 +109,12 @@ func (a *Agent) providerHistoryProjectionPolicy(policy ProviderHistoryReductionP
 	policy = normalizeProviderHistoryReductionPolicy(policy)
 	if a == nil || a.Runtime == nil {
 		return policy
+	}
+	if a.Runtime.Options.ReadOnly {
+		policy.SideEffects = providerhistory.ProjectionSideEffectsReadOnly
+		if policy.RawOutputApplyDisabledReason == "" {
+			policy.RawOutputApplyDisabledReason = providerHistoryProjectionReadOnlyReason
+		}
 	}
 
 	policy.RawOutputArtifactsMode = providerHistoryRawOutputArtifactsModeForRuntime(a.Runtime)

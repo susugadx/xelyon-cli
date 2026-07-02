@@ -120,23 +120,8 @@ func (p *Provider) ClearToolChoice() {
 
 // ChatWithImage は画像付きメッセージで会話を行う
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	// 画像がない場合は通常のChatWithToolsを使用
-	if image == nil || image.Base64 == "" {
-		history = append(history, api.Message{Role: "user", Content: userMessage})
-		return p.ChatWithTools(ctx, systemPrompt, history, model)
-	}
-
-	model = api.ResolveProviderRequestModel(ctx, model, "openai")
-	p.responsesLocalAutoCompressSkip = false
-
-	// Responses API モデルの場合は専用の画像処理
-	cfg := config.FromContext(ctx)
-	if cfg.IsProviderResponsesAPIModel("openai", model) {
-		return p.chatWithImageResponses(ctx, systemPrompt, history, userMessage, image, model)
-	}
-
-	p.clearLastOpenAIResponsesInputItems()
-	return p.chatWithImageCompletions(ctx, systemPrompt, history, userMessage, image, model)
+	history = append(history, api.NewUserMessageWithOptionalImage(userMessage, image))
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
 // ShouldSkipLocalAutoCompressionForServerCompaction は

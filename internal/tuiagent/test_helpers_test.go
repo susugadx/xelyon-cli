@@ -101,7 +101,8 @@ func (p *scriptedChatProvider) ChatWithImage(ctx context.Context, systemPrompt s
 }
 
 type imageOnceProvider struct {
-	imageCalls int
+	imageHistoryCalls int
+	lastMessage       string
 }
 
 func (p *imageOnceProvider) Name() string { return "openai" }
@@ -110,16 +111,21 @@ func (p *imageOnceProvider) SupportsImages() bool { return true }
 
 func (p *imageOnceProvider) IsFunctionCallingEnabled() bool { return true }
 
-func (p *imageOnceProvider) ChatWithTools(context.Context, string, []api.Message, string) (string, error) {
-	return "", fmt.Errorf("ChatWithTools should not be called for image one-shot")
+func (p *imageOnceProvider) ChatWithTools(_ context.Context, _ string, history []api.Message, _ string) (string, error) {
+	if len(history) == 0 {
+		return "", fmt.Errorf("history is required")
+	}
+	last := history[len(history)-1]
+	if !last.HasImage() {
+		return "", fmt.Errorf("image-bearing history message is required")
+	}
+	p.imageHistoryCalls++
+	p.lastMessage = last.Content
+	return "mock image response", nil
 }
 
-func (p *imageOnceProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, _ string, image *api.ImageData, _ string) (string, error) {
-	if image == nil {
-		return "", fmt.Errorf("image is required")
-	}
-	p.imageCalls++
-	return "mock image response", nil
+func (p *imageOnceProvider) ChatWithImage(_ context.Context, _ string, _ []api.Message, userMessage string, image *api.ImageData, _ string) (string, error) {
+	return "", fmt.Errorf("ChatWithImage should not be called for image one-shot: %q image=%v", userMessage, image != nil)
 }
 
 type mockErrorProvider struct{}

@@ -1,5 +1,7 @@
 package api
 
+import "strings"
+
 // Message はチャットメッセージ
 type Message struct {
 	Role             string           `json:"role"`
@@ -16,6 +18,7 @@ type messageProviderState struct {
 	anthropicContentBlocks  []AnthropicContentBlock
 	anthropicThinkingBlocks []AnthropicThinkingBlock
 	openAIResponsesItems    []InputItem
+	image                   *ImageData
 }
 
 // AnthropicThinkingBlock は Claude extended thinking の再送が必要なブロックを表す。
@@ -26,10 +29,18 @@ type AnthropicThinkingBlock struct {
 	Data      string `json:"data,omitempty"`      // type="redacted_thinking" 用
 }
 
+// ImageSource は provider-facing image block の source shape を表す。
+type ImageSource struct {
+	Type      string `json:"type"`       // "base64"
+	MediaType string `json:"media_type"` // "image/png" など
+	Data      string `json:"data"`       // base64
+}
+
 // AnthropicContentBlock は Claude thinking/tool-use 継続用の provider 専用 content block を表す。
 type AnthropicContentBlock struct {
 	Type      string         `json:"type"`                // "text", "thinking", "redacted_thinking", "tool_use", "compaction"
 	Text      string         `json:"text,omitempty"`      // type="text" 用
+	Source    *ImageSource   `json:"source,omitempty"`    // type="image" 用
 	Thinking  string         `json:"thinking,omitempty"`  // type="thinking" 用
 	Signature string         `json:"signature,omitempty"` // type="thinking" 用
 	Data      string         `json:"data,omitempty"`      // type="redacted_thinking" 用
@@ -80,6 +91,51 @@ func (m Message) OpenAIResponsesInputItems() []InputItem {
 // SetOpenAIResponsesInputItems は Responses full-payload replay 用の provider-facing items を設定する。
 func (m *Message) SetOpenAIResponsesInputItems(items []InputItem) {
 	m.providerState.openAIResponsesItems = CloneInputItems(items)
+}
+
+// NewUserImageMessage は画像付き user message を runtime-only state として保持する。
+func NewUserImageMessage(content string, image *ImageData) Message {
+	msg := NewUserMessage(content)
+	msg.SetImageData(image)
+	return msg
+}
+
+// NewUserMessage は text-only user message を作成する。
+func NewUserMessage(content string) Message {
+	return Message{Role: "user", Content: content}
+}
+
+// NewUserMessageWithOptionalImage は画像があれば runtime-only state に保持した user message を作成する。
+func NewUserMessageWithOptionalImage(content string, image *ImageData) Message {
+	if validImageData(image) {
+		return NewUserImageMessage(content, image)
+	}
+	return NewUserMessage(content)
+}
+
+// HasImage は runtime-only 画像 state を持つかを返す。
+func (m Message) HasImage() bool {
+	return validImageData(m.providerState.image)
+}
+
+// ImageData は runtime-only 画像 state を defensive copy して返す。
+func (m Message) ImageData() *ImageData {
+	return cloneImageData(m.providerState.image)
+}
+
+// SetImageData は runtime-only 画像 state を設定する。
+func (m *Message) SetImageData(image *ImageData) {
+	m.providerState.image = cloneImageData(image)
+}
+
+// MessagesHaveImage は履歴に画像付き message が含まれるかを返す。
+func MessagesHaveImage(messages []Message) bool {
+	for _, msg := range messages {
+		if msg.HasImage() {
+			return true
+		}
+	}
+	return false
 }
 
 // ReplaceOpenAIResponsesFunctionCallArguments は replay metadata 内の function_call arguments を同期する。
@@ -173,6 +229,10 @@ func CloneAnthropicContentBlocks(blocks []AnthropicContentBlock) []AnthropicCont
 	out := make([]AnthropicContentBlock, len(blocks))
 	for i, block := range blocks {
 		out[i] = block
+		if block.Source != nil {
+			source := *block.Source
+			out[i].Source = &source
+		}
 		out[i].Input = cloneAnyMap(block.Input)
 	}
 	return out
@@ -211,14 +271,28 @@ type MultimodalMessage struct {
 	Image   *ImageData `json:"-"` // JSON保存しない（一時的なもの）
 }
 
-// ToMessage は通常のMessageに変換（画像なし）
+// ToMessage は画像 state を保持した Message に変換する。
 func (m MultimodalMessage) ToMessage() Message {
-	return Message{Role: m.Role, Content: m.Content}
+	msg := Message{Role: m.Role, Content: m.Content}
+	msg.SetImageData(m.Image)
+	return msg
 }
 
 // HasImage は画像が添付されているか
 func (m MultimodalMessage) HasImage() bool {
-	return m.Image != nil && m.Image.Base64 != ""
+	return validImageData(m.Image)
+}
+
+func validImageData(image *ImageData) bool {
+	return image != nil && strings.TrimSpace(image.Base64) != ""
+}
+
+func cloneImageData(image *ImageData) *ImageData {
+	if image == nil {
+		return nil
+	}
+	cloned := *image
+	return &cloned
 }
 
 // GetReasoningContent はプロバイダーから最後の reasoning_content を取得するヘルパー

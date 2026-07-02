@@ -1,10 +1,17 @@
 package agent
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/config"
+	"github.com/susugadx/xelyon-cli/internal/finalcheck"
 )
 
 func TestRunFinalCheckCommands_NoCommands(t *testing.T) {
@@ -12,12 +19,15 @@ func TestRunFinalCheckCommands_NoCommands(t *testing.T) {
 	cfg.FinalChecks.Commands = nil
 
 	a := newCompletionTestAgent(cfg)
-	result := a.runFinalCheckCommands([]string{"/src/main.go"})
+	result := a.runFinalCheckCommands(context.Background(), []string{"/src/main.go"})
 	if result.NeedsContinue {
 		t.Error("expected needsContinue=false when no final checks are configured")
 	}
 	if result.Feedback != "" {
 		t.Errorf("expected empty feedback, got %q", result.Feedback)
+	}
+	if len(result.Checks) != 0 {
+		t.Fatalf("Checks = %+v, want empty", result.Checks)
 	}
 }
 
@@ -27,12 +37,15 @@ func TestRunFinalCheckCommands_SuccessfulCommand(t *testing.T) {
 	cfg.FinalChecks.Timeout = 10
 
 	a := newCompletionTestAgent(cfg)
-	result := a.runFinalCheckCommands([]string{"/src/main.go"})
+	result := a.runFinalCheckCommands(context.Background(), []string{"/src/main.go"})
 	if result.NeedsContinue {
 		t.Error("expected needsContinue=false for successful command")
 	}
 	if result.Feedback != "" {
 		t.Errorf("expected empty feedback, got %q", result.Feedback)
+	}
+	if len(result.Checks) != 1 || result.Checks[0].Command != "echo 'test passed'" || result.Checks[0].ExitCode != 0 || result.Checks[0].Status != "passed" {
+		t.Fatalf("Checks = %+v, want passed echo command", result.Checks)
 	}
 }
 
@@ -42,7 +55,7 @@ func TestRunFinalCheckCommands_FailedCommand(t *testing.T) {
 	cfg.FinalChecks.Timeout = 10
 
 	a := newCompletionTestAgent(cfg)
-	result := a.runFinalCheckCommands([]string{"/src/main.go"})
+	result := a.runFinalCheckCommands(context.Background(), []string{"/src/main.go"})
 	if !result.NeedsContinue {
 		t.Error("expected needsContinue=true for failed command")
 	}
@@ -58,6 +71,9 @@ func TestRunFinalCheckCommands_FailedCommand(t *testing.T) {
 	if result.FailureFingerprint == "" {
 		t.Error("expected non-empty failure fingerprint")
 	}
+	if len(result.Checks) != 1 || result.Checks[0].Command != "exit 1" || result.Checks[0].ExitCode != 1 || result.Checks[0].Status != "failed" {
+		t.Fatalf("Checks = %+v, want failed exit command", result.Checks)
+	}
 }
 
 func TestRunFinalCheckCommands_ChangedFilesEnv(t *testing.T) {
@@ -66,7 +82,7 @@ func TestRunFinalCheckCommands_ChangedFilesEnv(t *testing.T) {
 	cfg.FinalChecks.Timeout = 10
 
 	a := newCompletionTestAgent(cfg)
-	result := a.runFinalCheckCommands([]string{"/src/main.go", "/src/util.go"})
+	result := a.runFinalCheckCommands(context.Background(), []string{"/src/main.go", "/src/util.go"})
 	if result.NeedsContinue {
 		t.Error("expected needsContinue=false, XELYON_CHANGED_FILES should be set")
 	}
@@ -82,12 +98,18 @@ func TestRunFinalCheckCommands_MultipleCommands_StopsOnFirstFailure(t *testing.T
 	cfg.FinalChecks.Timeout = 10
 
 	a := newCompletionTestAgent(cfg)
-	result := a.runFinalCheckCommands([]string{"/src/main.go"})
+	result := a.runFinalCheckCommands(context.Background(), []string{"/src/main.go"})
 	if !result.NeedsContinue {
 		t.Error("expected needsContinue=true when second command fails")
 	}
 	if !strings.Contains(result.Feedback, "exit code 42") {
 		t.Errorf("expected exit code 42 in feedback, got %q", result.Feedback)
+	}
+	if len(result.Checks) != 2 {
+		t.Fatalf("Checks len = %d, want 2: %+v", len(result.Checks), result.Checks)
+	}
+	if result.Checks[0].Status != "passed" || result.Checks[1].Status != "failed" || result.Checks[1].ExitCode != 42 {
+		t.Fatalf("Checks = %+v, want passed then failed exit 42", result.Checks)
 	}
 }
 
@@ -100,7 +122,7 @@ func TestRunFinalCheckCommands_RecordsLedgerWithoutHistory(t *testing.T) {
 	cfg.FinalChecks.Timeout = 10
 
 	a := newCompletionTestAgent(cfg)
-	result := a.runFinalCheckCommands([]string{"src/main.go"})
+	result := a.runFinalCheckCommands(context.Background(), []string{"src/main.go"})
 	if !result.NeedsContinue {
 		t.Fatal("expected failed final check to request continuation")
 	}
@@ -128,13 +150,67 @@ func TestRunFinalCheckCommands_Timeout(t *testing.T) {
 	cfg.FinalChecks.Timeout = 1
 
 	a := newCompletionTestAgent(cfg)
-	result := a.runFinalCheckCommands([]string{"/src/main.go"})
+	result := a.runFinalCheckCommands(context.Background(), []string{"/src/main.go"})
 	if !result.NeedsContinue {
 		t.Error("expected needsContinue=true for timed-out command")
+	}
+	if result.Cancelled {
+		t.Fatalf("Cancelled = true, want false for per-command timeout")
 	}
 	if result.Feedback == "" {
 		t.Error("expected non-empty feedback for timed-out command")
 	}
+}
+
+func TestRunFinalCheckCommands_ParentCancelStopsRunningCommand(t *testing.T) {
+	cfg := config.DefaultConfig()
+	startedFile := filepath.Join(t.TempDir(), "started")
+	cfg.FinalChecks.Commands = []string{
+		fmt.Sprintf("touch %q; sleep 30", startedFile),
+	}
+	cfg.FinalChecks.Timeout = 60
+
+	a := newCompletionTestAgent(cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	resultCh := make(chan finalcheck.RunResult, 1)
+	go func() {
+		resultCh <- a.runFinalCheckCommands(ctx, []string{"/src/main.go"})
+	}()
+
+	waitForFile(t, startedFile)
+	cancel()
+
+	select {
+	case result := <-resultCh:
+		if !result.Cancelled {
+			t.Fatalf("Cancelled = false, want true: %+v", result)
+		}
+		if !errors.Is(result.Err, context.Canceled) {
+			t.Fatalf("Err = %v, want context.Canceled", result.Err)
+		}
+		if result.NeedsContinue {
+			t.Fatal("NeedsContinue = true, want false for parent cancellation")
+		}
+		if len(result.Checks) != 1 || result.Checks[0].Command != cfg.FinalChecks.Commands[0] || result.Checks[0].ExitCode != -1 || result.Checks[0].Status != "failed" {
+			t.Fatalf("Checks = %+v, want cancelled running command as failed/-1", result.Checks)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("runFinalCheckCommands did not return promptly after parent context cancellation")
+	}
+}
+
+func waitForFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("file %s was not created before deadline", path)
 }
 
 func TestFinalChecksConfig_TimeoutDefault(t *testing.T) {

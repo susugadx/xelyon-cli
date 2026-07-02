@@ -78,21 +78,25 @@ func (p *Provider) chatWithTextMode(ctx context.Context, systemPrompt string, hi
 
 // ChatWithImage は画像付きメッセージで会話を行う
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	// 画像がない場合は通常のChatWithToolsを使用
-	if image == nil || image.Base64 == "" {
-		history = append(history, api.Message{Role: "user", Content: userMessage})
-		return p.ChatWithTools(ctx, systemPrompt, history, model)
-	}
+	history = append(history, api.NewUserMessageWithOptionalImage(userMessage, image))
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
+}
 
+func (p *Provider) chatWithMultimodalHistory(
+	ctx context.Context,
+	systemPrompt string,
+	history []api.Message,
+	model string,
+	functionCallingEnabled bool,
+	cfgImg *config.Config,
+) (string, error) {
 	// モデル名を設定（config優先、フォールバックはgemini-3.1-pro-preview-customtools）
 	model = api.ResolveProviderRequestModel(ctx, model, "gemini")
 
-	cfgImg := config.FromContext(ctx)
-	functionCallingPolicy := newGeminiFunctionCallingPolicy(cfgImg, model)
-	if !functionCallingPolicy.Enabled() && !api.IsToolUseDisabled(ctx) {
-		return "", functionCallingPolicy.UnsupportedError()
+	if cfgImg == nil {
+		cfgImg = config.FromContext(ctx)
 	}
-	reqBody := buildGeminiMultimodalRequest(ctx, systemPrompt, history, userMessage, image, model, p.mcpTools, functionCallingPolicy.Enabled(), cfgImg)
+	reqBody := buildGeminiMultimodalHistoryRequest(ctx, systemPrompt, history, model, p.mcpTools, functionCallingEnabled, cfgImg)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
@@ -120,7 +124,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	if err != nil {
 		spinner.Stop()
 		if retryResult, handled, retryErr := retryGeminiTimeout(ctx, err, "multimodal FC mode", func(retryCtx context.Context) (string, error) {
-			return p.ChatWithImage(retryCtx, systemPrompt, history, userMessage, image, model)
+			return p.chatWithMultimodalHistory(retryCtx, systemPrompt, history, model, functionCallingEnabled, cfgImg)
 		}); handled {
 			return retryResult, retryErr
 		}
@@ -157,7 +161,7 @@ func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, histo
 	if err != nil {
 		if retryResult, handled, retryErr := retryGeminiTimeout(ctx, err, "multimodal FC mode", func(retryCtx context.Context) (string, error) {
 			closeRespBody()
-			return p.ChatWithImage(retryCtx, systemPrompt, history, userMessage, image, model)
+			return p.chatWithMultimodalHistory(retryCtx, systemPrompt, history, model, functionCallingEnabled, cfgImg)
 		}); handled {
 			return retryResult, retryErr
 		}

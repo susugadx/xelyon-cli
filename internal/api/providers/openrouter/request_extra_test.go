@@ -235,6 +235,61 @@ func TestBuildOpenAITextChatPayload_FixesToolChoiceAndIncludeUsage(t *testing.T)
 	}
 }
 
+func TestBuildOpenAITextChatPayload_SerializesImageHistoryAtOriginalPosition(t *testing.T) {
+	t.Setenv("OPENROUTER_FUNCTION_CALLING", "0")
+	cfg := config.DefaultConfig()
+	cfg.ProviderModels["openrouter"] = config.ProviderModelConfig{
+		DefaultModel:    "openai/gpt-4o",
+		MaxOutputTokens: 222,
+	}
+
+	p := New("test-key")
+	ctx, _ := newOpenRouterTestContext(t, cfg)
+	payload, err := p.buildOpenAITextChatPayload(ctx, "system prompt", []api.Message{
+		api.NewUserImageMessage("inspect", &api.ImageData{MediaType: "image/png", Base64: "aW1hZ2U="}),
+		{Role: "assistant", ToolCalls: []api.OpenAIToolCall{{
+			ID:       "call_1",
+			Type:     "function",
+			Function: api.OpenAIToolCallFunction{Name: "read_file", Arguments: `{"path":"README.md"}`},
+		}}},
+		{Role: "tool", ToolCallID: "call_1", Content: "README contents"},
+	}, "openai/gpt-4o")
+	if err != nil {
+		t.Fatalf("buildOpenAITextChatPayload() error = %v", err)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("json unmarshal failed: %v", err)
+	}
+	messages, ok := body["messages"].([]any)
+	if !ok || len(messages) != 4 {
+		t.Fatalf("messages = %#v, want system + image + assistant tool call + tool result", body["messages"])
+	}
+	imageMessage, ok := messages[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image message = %#v, want object", messages[1])
+	}
+	content, ok := imageMessage["content"].([]any)
+	if !ok || len(content) != 2 {
+		t.Fatalf("image content = %#v, want text + image_url", imageMessage["content"])
+	}
+	imagePart, ok := content[1].(map[string]any)
+	if !ok {
+		t.Fatalf("image part = %#v, want object", content[1])
+	}
+	imageURL, ok := imagePart["image_url"].(map[string]any)
+	if !ok || imageURL["url"] != "data:image/png;base64,aW1hZ2U=" {
+		t.Fatalf("image_url = %#v, want data URL", imagePart["image_url"])
+	}
+	if messages[2].(map[string]any)["tool_calls"] == nil {
+		t.Fatalf("assistant message = %#v, want tool_calls preserved", messages[2])
+	}
+	if messages[3].(map[string]any)["tool_call_id"] != "call_1" {
+		t.Fatalf("tool result message = %#v, want call_1", messages[3])
+	}
+}
+
 func TestBuildOpenAITextChatPayload_ToolUseDisabledOmitsToolFields(t *testing.T) {
 	t.Setenv("OPENROUTER_FUNCTION_CALLING", "1")
 

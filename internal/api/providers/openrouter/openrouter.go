@@ -140,20 +140,8 @@ func (p *Provider) ChatWithTools(ctx context.Context, systemPrompt string, histo
 
 // ChatWithImage は画像付きチャットの実装
 func (p *Provider) ChatWithImage(ctx context.Context, systemPrompt string, history []api.Message, userMessage string, image *api.ImageData, model string) (string, error) {
-	if image == nil || image.Base64 == "" {
-		history = append(history, api.Message{Role: "user", Content: userMessage})
-		return p.ChatWithTools(ctx, systemPrompt, history, model)
-	}
-
-	model = api.ResolveProviderRequestModel(ctx, model, "openrouter")
-	cfg := config.ResolveContext(ctx, p.effectiveConfig())
-	route := p.routePlanForRequest(cfg, model)
-
-	if route.usesAnthropicMessages() {
-		return p.chatWithClaudeAPI(ctx, systemPrompt, history, userMessage, model, image, route)
-	}
-
-	return p.chatWithImageRequest(ctx, systemPrompt, history, userMessage, image, model)
+	history = append(history, api.NewUserMessageWithOptionalImage(userMessage, image))
+	return p.ChatWithTools(ctx, systemPrompt, history, model)
 }
 
 // chatWithImageRequest はOpenAI互換形式での画像送信
