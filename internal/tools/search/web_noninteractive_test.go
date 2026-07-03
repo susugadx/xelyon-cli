@@ -109,6 +109,41 @@ func TestSearchWebReportsResolvedUsageAttributionAndLegacyCallback(t *testing.T)
 	}
 }
 
+func TestSearchWebPassesThinkingConfigToNativeProviderContext(t *testing.T) {
+	resetWebSearchCacheForTest()
+	query := "thinking inheritance query"
+	websearch.RegisterWithContextForTest(t, "openai_subscription", func(ctx context.Context, gotQuery, model string) (string, error) {
+		if gotQuery != query {
+			t.Fatalf("query = %q, want %q", gotQuery, query)
+		}
+		if model != "gpt-5.5" {
+			t.Fatalf("model = %q, want configured subscription model", model)
+		}
+		cfg := config.FromContext(ctx)
+		if !cfg.Thinking.Enabled || cfg.Thinking.Level != "high" || !api.IsThinkingEnabled(ctx) {
+			t.Fatalf("thinking config = %+v active=%t, want high enabled", cfg.Thinking, api.IsThinkingEnabled(ctx))
+		}
+		return "Summary:\nthinking inherited\n\nSources:\n\n1. Docs\n   URL: https://docs.example.test/thinking", nil
+	})
+	cfg := config.DefaultConfig()
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "high"
+	cfg.WebSearch.Provider = "openai_subscription"
+	cfg.SetProviderModelConfig("openai_subscription", config.ProviderModelConfig{DefaultModel: "gpt-5.5"})
+
+	got, err := SearchWeb(context.Background(), WebSearchRequest{
+		Config:       cfg,
+		MainProvider: "deepseek",
+		Query:        query,
+	})
+	if err != nil {
+		t.Fatalf("SearchWeb() error = %v", err)
+	}
+	if got.Provider != "openai_subscription" || got.Model != "gpt-5.5" {
+		t.Fatalf("provider/model = %s/%s, want openai_subscription/gpt-5.5", got.Provider, got.Model)
+	}
+}
+
 func TestSearchWebCanonicalizesOpenAISubscriptionAliasBeforeUsageAndCacheOwners(t *testing.T) {
 	resetWebSearchCacheForTest()
 	query := "subscription alias owner query"

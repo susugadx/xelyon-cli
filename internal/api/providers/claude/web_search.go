@@ -10,16 +10,22 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
-const webSearchBetaHeader = "web-search-2025-03-05"
+const (
+	webSearchBetaHeader          = "web-search-2025-03-05"
+	webSearchVisibleMaxTokensCap = 2048
+)
 
 type webSearchRequest struct {
-	Model     string             `json:"model"`
-	Messages  []AnthropicMessage `json:"messages"`
-	MaxTokens int                `json:"max_tokens"`
-	Stream    bool               `json:"stream"`
-	Tools     []webSearchTool    `json:"tools"`
+	Model        string             `json:"model"`
+	Messages     []AnthropicMessage `json:"messages"`
+	MaxTokens    int                `json:"max_tokens"`
+	Stream       bool               `json:"stream"`
+	Thinking     *ThinkingConfig    `json:"thinking,omitempty"`
+	OutputConfig *OutputConfig      `json:"output_config,omitempty"`
+	Tools        []webSearchTool    `json:"tools"`
 }
 
 type webSearchTool struct {
@@ -107,10 +113,10 @@ func (p *Provider) webSearch(ctx context.Context, query, model string) (string, 
 }
 
 func (p *Provider) buildWebSearchRequest(ctx context.Context, query, model string) claudeWebSearchRequestBuild {
-	maxTokens := 2048
-	if providerMax := p.maxOutputTokens(ctx, model); providerMax > 0 && providerMax < maxTokens {
-		maxTokens = providerMax
-	}
+	cfg := config.ResolveContext(ctx, p.effectiveConfig())
+	catalogModel := cfg.ModelCatalogName(p.configLookupKey(), model)
+	thinking, outputConfig := buildClaudeThinkingRequestPolicy(ctx, cfg, catalogModel)
+	maxTokens := p.webSearchMaxTokens(ctx, model, thinking)
 
 	return claudeWebSearchRequestBuild{
 		Model: model,
@@ -123,8 +129,10 @@ func (p *Provider) buildWebSearchRequest(ctx context.Context, query, model strin
 					Text: buildWebSearchPrompt(query),
 				}},
 			}},
-			MaxTokens: maxTokens,
-			Stream:    false,
+			MaxTokens:    maxTokens,
+			Stream:       false,
+			Thinking:     thinking,
+			OutputConfig: outputConfig,
 			Tools: []webSearchTool{{
 				Type:    "web_search_20250305",
 				Name:    "web_search",
@@ -132,6 +140,23 @@ func (p *Provider) buildWebSearchRequest(ctx context.Context, query, model strin
 			}},
 		},
 	}
+}
+
+func (p *Provider) webSearchMaxTokens(ctx context.Context, model string, thinking *ThinkingConfig) int {
+	visibleMaxTokens := webSearchVisibleMaxTokensCap
+	providerMaxTokens := p.maxOutputTokens(ctx, model)
+	if thinking != nil && thinking.BudgetTokens > 0 {
+		if providerMaxTokens > thinking.BudgetTokens {
+			if providerVisibleMaxTokens := providerMaxTokens - thinking.BudgetTokens; providerVisibleMaxTokens < visibleMaxTokens {
+				visibleMaxTokens = providerVisibleMaxTokens
+			}
+		}
+		return thinking.BudgetTokens + visibleMaxTokens
+	}
+	if providerMaxTokens > 0 && providerMaxTokens < visibleMaxTokens {
+		return providerMaxTokens
+	}
+	return visibleMaxTokens
 }
 
 func buildWebSearchPrompt(query string) string {

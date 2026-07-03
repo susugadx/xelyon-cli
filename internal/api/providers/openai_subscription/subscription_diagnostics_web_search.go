@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
+	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
 	"github.com/susugadx/xelyon-cli/internal/providerdiag"
 )
@@ -59,7 +60,8 @@ func subscriptionDiagnosticWebSearchPreviewBody(body subscriptionWebSearchReques
 		"stream":                 body.Stream,
 		"store":                  body.Store,
 		"instructions":           presenceLabel(body.Instructions),
-		"input":                  presenceLabel(body.Input),
+		"input":                  subscriptionDiagnosticInputShape(body.Input),
+		"reasoning":              subscriptionDiagnosticWebSearchReasoningPreview(body.Reasoning),
 		"tools":                  subscriptionDiagnosticWebSearchToolsPreview(body.Tools),
 		"tool_choice":            body.ToolChoice,
 		"prompt_cache_key":       presenceLabel(body.PromptCacheKey),
@@ -68,7 +70,15 @@ func subscriptionDiagnosticWebSearchPreviewBody(body subscriptionWebSearchReques
 		"prompt_cache_retention": "omitted",
 		"max_output_tokens":      "omitted",
 		"include":                "omitted",
+		"web_search_preview":     "omitted",
 	}
+}
+
+func subscriptionDiagnosticWebSearchReasoningPreview(reasoning *openairesponses.ReasoningConfig) any {
+	if reasoning == nil {
+		return "omitted"
+	}
+	return map[string]string{"effort": reasoning.Effort}
 }
 
 func subscriptionDiagnosticWebSearchToolsPreview(tools []subscriptionWebSearchTool) []map[string]string {

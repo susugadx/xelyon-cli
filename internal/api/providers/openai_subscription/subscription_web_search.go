@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	openairesponses "github.com/susugadx/xelyon-cli/internal/api/providers/openai_responses"
@@ -19,14 +18,15 @@ const (
 )
 
 type subscriptionWebSearchRequest struct {
-	Model          string                      `json:"model"`
-	Input          string                      `json:"input"`
-	Instructions   string                      `json:"instructions,omitempty"`
-	Stream         bool                        `json:"stream"`
-	Store          bool                        `json:"store"`
-	Tools          []subscriptionWebSearchTool `json:"tools"`
-	ToolChoice     string                      `json:"tool_choice"`
-	PromptCacheKey string                      `json:"prompt_cache_key,omitempty"`
+	Model          string                           `json:"model"`
+	Input          []openairesponses.InputItem      `json:"input"`
+	Instructions   string                           `json:"instructions,omitempty"`
+	Stream         bool                             `json:"stream"`
+	Store          bool                             `json:"store"`
+	Reasoning      *openairesponses.ReasoningConfig `json:"reasoning,omitempty"`
+	Tools          []subscriptionWebSearchTool      `json:"tools"`
+	ToolChoice     string                           `json:"tool_choice"`
+	PromptCacheKey string                           `json:"prompt_cache_key,omitempty"`
 }
 
 type subscriptionWebSearchTool struct {
@@ -83,9 +83,6 @@ func (p *SubscriptionProvider) runSubscriptionWebSearch(ctx context.Context, end
 	if resp.StatusCode != http.StatusOK {
 		return subscriptionWebSearchResult{}, handleSubscriptionHTTPError(resp, nil, subscriptionDisplayName)
 	}
-	if !strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
-		return subscriptionWebSearchResult{}, fmt.Errorf("subscription web search expected streaming response, got %q", resp.Header.Get("Content-Type"))
-	}
 
 	result, err := parseSubscriptionWebSearchStream(ctx, resp)
 	if err != nil {
@@ -110,6 +107,7 @@ func buildSubscriptionWebSearchRequest(ctx context.Context, query, model string)
 		Instructions: subscriptionWebSearchInstructions,
 		Stream:       true,
 		Store:        false,
+		Reasoning:    subscriptionResponsesReasoningConfig(ctx, modelIdentity),
 		Tools: []subscriptionWebSearchTool{{
 			Type: subscriptionWebSearchToolType,
 		}},
@@ -118,6 +116,10 @@ func buildSubscriptionWebSearchRequest(ctx context.Context, query, model string)
 	}
 }
 
-func buildSubscriptionWebSearchInput(query string) string {
-	return fmt.Sprintf("Search the web for the query below and return concise findings with source URLs.\n\nQuery: %s", query)
+func buildSubscriptionWebSearchInput(query string) []openairesponses.InputItem {
+	return []openairesponses.InputItem{{
+		Type:    "message",
+		Role:    "user",
+		Content: fmt.Sprintf("Search the web for the query below and return concise findings with source URLs.\n\nQuery: %s", query),
+	}}
 }

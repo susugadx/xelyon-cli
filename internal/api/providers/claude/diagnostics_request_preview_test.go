@@ -194,6 +194,73 @@ func TestDiagnoseClaude_PrintRequestThinkingToolSmokeUsesAutoToolChoice(t *testi
 	}
 }
 
+func TestDiagnoseClaude_PrintRequestWebSearchInheritsThinkingConfig(t *testing.T) {
+	setClaudeDiagnosticTestEnv(t, "", "")
+	cfg := config.DefaultConfig()
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         cfg,
+		Model:          "claude-opus-4-7",
+		CatalogModel:   "claude-opus-4-7",
+		PrintRequest:   true,
+		WebSearchSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.RequestPreview == nil || len(report.RequestPreview.Requests) != 1 {
+		t.Fatalf("RequestPreview = %#v, want web search request", report.RequestPreview)
+	}
+	body, ok := report.RequestPreview.Requests[0].Body.(webSearchRequest)
+	if !ok {
+		t.Fatalf("web body type = %T, want webSearchRequest", report.RequestPreview.Requests[0].Body)
+	}
+	if body.Thinking == nil || body.Thinking.Type != "adaptive" {
+		t.Fatalf("Thinking = %#v, want adaptive", body.Thinking)
+	}
+	if body.OutputConfig == nil || body.OutputConfig.Effort != "xhigh" {
+		t.Fatalf("OutputConfig = %#v, want effort=xhigh", body.OutputConfig)
+	}
+	if len(body.Tools) != 1 || body.Tools[0].Type != "web_search_20250305" || body.Tools[0].MaxUses != 3 {
+		t.Fatalf("Tools = %#v, want unchanged web search tool", body.Tools)
+	}
+}
+
+func TestDiagnoseClaude_PrintRequestWebSearchLegacyThinkingExpandsMaxTokens(t *testing.T) {
+	setClaudeDiagnosticTestEnv(t, "", "")
+	cfg := config.DefaultConfig()
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "high"
+
+	report := Diagnose(context.Background(), DiagnosticOptions{
+		Config:         cfg,
+		Model:          "claude-3-5-sonnet",
+		CatalogModel:   "claude-3-5-sonnet",
+		PrintRequest:   true,
+		WebSearchSmoke: true,
+	})
+	if report.HasFailures() {
+		t.Fatalf("HasFailures() = true, want false: %#v", report.Checks)
+	}
+	if report.RequestPreview == nil || len(report.RequestPreview.Requests) != 1 {
+		t.Fatalf("RequestPreview = %#v, want web search request", report.RequestPreview)
+	}
+	body, ok := report.RequestPreview.Requests[0].Body.(webSearchRequest)
+	if !ok {
+		t.Fatalf("web body type = %T, want webSearchRequest", report.RequestPreview.Requests[0].Body)
+	}
+	budget := LevelToBudgetTokens("high")
+	if body.Thinking == nil || body.Thinking.Type != "enabled" || body.Thinking.BudgetTokens != budget {
+		t.Fatalf("Thinking = %#v, want enabled budget %d", body.Thinking, budget)
+	}
+	wantMaxTokens := budget + defaultClaudeDiagnosticSmokeMaxOutputTokens
+	if body.MaxTokens != wantMaxTokens {
+		t.Fatalf("MaxTokens = %d, want budget plus diagnostic visible cap %d", body.MaxTokens, wantMaxTokens)
+	}
+}
+
 func TestDiagnoseClaude_PrintRequestRecordsSkippedToolWhenFunctionCallingDisabled(t *testing.T) {
 	setClaudeDiagnosticTestEnv(t, "", "")
 	t.Setenv(claudeFunctionCallEnv, "0")

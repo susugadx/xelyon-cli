@@ -229,3 +229,102 @@ func TestBuildWebSearchRequest_UsesSharedHeaderPolicy(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildWebSearchRequest_InheritsThinkingPolicy(t *testing.T) {
+	tests := []struct {
+		name             string
+		model            string
+		configure        func(*config.Config)
+		wantType         string
+		wantEffort       string
+		wantBudgetTokens int
+		wantMaxTokens    int
+	}{
+		{
+			name:          "disabled omits thinking for adaptive model",
+			model:         "claude-opus-4-7",
+			wantMaxTokens: 2048,
+		},
+		{
+			name:  "adaptive model sends output effort",
+			model: "claude-opus-4-7",
+			configure: func(cfg *config.Config) {
+				cfg.Thinking.Enabled = true
+				cfg.Thinking.Level = "xhigh"
+			},
+			wantType:      "adaptive",
+			wantEffort:    "xhigh",
+			wantMaxTokens: 2048,
+		},
+		{
+			name:  "legacy thinking model sends budget tokens",
+			model: "claude-3-5-sonnet",
+			configure: func(cfg *config.Config) {
+				cfg.Thinking.Enabled = true
+				cfg.Thinking.Level = "high"
+			},
+			wantType:         "enabled",
+			wantBudgetTokens: LevelToBudgetTokens("high"),
+			wantMaxTokens:    LevelToBudgetTokens("high") + 2048,
+		},
+	}
+
+	p := New("test-key")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			if tt.configure != nil {
+				tt.configure(cfg)
+			}
+			built := p.buildWebSearchRequest(config.WithContext(context.Background(), cfg), "anthropic web search", tt.model)
+			if built.Request.MaxTokens != tt.wantMaxTokens {
+				t.Fatalf("MaxTokens = %d, want %d", built.Request.MaxTokens, tt.wantMaxTokens)
+			}
+			if tt.wantType == "" {
+				if built.Request.Thinking != nil || built.Request.OutputConfig != nil {
+					t.Fatalf("Thinking = %+v OutputConfig = %+v, want omitted", built.Request.Thinking, built.Request.OutputConfig)
+				}
+				return
+			}
+			if built.Request.Thinking == nil || built.Request.Thinking.Type != tt.wantType {
+				t.Fatalf("Thinking = %+v, want type %q", built.Request.Thinking, tt.wantType)
+			}
+			if got := built.Request.Thinking.BudgetTokens; got != tt.wantBudgetTokens {
+				t.Fatalf("BudgetTokens = %d, want %d", got, tt.wantBudgetTokens)
+			}
+			if tt.wantEffort == "" {
+				if built.Request.OutputConfig != nil {
+					t.Fatalf("OutputConfig = %+v, want nil", built.Request.OutputConfig)
+				}
+				return
+			}
+			if built.Request.OutputConfig == nil || built.Request.OutputConfig.Effort != tt.wantEffort {
+				t.Fatalf("OutputConfig = %+v, want effort %q", built.Request.OutputConfig, tt.wantEffort)
+			}
+		})
+	}
+}
+
+func TestBuildWebSearchRequest_LegacyThinkingKeepsConfiguredVisibleOutputBudget(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "high"
+	cfg.SetProviderModelConfig("claude", config.ProviderModelConfig{
+		ModelOverrides: map[string]config.ModelOverride{
+			"corp-legacy-web": {
+				CatalogModel:    "claude-3-5-sonnet",
+				MaxOutputTokens: 1024,
+			},
+		},
+	})
+
+	p := New("test-key")
+	built := p.buildWebSearchRequest(config.WithContext(context.Background(), cfg), "anthropic web search", "corp-legacy-web")
+	budget := LevelToBudgetTokens("high")
+	if built.Request.Thinking == nil || built.Request.Thinking.BudgetTokens != budget {
+		t.Fatalf("Thinking = %+v, want budget %d", built.Request.Thinking, budget)
+	}
+	if built.Request.MaxTokens != budget+1024 {
+		t.Fatalf("MaxTokens = %d, want budget plus configured visible output %d", built.Request.MaxTokens, budget+1024)
+	}
+}

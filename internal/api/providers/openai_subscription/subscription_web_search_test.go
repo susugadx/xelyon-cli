@@ -3,6 +3,7 @@ package openaisubscription
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/susugadx/xelyon-cli/internal/api"
 	"github.com/susugadx/xelyon-cli/internal/api/websearch"
+	"github.com/susugadx/xelyon-cli/internal/config"
 )
 
 func TestSubscriptionWebSearchUsesOAuthTransportAndExactRequestShape(t *testing.T) {
@@ -40,7 +42,7 @@ func TestSubscriptionWebSearchUsesOAuthTransportAndExactRequestShape(t *testing.
 			``,
 			`data: {"type":"response.output_item.done","item":{"type":"web_search_call","id":"ws_1","status":"completed","action":{"sources":[{"title":"Docs","url":"https://docs.example.test/search"},{"title":"Docs duplicate","url":"https://docs.example.test/search"}]}}}`,
 			``,
-			`data: {"type":"response.completed","response":{"id":"resp_search","usage":{"input_tokens":13,"output_tokens":5,"input_tokens_details":{"cached_tokens":2}}}}`,
+			`data: {"type":"response.completed","response":{"id":"resp_search","usage":{"input_tokens":13,"output_tokens":7,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":2}}}}`,
 			``,
 			`data: [DONE]`,
 		}, "\n")))
@@ -111,8 +113,22 @@ func TestSubscriptionWebSearchUsesOAuthTransportAndExactRequestShape(t *testing.
 			t.Fatalf("%s should be omitted: %#v", forbidden, raw)
 		}
 	}
-	if strings.TrimSpace(raw["input"].(string)) == "" || strings.TrimSpace(raw["instructions"].(string)) == "" {
+	input, ok := raw["input"].([]any)
+	if !ok || len(input) != 1 {
+		t.Fatalf("input = %#v, want one Responses input item", raw["input"])
+	}
+	inputItem, ok := input[0].(map[string]any)
+	if !ok {
+		t.Fatalf("input[0] = %#v, want object", input[0])
+	}
+	if inputItem["type"] != "message" || inputItem["role"] != "user" || !strings.Contains(fmt.Sprint(inputItem["content"]), "OpenAI web_search docs") {
+		t.Fatalf("input[0] = %#v, want user message item with query", inputItem)
+	}
+	if strings.TrimSpace(raw["instructions"].(string)) == "" {
 		t.Fatalf("input/instructions missing: %#v", raw)
+	}
+	if _, ok := raw["reasoning"]; ok {
+		t.Fatalf("reasoning should be omitted when thinking is disabled for non-Codex model: %#v", raw["reasoning"])
 	}
 	if strings.TrimSpace(raw["prompt_cache_key"].(string)) == "" {
 		t.Fatalf("prompt_cache_key missing: %#v", raw)
@@ -123,11 +139,121 @@ func TestSubscriptionWebSearchUsesOAuthTransportAndExactRequestShape(t *testing.
 		strings.Contains(result, "Docs duplicate") {
 		t.Fatalf("result = %q, want Summary/Sources with deduped source", result)
 	}
-	if gotUsage.InputTokens != 13 || gotUsage.OutputTokens != 5 || gotUsage.CachedInputTokens != 2 {
-		t.Fatalf("usage = %+v, want parsed token usage", gotUsage)
+	if gotUsage.InputTokens != 13 || gotUsage.OutputTokens != 5 || gotUsage.CachedInputTokens != 2 || gotUsage.ThinkingTokens != 2 {
+		t.Fatalf("usage = %+v, want parsed token usage with reasoning tokens", gotUsage)
 	}
 	if gotUsage.StorageCost != 0 || gotUsage.WebSearchCalls != 0 {
 		t.Fatalf("usage = %+v, want no Platform API cost or Kimi-style web search fee", gotUsage)
+	}
+}
+
+func TestSubscriptionWebSearchAcceptsStreamingBodyWithoutContentType(t *testing.T) {
+	t.Setenv(subscriptionAuthDirEnv, t.TempDir())
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header()["Content-Type"] = nil
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`data: {"type":"response.created","response":{"id":"resp_search_no_content_type"}}`,
+			``,
+			`data: {"type":"response.web_search_call.in_progress","item_id":"ws_no_content_type"}`,
+			``,
+			`data: {"type":"response.output_text.delta","delta":"Subscription web search succeeded without a Content-Type header."}`,
+			``,
+			`data: {"type":"response.output_item.done","item":{"type":"web_search_call","id":"ws_no_content_type","status":"completed","action":{"sources":[{"title":"No header source","url":"https://docs.example.test/no-content-type"}]}}}`,
+			``,
+			`data: {"type":"response.completed","response":{"id":"resp_search_no_content_type"}}`,
+			``,
+			`data: [DONE]`,
+		}, "\n")))
+	})
+	t.Setenv(subscriptionEndpointEnv, server.URL)
+	if err := SaveSubscriptionCredential(DefaultSubscriptionAuthConfig(), SubscriptionCredential{
+		AccessToken:  "oauth-access-token",
+		RefreshToken: "oauth-refresh-token",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("SaveSubscriptionCredential() error = %v", err)
+	}
+
+	result, err := WebSearchWithContext(context.Background(), "OpenAI web_search without content type", "gpt-5.5")
+	if err != nil {
+		t.Fatalf("WebSearchWithContext() error = %v", err)
+	}
+	if !strings.Contains(result, "Subscription web search succeeded without a Content-Type header.") ||
+		!strings.Contains(result, "https://docs.example.test/no-content-type") {
+		t.Fatalf("result = %q, want parsed SSE body without Content-Type header", result)
+	}
+}
+
+func TestSubscriptionWebSearchEmptyBodyFailsRuntimeValidation(t *testing.T) {
+	t.Setenv(subscriptionAuthDirEnv, t.TempDir())
+
+	server := mockAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header()["Content-Type"] = nil
+		w.WriteHeader(http.StatusOK)
+	})
+	t.Setenv(subscriptionEndpointEnv, server.URL)
+	if err := SaveSubscriptionCredential(DefaultSubscriptionAuthConfig(), SubscriptionCredential{
+		AccessToken:  "oauth-access-token",
+		RefreshToken: "oauth-refresh-token",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("SaveSubscriptionCredential() error = %v", err)
+	}
+
+	_, err := WebSearchWithContext(context.Background(), "empty body", "gpt-5.5")
+	if err == nil || !strings.Contains(err.Error(), "web_search_call or source URL") {
+		t.Fatalf("WebSearchWithContext() error = %v, want empty body validation failure", err)
+	}
+}
+
+func TestSubscriptionWebSearchRequestInheritsThinkingPolicy(t *testing.T) {
+	tests := []struct {
+		name       string
+		model      string
+		configure  func(*config.Config)
+		wantEffort string
+	}{
+		{
+			name:  "thinking off omits reasoning for GPT",
+			model: "gpt-5.5",
+		},
+		{
+			name:  "thinking enabled sends selected effort",
+			model: "gpt-5.5",
+			configure: func(cfg *config.Config) {
+				cfg.Thinking.Enabled = true
+				cfg.Thinking.Level = "xhigh"
+			},
+			wantEffort: "xhigh",
+		},
+		{
+			name:       "Codex catalog fallback keeps low reasoning when thinking off",
+			model:      "gpt-5.3-codex-spark",
+			wantEffort: "low",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			if tt.configure != nil {
+				tt.configure(cfg)
+			}
+			req := buildSubscriptionWebSearchRequest(config.WithContext(context.Background(), cfg), "thinking inheritance query", tt.model)
+			if len(req.Input) != 1 || req.Input[0].Type != "message" || req.Input[0].Role != "user" {
+				t.Fatalf("Input = %#v, want one user message input item", req.Input)
+			}
+			if tt.wantEffort == "" {
+				if req.Reasoning != nil {
+					t.Fatalf("Reasoning = %#v, want omitted", req.Reasoning)
+				}
+				return
+			}
+			if req.Reasoning == nil || req.Reasoning.Effort != tt.wantEffort {
+				t.Fatalf("Reasoning = %#v, want effort %q", req.Reasoning, tt.wantEffort)
+			}
+		})
 	}
 }
 
