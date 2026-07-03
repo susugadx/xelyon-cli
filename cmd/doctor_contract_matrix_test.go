@@ -193,10 +193,10 @@ func doctorProviderContractMatrixEntries() []doctorProviderContractMatrixEntry {
 		{
 			provider:              "openai-subscription",
 			newCommand:            newOpenAISubscriptionDoctorCommand,
-			requiredFlags:         withCommonModel("tool-smoke", "retention-smoke", "cache-smoke", "compact-smoke", "thinking-smoke", "capabilities", "require-capability"),
-			forbiddenFlags:        []string{"deployment", "image-smoke", "web-search-smoke", "print-config"},
-			docsRow:               "| `openai-subscription` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke`, `--cache-smoke`, `--compact-smoke`, `--thinking-smoke` | `--capabilities`, `--require-capability` | `--print-request` | ChatGPT/Codex OAuth subscription endpoint; full-payload Responses-shaped runtime only | streaming usage when returned; cost is N/A (ChatGPT subscription) |",
-			capabilityContractRow: "| OpenAI Subscription | yes | yes | no | yes | no | no | config | no | no | no | no |",
+			requiredFlags:         withCommonModel("tool-smoke", "retention-smoke", "cache-smoke", "compact-smoke", "thinking-smoke", "web-search-smoke", "capabilities", "require-capability"),
+			forbiddenFlags:        []string{"deployment", "image-smoke", "print-config"},
+			docsRow:               "| `openai-subscription` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke`, `--cache-smoke`, `--compact-smoke`, `--thinking-smoke`, `--web-search-smoke` | `--capabilities`, `--require-capability` | `--print-request` | ChatGPT/Codex OAuth subscription endpoint; full-payload Responses-shaped runtime plus dedicated native web_search payload | streaming usage when returned; web search call count when observed; cost is N/A (ChatGPT subscription) |",
+			capabilityContractRow: "| OpenAI Subscription | yes | yes | no | yes | no | yes | config | no | no | no | no |",
 		},
 		{
 			provider:              "azure",

@@ -103,6 +103,7 @@ type OpenAISubscriptionOptions struct {
 	CacheSmoke     bool
 	CompactSmoke   bool
 	ThinkingSmoke  bool
+	WebSearchSmoke bool
 	SmokeOutput    io.Writer
 }
 

@@ -32,6 +32,7 @@ var (
 	doctorOpenAISubscriptionCacheSmokeFlag     bool
 	doctorOpenAISubscriptionCompactSmokeFlag   bool
 	doctorOpenAISubscriptionThinkingSmokeFlag  bool
+	doctorOpenAISubscriptionWebSearchSmokeFlag bool
 	doctorBedrockImageSmokeFlag                bool
 	doctorBedrockThinkingSmokeFlag             bool
 	doctorClaudeImageSmokeFlag                 bool
@@ -142,6 +143,7 @@ func (flags *doctorTestFlagSet) Set(name, value string) error {
 		doctorClaudeWebSearchSmokeFlag = true
 		doctorGeminiWebSearchSmokeFlag = true
 		doctorKimiWebSearchSmokeFlag = true
+		doctorOpenAISubscriptionWebSearchSmokeFlag = true
 		return setDoctorTestBool(value, &doctorClaudeWebSearchSmokeFlag)
 	case "connect":
 		return setDoctorTestBool(value, &doctorMCPConnectFlag)
@@ -218,6 +220,7 @@ func resetDoctorTestFlags() {
 	doctorOpenAISubscriptionCacheSmokeFlag = false
 	doctorOpenAISubscriptionCompactSmokeFlag = false
 	doctorOpenAISubscriptionThinkingSmokeFlag = false
+	doctorOpenAISubscriptionWebSearchSmokeFlag = false
 	doctorBedrockImageSmokeFlag = false
 	doctorBedrockThinkingSmokeFlag = false
 	doctorClaudeImageSmokeFlag = false
@@ -378,6 +381,7 @@ func runOpenAISubscriptionDoctorInvocation(cmd *doctorTestCommand, args []string
 		CacheSmoke:     doctorOpenAISubscriptionCacheSmokeFlag,
 		CompactSmoke:   doctorOpenAISubscriptionCompactSmokeFlag,
 		ThinkingSmoke:  doctorOpenAISubscriptionThinkingSmokeFlag,
+		WebSearchSmoke: doctorOpenAISubscriptionWebSearchSmokeFlag,
 		SmokeOutput:    cmd.out,
 	})
 	return applyDoctorTestResult(cmd, silenceUsage, err)

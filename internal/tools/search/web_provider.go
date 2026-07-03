@@ -16,19 +16,19 @@ type webSearchModelResolution struct {
 func resolveSearchProvider(cfg *config.Config, mainProvider, mainProviderConfigKey string) string {
 	if cfg != nil {
 		provider := normalizeProviderName(cfg.WebSearch.Provider)
-		if isNativeSearchProvider(provider) {
-			return provider
+		if resolved := resolveNativeSearchProviderKey(provider); resolved != "" {
+			return resolved
 		}
 	}
 
 	provider := normalizeProviderName(mainProviderConfigKey)
-	if isNativeSearchProvider(provider) {
-		return provider
+	if resolved := resolveNativeSearchProviderKey(provider); resolved != "" {
+		return resolved
 	}
 
 	provider = normalizeProviderName(mainProvider)
-	if isNativeSearchProvider(provider) {
-		return provider
+	if resolved := resolveNativeSearchProviderKey(provider); resolved != "" {
+		return resolved
 	}
 
 	return ""
@@ -79,9 +79,18 @@ func webSearchOwnerLabel(provider string, model webSearchModelResolution) string
 	return label
 }
 
-func isNativeSearchProvider(provider string) bool {
+func resolveNativeSearchProviderKey(provider string) string {
+	if provider == "" {
+		return ""
+	}
 	entry, ok := llmcatalog.ProviderDescriptorFor(provider)
-	return ok && entry.NativeWebSearch
+	if !ok || !entry.NativeWebSearch {
+		return ""
+	}
+	if entry.Key == "openai_subscription" {
+		return entry.Key
+	}
+	return provider
 }
 
 func webSearchProviderError() string {

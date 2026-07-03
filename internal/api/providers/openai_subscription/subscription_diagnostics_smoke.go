@@ -94,6 +94,15 @@ func runSubscriptionDiagnosticSmoke(ctx context.Context, cfg *config.Config, rep
 	result := SubscriptionDiagnosticSmokeResult{Ran: true}
 	started := time.Now()
 	for _, request := range subscriptionDiagnosticSmokeRequests(options) {
+		if request.WebSearchPayload {
+			requestResult, err := runSubscriptionDiagnosticWebSearchSmokeRequest(smokeCtx, provider, report, request)
+			subscriptionDiagnosticAddSmokeRequest(&result, requestResult)
+			if err != nil {
+				result.Duration = time.Since(started).Round(time.Millisecond).String()
+				return result, err
+			}
+			continue
+		}
 		if request.CompactPayload {
 			requestResult, err := runSubscriptionDiagnosticCompactSmokeRequest(smokeCtx, provider, report, request)
 			subscriptionDiagnosticAddSmokeRequest(&result, requestResult)
@@ -271,7 +280,7 @@ func observeSubscriptionDiagnosticResponsesRequests(provider *SubscriptionProvid
 }
 
 func subscriptionDiagnosticSmokeRequests(options SubscriptionDiagnosticOptions) []subscriptionDiagnosticSmokeRequest {
-	textSmoke := options.TextSmoke || (!options.ToolSmoke && !options.RetentionSmoke && !options.CacheSmoke && !options.CompactSmoke && !options.ThinkingSmoke)
+	textSmoke := options.TextSmoke || (!options.ToolSmoke && !options.RetentionSmoke && !options.CacheSmoke && !options.CompactSmoke && !options.ThinkingSmoke && !options.WebSearchSmoke)
 	var requests []subscriptionDiagnosticSmokeRequest
 	if textSmoke {
 		requests = append(requests, subscriptionDiagnosticSmokeRequest{Name: "text", SystemPrompt: "Reply briefly.", UserContent: "Reply with: xelyon openai subscription doctor ok"})
@@ -290,6 +299,9 @@ func subscriptionDiagnosticSmokeRequests(options SubscriptionDiagnosticOptions) 
 	}
 	if options.CompactSmoke {
 		requests = append(requests, subscriptionDiagnosticSmokeRequest{Name: "compact", CompactPayload: true})
+	}
+	if options.WebSearchSmoke {
+		requests = append(requests, subscriptionDiagnosticSmokeRequest{Name: "web_search", UserContent: "xelyon openai subscription native web search smoke", WebSearchPayload: true})
 	}
 	return requests
 }
@@ -452,6 +464,10 @@ func subscriptionDiagnosticAddSmokeRequest(result *SubscriptionDiagnosticSmokeRe
 	}
 	if request.CompactPayload {
 		result.CompactPayload = true
+	}
+	if request.WebSearchPayload {
+		result.WebSearchPayload = true
+		result.WebSearchCallCount += request.WebSearchCallCount
 	}
 	if request.Content != "" {
 		result.Content = request.Content

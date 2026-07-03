@@ -2,6 +2,7 @@ package llmcatalog
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -262,10 +263,24 @@ func TestProviderDescriptorFor_GeminiUsesStableHelperModels(t *testing.T) {
 	}
 }
 
-func TestNativeWebSearchProviderKeys_IncludesKimiAndMoonshotAlias(t *testing.T) {
+func TestNativeWebSearchProviderKeys_ExposesCanonicalSubscriptionOnly(t *testing.T) {
 	got := NativeWebSearchProviderKeys(true)
-	want := []string{"kimi", "moonshot", "openai", "gemini", "claude", "anthropic"}
+	want := []string{"kimi", "moonshot", "openai", "openai_subscription", "gemini", "claude", "anthropic"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("NativeWebSearchProviderKeys(true) = %v, want %v", got, want)
+	}
+}
+
+func TestNativeWebSearchProviderKeys_HidesSubscriptionAliasesButKeepsOtherAliases(t *testing.T) {
+	got := NativeWebSearchProviderKeys(true)
+	for _, want := range []string{"moonshot", "anthropic", "openai_subscription"} {
+		if !slices.Contains(got, want) {
+			t.Fatalf("NativeWebSearchProviderKeys(true) = %v, want %q", got, want)
+		}
+	}
+	for _, hidden := range []string{"chatgpt", "openai-subscription", "codex-subscription"} {
+		if slices.Contains(got, hidden) {
+			t.Fatalf("NativeWebSearchProviderKeys(true) = %v, must not expose subscription alias %q", got, hidden)
+		}
 	}
 }

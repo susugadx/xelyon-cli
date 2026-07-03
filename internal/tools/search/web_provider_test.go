@@ -21,13 +21,20 @@ func TestResolveSearchProvider(t *testing.T) {
 		{name: "config claude wins", configProvider: "claude", mainProvider: "openai", want: "claude"},
 		{name: "config kimi wins", configProvider: "kimi", mainProvider: "deepseek", want: "kimi"},
 		{name: "config moonshot wins", configProvider: "moonshot", mainProvider: "deepseek", want: "moonshot"},
+		{name: "config openai_subscription wins", configProvider: "openai_subscription", mainProvider: "deepseek", want: "openai_subscription"},
+		{name: "config chatgpt alias canonicalizes", configProvider: "chatgpt", mainProvider: "deepseek", want: "openai_subscription"},
+		{name: "config dashed subscription alias canonicalizes", configProvider: "openai-subscription", mainProvider: "deepseek", want: "openai_subscription"},
+		{name: "config codex subscription alias canonicalizes", configProvider: "codex-subscription", mainProvider: "deepseek", want: "openai_subscription"},
 
 		// config未設定 → exact owner key を優先
 		{name: "session owner anthropic wins over canonical claude runtime", configProvider: "", mainProvider: "claude", mainProviderOwner: "anthropic", want: "anthropic"},
 		{name: "session owner moonshot wins over canonical kimi runtime", configProvider: "", mainProvider: "kimi", mainProviderOwner: "moonshot", want: "moonshot"},
+		{name: "session owner chatgpt canonicalizes before registry", configProvider: "", mainProvider: "openai_subscription", mainProviderOwner: "chatgpt", want: "openai_subscription"},
 
 		// config未設定 → main provider
 		{name: "fallback to openai main provider", configProvider: "", mainProvider: "openai", want: "openai"},
+		{name: "fallback to openai_subscription main provider", configProvider: "", mainProvider: "openai_subscription", want: "openai_subscription"},
+		{name: "fallback to chatgpt main provider alias canonicalizes", configProvider: "", mainProvider: "chatgpt", want: "openai_subscription"},
 		{name: "fallback to gemini main provider", configProvider: "", mainProvider: "gemini", want: "gemini"},
 		{name: "fallback to claude main provider", configProvider: "", mainProvider: "claude", want: "claude"},
 		{name: "fallback to anthropic main provider", configProvider: "", mainProvider: "anthropic", want: "anthropic"},

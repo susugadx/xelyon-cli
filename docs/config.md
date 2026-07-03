@@ -278,9 +278,9 @@ output:
 # ============================================================
 # ネイティブ Web 検索の実行プロバイダーとキャッシュ設定
 # 未設定の場合はメインプロバイダーの検索を使用
-# メインが非対応の場合は kimi / moonshot / openai / gemini / claude / anthropic のいずれかを設定
+# メインが非対応の場合は kimi / moonshot / openai / openai_subscription / gemini / claude / anthropic のいずれかを設定
 web_search:
-    # 検索プロバイダー（kimi / moonshot / openai / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）
+    # 検索プロバイダー（kimi / moonshot / openai / openai_subscription / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）
     provider: gemini
     # キャッシュを有効化（デフォルト: true）
     cache_enabled: true
@@ -860,19 +860,19 @@ export GROQ_API_KEY=gsk_...
 
 ### Web検索
 
-`web_search` は Kimi / OpenAI / Gemini / Claude のネイティブ検索を使います。
+`web_search` は Kimi / OpenAI / OpenAI Subscription / Gemini / Claude のネイティブ検索を使います。
 
-- **`web_search.provider` 未設定**: メインプロバイダーが Kimi / OpenAI / Gemini / Claude の場合、そのままネイティブ検索を使用
+- **`web_search.provider` 未設定**: メインプロバイダーが Kimi / OpenAI / OpenAI Subscription / Gemini / Claude の場合、そのままネイティブ検索を使用
 - **`web_search.provider` 設定あり**: 指定した検索プロバイダーを使用
 - **メインが非対応**: DeepSeek / OpenRouter / Groq / Ollama / Bedrock などでは `web_search.provider` の設定が必要
 
-Gemini native web search は API の `usageMetadata` が返る場合、通常の token usage / cost として表示します。Kimi を使う場合は Moonshot Chat Completions の built-in `$web_search` を text-only の検索 route として使います。検索 request では `thinking: {"type":"disabled"}` を送信し、通常 function tools / 画像 / video / file upload とは混ぜません。K2.7 Code は thinking を無効化できないため、K2.7 Code 選択中の Kimi built-in `$web_search` は検索 request だけ `kimi-k2.6` に自動 fallback し、usage / cost / 実行ログも `kimi-k2.6` として記録します。Moonshot は `$web_search` call fee と token 使用量を別々に課金します。XELYON は API が返す token usage と `cached_tokens` を token cost の source of truth とし、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を外部固定費として別枠で観測します。call fee は `finish_reason = "tool_calls"` で `tool_call.function.name = "$web_search"` が返った場合だけ観測し、`finish_reason = "stop"` で tool call がない response には加算しません。検索結果 tokens は次 request の `prompt_tokens` に含まれるため、表示用に観測しても token totals へは二重加算しません。
+Gemini native web search は API の `usageMetadata` が返る場合、通常の token usage / cost として表示します。OpenAI Subscription を使う場合は ChatGPT/Codex OAuth の subscription endpoint に `tools: [{"type":"web_search"}]` / `tool_choice: "required"` の dedicated Responses-shaped payload を送り、`OPENAI_API_KEY` には fallback しません。Kimi を使う場合は Moonshot Chat Completions の built-in `$web_search` を text-only の検索 route として使います。検索 request では `thinking: {"type":"disabled"}` を送信し、通常 function tools / 画像 / video / file upload とは混ぜません。K2.7 Code は thinking を無効化できないため、K2.7 Code 選択中の Kimi built-in `$web_search` は検索 request だけ `kimi-k2.6` に自動 fallback し、usage / cost / 実行ログも `kimi-k2.6` として記録します。Moonshot は `$web_search` call fee と token 使用量を別々に課金します。XELYON は API が返す token usage と `cached_tokens` を token cost の source of truth とし、[Kimi API Platform WebSearch Pricing](https://platform.moonshot.ai/docs/pricing/tools.en-US) の `$0.005 / invocation` を外部固定費として別枠で観測します。call fee は `finish_reason = "tool_calls"` で `tool_call.function.name = "$web_search"` が返った場合だけ観測し、`finish_reason = "stop"` で tool call がない response には加算しません。検索結果 tokens は次 request の `prompt_tokens` に含まれるため、表示用に観測しても token totals へは二重加算しません。
 
 #### 設定例
 
 ```yaml
 web_search:
-  provider: kimi
+  provider: openai_subscription
 ```
 
 #### 必要なAPIキー
@@ -882,6 +882,9 @@ web_search:
 ```bash
 # OpenAI を検索に使う場合
 export OPENAI_API_KEY=sk-...
+
+# OpenAI Subscription を検索に使う場合
+xelyon auth openai-subscription login
 
 # Kimi / Moonshot を検索に使う場合
 export MOONSHOT_API_KEY=sk-...
@@ -910,7 +913,7 @@ xelyon
 > 最新のGo言語の情報を検索して
 ```
 
-メインプロバイダーが Kimi / OpenAI / Gemini / Claude の場合は、`web_search.provider` を省略するとそのままネイティブ検索を使用します。
+メインプロバイダーが Kimi / OpenAI / OpenAI Subscription / Gemini / Claude の場合は、`web_search.provider` を省略するとそのままネイティブ検索を使用します。
 
 ### プロバイダー・モデル指定
 

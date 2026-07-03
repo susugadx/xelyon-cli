@@ -109,6 +109,73 @@ func TestSearchWebReportsResolvedUsageAttributionAndLegacyCallback(t *testing.T)
 	}
 }
 
+func TestSearchWebCanonicalizesOpenAISubscriptionAliasBeforeUsageAndCacheOwners(t *testing.T) {
+	resetWebSearchCacheForTest()
+	query := "subscription alias owner query"
+	calls := 0
+	websearch.RegisterWithContextForTest(t, "openai_subscription", func(ctx context.Context, gotQuery, model string) (string, error) {
+		calls++
+		if gotQuery != query {
+			t.Fatalf("query = %q, want %q", gotQuery, query)
+		}
+		if model != "gpt-5.5" {
+			t.Fatalf("model = %q, want configured subscription model", model)
+		}
+		callback := websearch.UsageCallbackFromContext(ctx)
+		if callback == nil {
+			t.Fatal("UsageCallbackFromContext() = nil, want callback")
+		}
+		callback(api.Usage{InputTokens: 31, OutputTokens: 9})
+		return "Summary:\nsubscription result\n\nSources:\n\n1. Docs\n   URL: https://docs.example.test/subscription", nil
+	})
+	cfg := config.DefaultConfig()
+	cfg.WebSearch.Provider = "chatgpt"
+	cfg.WebSearch.CacheEnabled = true
+	cfg.SetProviderModelConfig("openai_subscription", config.ProviderModelConfig{DefaultModel: "gpt-5.5"})
+
+	var attributedProvider string
+	var attributedModel string
+	var attributedUsage api.Usage
+	first, err := SearchWeb(context.Background(), WebSearchRequest{
+		Config:       cfg,
+		MainProvider: "deepseek",
+		Query:        query,
+		UsageAttribution: func(provider, model string, usage api.Usage) {
+			attributedProvider = provider
+			attributedModel = model
+			attributedUsage = usage
+		},
+	})
+	if err != nil {
+		t.Fatalf("first SearchWeb() error = %v", err)
+	}
+	if first.Provider != "openai_subscription" || first.Model != "gpt-5.5" {
+		t.Fatalf("first provider/model = %s/%s, want openai_subscription/gpt-5.5", first.Provider, first.Model)
+	}
+	if attributedProvider != "openai_subscription" || attributedModel != "gpt-5.5" {
+		t.Fatalf("usage owner = %s/%s, want openai_subscription/gpt-5.5", attributedProvider, attributedModel)
+	}
+	if attributedUsage.InputTokens != 31 || attributedUsage.OutputTokens != 9 {
+		t.Fatalf("usage = %+v, want subscription token usage", attributedUsage)
+	}
+
+	cfg.WebSearch.Provider = "openai_subscription"
+	second, err := SearchWeb(context.Background(), WebSearchRequest{
+		Config:       cfg,
+		MainProvider: "deepseek",
+		Query:        query,
+	})
+	if err != nil {
+		t.Fatalf("second SearchWeb() error = %v", err)
+	}
+	if !second.Cached {
+		t.Fatal("second.Cached = false, want canonical cache hit")
+	}
+	if calls != 1 {
+		t.Fatalf("calls = %d, want alias/canonical cache owner to be shared", calls)
+	}
+}
+
 func TestSearchWeb_KimiK27FallsBackToK26ForUsageAttribution(t *testing.T) {
 	resetWebSearchCacheForTest()
 	query := "noninteractive kimi k2.7 fallback"

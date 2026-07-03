@@ -20,7 +20,7 @@ XELYON CLIで使用できる全コマンドのリファレンスです。
 | `ollama` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `OLLAMA_BASE_URL` is a base URL; concrete `/api/chat` or `/api/tags` endpoints fail | local zero-cost token usage when returned |
 | `openrouter` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `OPENROUTER_API_URL` is Chat Completions / proxy; Anthropic Skin `/v1/messages` is derived | selected route token usage and cost when returned |
 | `openai` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke` | `--capabilities`, `--require-capability` | `--print-request` | `OPENAI_API_URL` is Chat Completions; `OPENAI_RESPONSES_URL` is Responses | response ID, token usage, cost, and retention chain metadata when returned |
-| `openai-subscription` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke`, `--cache-smoke`, `--compact-smoke`, `--thinking-smoke` | `--capabilities`, `--require-capability` | `--print-request` | ChatGPT/Codex OAuth subscription endpoint; full-payload Responses-shaped runtime only | streaming usage when returned; cost is N/A (ChatGPT subscription) |
+| `openai-subscription` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke`, `--cache-smoke`, `--compact-smoke`, `--thinking-smoke`, `--web-search-smoke` | `--capabilities`, `--require-capability` | `--print-request` | ChatGPT/Codex OAuth subscription endpoint; full-payload Responses-shaped runtime plus dedicated native web_search payload | streaming usage when returned; web search call count when observed; cost is N/A (ChatGPT subscription) |
 | `azure` | `--deployment`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--retention-smoke` | `--capabilities`, `--require-capability`, `--print-config` | `--print-request` | `AZURE_OPENAI_BASE_URL` is a resource v1 base URL; smoke uses `<normalized_base_url>/responses` | response ID, token usage, cost, and retention chain metadata when returned |
 | `bedrock` | `--model`, `--catalog-model` | `--smoke`, `--tool-smoke`, `--image-smoke`, `--thinking-smoke` | `--capabilities`, `--require-capability` | `--print-request` | AWS region / credentials select Bedrock runtime route; request preview is credential-independent | AWS request ID, token usage, and cost when returned; partial usage makes total cost unavailable |
 
@@ -231,27 +231,29 @@ xelyon doctor openai --json
 
 ### `xelyon doctor openai-subscription`
 
-OpenAI Subscription provider の local auth、endpoint、originator、provider 登録、model / `catalog_model` 解決、billing / cost、v2 full-payload runtime policy を確認します。default doctor は local-only で、token refresh や live request は行いません。`--capabilities` は Responses streaming / function calling / thinking / unsupported chain capability を live request なしで表示し、`--require-capability` は shared capability 名を local gate として評価します。
+OpenAI Subscription provider の local auth、endpoint、originator、provider 登録、model / `catalog_model` 解決、billing / cost、v2 full-payload runtime policy、native web search capability を確認します。default doctor は local-only で、token refresh や live request は行いません。`--capabilities` は Responses streaming / function calling / native web search / thinking / unsupported chain capability を live request なしで表示し、`--require-capability` は shared capability 名を local gate として評価します。
 
-この provider は ChatGPT/Codex OAuth を使う experimental provider で、OpenAI Platform API key provider ではありません。`OPENAI_API_KEY`、OpenCode auth cache、Codex auth cache は使いません。runtime は `store=false` / full payload / `prompt_cache_key` / streaming / tool loop / subscription Compact API で動作し、`previous_response_id` と `context_management` は expected unsupported / disabled として表示します。cost は `N/A (ChatGPT subscription)` です。
+この provider は ChatGPT/Codex OAuth を使う experimental provider で、OpenAI Platform API key provider ではありません。`OPENAI_API_KEY`、OpenCode auth cache、Codex auth cache は使いません。runtime は `store=false` / full payload / `prompt_cache_key` / streaming / tool loop / subscription Compact API で動作し、`previous_response_id` と `context_management` は expected unsupported / disabled として表示します。native web search は通常 tool loop とは別に `tools: [{"type":"web_search"}]` / `tool_choice: "required"` の dedicated Responses-shaped payload を送ります。cost は `N/A (ChatGPT subscription)` です。
 
 ```bash
 xelyon doctor openai-subscription
 xelyon doctor openai-subscription --model gpt-5.4-mini
 xelyon doctor openai-subscription --capabilities
-xelyon doctor openai-subscription --require-capability responses_streaming --require-capability function_calling
+xelyon doctor openai-subscription --require-capability responses_streaming --require-capability function_calling --require-capability web_search
 xelyon doctor openai-subscription --print-request
 xelyon doctor openai-subscription --tool-smoke --print-request
+xelyon doctor openai-subscription --web-search-smoke --print-request
 xelyon doctor openai-subscription --smoke
 xelyon doctor openai-subscription --cache-smoke
 xelyon doctor openai-subscription --compact-smoke
 xelyon doctor openai-subscription --thinking-smoke
+xelyon doctor openai-subscription --web-search-smoke
 xelyon doctor openai-subscription --retention-smoke
 xelyon doctor openai-subscription --tool-smoke
 xelyon doctor openai-subscription --json
 ```
 
-`--smoke` / `--tool-smoke` / `--cache-smoke` / `--thinking-smoke` は live subscription request を送ります。`--compact-smoke` は既定で live verified された subscription Compact endpoint（`https://chatgpt.com/backend-api/codex/responses/compact`）を検証します。`XELYON_OPENAI_SUBSCRIPTION_COMPACT_ENDPOINT` で検証先を差し替えられ、空文字に明示設定した場合は WARN skip し、runtime の `/compress --compact` も unsupported 扱いになります。`openai_subscription` の `/compress --compact` と `compression.prefer_compact_api` はこの subscription Compact endpoint を使い、OpenAI Platform Compact API や `OPENAI_API_KEY` には fallback しません。unsupported は basic provider failure ではなく WARN です。`--retention-smoke` は v2 runtime が chain を使わず full payload fallback を維持していることを確認します。`--print-request` は live request を送らず、Authorization、account ID、token-like strings、raw prompt body を出さない structural preview を表示します。
+`--smoke` / `--tool-smoke` / `--cache-smoke` / `--thinking-smoke` / `--web-search-smoke` は live subscription request を送ります。`--web-search-smoke` は `web_search_call` が 1 件以上観測され、summary または source URL が返った場合だけ成功扱いにします。`--compact-smoke` は既定で live verified された subscription Compact endpoint（`https://chatgpt.com/backend-api/codex/responses/compact`）を検証します。`XELYON_OPENAI_SUBSCRIPTION_COMPACT_ENDPOINT` で検証先を差し替えられ、空文字に明示設定した場合は WARN skip し、runtime の `/compress --compact` も unsupported 扱いになります。`openai_subscription` の `/compress --compact` と `compression.prefer_compact_api` はこの subscription Compact endpoint を使い、OpenAI Platform Compact API や `OPENAI_API_KEY` には fallback しません。unsupported は basic provider failure ではなく WARN です。`--retention-smoke` は v2 runtime が chain を使わず full payload fallback を維持していることを確認します。`--print-request` は live request を送らず、Authorization、account ID、token-like strings、raw prompt body、raw web search query を出さない structural preview を表示します。
 
 ### `xelyon doctor azure`
 
@@ -913,8 +915,8 @@ bash: git checkout -b feature-branch
 |---------|------|---------|
 | `gather_context` | 既定の調査入口。symbol-like query では structured impact route を試し、`search_code(intent=impact)` が返す `RecommendedReads` を compact evidence として prefetch する。diagnostics の `resolved_by` / `confidence` / `truncated` / `budget_limit_hit` に応じて prefetch 件数を絞り、ambiguous の場合は speculative prefetch しない | `query`, `path`, `file_filter` |
 | `search_code` | 低レベルの expert 検索ツール。通常は `gather_context` を優先し、明示的に search route を制御したい場合だけ使う。`mode=auto` は symbol-aware / literal / regex を language-aware に routing する。`intent=impact` は shared-change impact analysis の入口で、Go、TypeScript `.ts` / `.d.ts`、対象を絞った TSX `.tsx`、JavaScript `.js` / JSX `.jsx` で構造化 impact を優先する。`file_filter=typescript` / `javascript` は broad fallback scope で、targeted structured impact には `ts` / `tsx` / `js` / `jsx` や direct path / glob を使う。結果の diagnostics summary で `resolved_by`、`confidence`、fallback / truncation / budget 状態を確認できる | `pattern`, `intent`, `mode`, `path`, `file_filter` 等 |
-| `web_search` | ネイティブWeb検索（`web_search.provider` で Kimi / OpenAI / Gemini / Claude を選択可能） | `query` |
-**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。メインプロバイダーが Kimi の場合は provider 指定なしで Moonshot built-in `$web_search` を使います。K2.7 Code 選択中の Kimi built-in `$web_search` は検索 request だけ `kimi-k2.6` に fallback し、usage / cost / 実行ログも `kimi-k2.6` として扱います。Kimi で `$web_search` が起動すると call fee が発生し、XELYON は token usage と別枠で観測します。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
+| `web_search` | ネイティブWeb検索（`web_search.provider` で Kimi / OpenAI / OpenAI Subscription / Gemini / Claude を選択可能） | `query` |
+**注意**: メインプロバイダーがネイティブ検索非対応（DeepSeek / Groq / Ollama / OpenRouter / Bedrock など）の場合は、`config.yaml` で `web_search.provider` を設定してください。メインプロバイダーが Kimi の場合は provider 指定なしで Moonshot built-in `$web_search` を使います。OpenAI Subscription は `xelyon auth openai-subscription login` の OAuth credential を使い、`OPENAI_API_KEY` には fallback しません。K2.7 Code 選択中の Kimi built-in `$web_search` は検索 request だけ `kimi-k2.6` に fallback し、usage / cost / 実行ログも `kimi-k2.6` として扱います。Kimi で `$web_search` が起動すると call fee が発生し、XELYON は token usage と別枠で観測します。詳細は[config.md - Web検索](config.md#web検索)を参照してください。
 
 ### 開発支援
 
@@ -1095,7 +1097,7 @@ xelyon --headless --prompt-file review-prompt.md --exit-code-policy ci --fail-on
 
 `summary` は runtime observation がある場合だけ出ます。`summary.changed_files` は tool の `FileChange` を task ledger で repo-relative に正規化したものです。`summary.commands` は bash tool で実行したコマンドの `command`、`exit_code`、`status`、`source:"tool"` を出します。`summary.final_checks` は変更ファイルがある headless 実行で `final_checks.commands` が設定されている場合に実行され、`command`、`exit_code`、`status` を出します。コマンド出力本文は JSON summary には入れません。final check が失敗した場合は `status:"error"`、`error.type:"final_check_failed"`、`failure_reason:"final_check_failed"` になります。
 
-Gemini native web search の `usageMetadata` は通常の token usage として `tokens` / `cost` に含まれます。Kimi `$web_search` を使った場合、既存の `cost` は token cost + web search call fee の合計を維持し、`web_search` object に `calls`、`fee_estimate`、`result_tokens` を分けて出します。検索結果 tokens は次 request の `prompt_tokens` に含まれる前提の表示用観測値で、headless JSON の token totals には再加算しません。
+Gemini / OpenAI Subscription native web search の token usage は、provider が usage を返した場合に通常の token usage として `tokens` / `cost` に含まれます。OpenAI Subscription の cost は ChatGPT subscription 扱いのため `pricing_unavailable` のままです。Kimi `$web_search` を使った場合、既存の `cost` は token cost + web search call fee の合計を維持し、`web_search` object に `calls`、`fee_estimate`、`result_tokens` を分けて出します。検索結果 tokens は次 request の `prompt_tokens` に含まれる前提の表示用観測値で、headless JSON の token totals には再加算しません。
 
 #### Read-only / dry-run contract
 
