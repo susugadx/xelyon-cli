@@ -288,7 +288,7 @@ type ThinkingConfig struct {
 
 // WebSearchConfig は Web 検索プロバイダーとキャッシュの設定
 type WebSearchConfig struct {
-	Provider     string `yaml:"provider,omitempty"` // 検索プロバイダー（openai/gemini/claude、未設定時はメインプロバイダーを使用）
+	Provider     string `yaml:"provider,omitempty"` // 検索プロバイダー（kimi / moonshot / openai / openai_subscription / gemini / claude / anthropic、未設定時はメインプロバイダーを使用）
 	CacheEnabled bool   `yaml:"cache_enabled"`      // キャッシュを有効化（デフォルト: true）
 	CacheTTL     int    `yaml:"cache_ttl"`          // キャッシュTTL秒数（デフォルト: 3600 = 1時間）
 	CacheSize    int    `yaml:"cache_size"`         // 最大キャッシュ数（デフォルト: 50）

@@ -242,10 +242,13 @@ runtime は v2 full payload mode 固定です。
 - full provider-facing payload replay
 - XELYON tool loop / function_call / function_call_output continuation
 - subscription Compact API for `/compress --compact` / auto-compress when the compact endpoint is configured
+- native web search via a dedicated `tools: [{"type":"web_search"}]` / `tool_choice: "required"` Responses-shaped payload
 
 2026-06-08 時点の live smoke では、subscription endpoint は `store=true` を `Store must be set to false` として拒否し、`previous_response_id` を `Unsupported parameter: previous_response_id` として拒否しました。`max_output_tokens` も `Unsupported parameter: max_output_tokens` として拒否されたため、`openai_subscription` は provider config に値があっても request には送りません。
 
 `store=true` / `previous_response_id` / server-side `context_management` chain は subscription endpoint では使いません。これは壊れた install ではなく expected v2 behavior です。OpenAI API provider と同等の server-side response chain optimization は主張せず、XELYON の provider-facing history reduction、stable prefix、`prompt_cache_key`、subscription Compact endpoint を主な最適化として使います。
+
+native web search は通常 conversation request / tool loop とは別 route として扱い、`input` と `instructions` に検索 query を入れ、`stream: true`、`store: false`、`prompt_cache_key` を送ります。`previous_response_id`、`context_management`、`prompt_cache_retention`、`max_output_tokens`、`include`、`web_search_preview` は送りません。検索結果の token usage が返った場合は通常 token usage として観測しますが、OpenAI Platform API cost や Kimi-style call fee には換算しません。`web_search.provider: openai_subscription` は ChatGPT/Codex OAuth を使い、`OPENAI_API_KEY` へ fallback しません。
 
 request は `originator: xelyon` と `xelyon/<version>` User-Agent で XELYON として識別されます。OpenCode や official Codex CLI を偽装せず、`originator=opencode` / `originator=codex_cli_rs` への fallback も行いません。
 
@@ -262,15 +265,17 @@ xelyon doctor openai-subscription --smoke
 xelyon doctor openai-subscription --cache-smoke
 xelyon doctor openai-subscription --compact-smoke
 xelyon doctor openai-subscription --thinking-smoke
+xelyon doctor openai-subscription --web-search-smoke
 xelyon doctor openai-subscription --retention-smoke
 xelyon doctor openai-subscription --tool-smoke
+xelyon doctor openai-subscription --web-search-smoke --print-request
 xelyon doctor openai-subscription --print-request
 xelyon doctor openai-subscription --json
 
 xelyon --provider openai_subscription --model gpt-5.5 "hello"
 ```
 
-`--smoke` / `--tool-smoke` / `--cache-smoke` / `--thinking-smoke` は live request を送ります。`--compact-smoke` は既定で live verified された subscription Compact endpoint（`https://chatgpt.com/backend-api/codex/responses/compact`）へ OAuth request を送ります。これは OpenAI Platform API endpoint ではなく ChatGPT/Codex subscription backend の endpoint です。`XELYON_OPENAI_SUBSCRIPTION_COMPACT_ENDPOINT` で検証先を差し替えられ、空文字に明示設定した場合は compact smoke を WARN skip し、runtime の `/compress --compact` も unsupported 扱いになります。`openai_subscription` の `/compress --compact` と `compression.prefer_compact_api` はこの subscription Compact endpoint を使い、OpenAI Platform Compact API や `OPENAI_API_KEY` には fallback しません。unsupported は basic provider failure ではなく WARN として扱います。設定と request shape だけを見る場合は `doctor openai-subscription --print-request` を使ってください。
+`--smoke` / `--tool-smoke` / `--cache-smoke` / `--thinking-smoke` / `--web-search-smoke` は live request を送ります。`--web-search-smoke` は `web_search_call` が 1 件以上観測され、summary または source URL が返った場合だけ成功扱いにします。`--compact-smoke` は既定で live verified された subscription Compact endpoint（`https://chatgpt.com/backend-api/codex/responses/compact`）へ OAuth request を送ります。これは OpenAI Platform API endpoint ではなく ChatGPT/Codex subscription backend の endpoint です。`XELYON_OPENAI_SUBSCRIPTION_COMPACT_ENDPOINT` で検証先を差し替えられ、空文字に明示設定した場合は compact smoke を WARN skip し、runtime の `/compress --compact` も unsupported 扱いになります。`openai_subscription` の `/compress --compact` と `compression.prefer_compact_api` はこの subscription Compact endpoint を使い、OpenAI Platform Compact API や `OPENAI_API_KEY` には fallback しません。unsupported は basic provider failure ではなく WARN として扱います。設定と request shape だけを見る場合は `doctor openai-subscription --print-request` を使ってください。
 
 ### 4. Azure OpenAI
 

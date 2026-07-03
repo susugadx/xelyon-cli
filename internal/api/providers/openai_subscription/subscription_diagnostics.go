@@ -30,6 +30,7 @@ type SubscriptionDiagnosticOptions struct {
 	CacheSmoke           bool
 	CompactSmoke         bool
 	ThinkingSmoke        bool
+	WebSearchSmoke       bool
 	Capabilities         bool
 	RequiredCapabilities []string
 	PrintRequest         bool
@@ -93,6 +94,7 @@ type SubscriptionDiagnosticRequestPreviewRequest struct {
 	CachePayload     bool              `json:"cache_payload"`
 	ThinkingPayload  bool              `json:"thinking_payload"`
 	CompactPayload   bool              `json:"compact_payload"`
+	WebSearchPayload bool              `json:"web_search_payload"`
 	Route            string            `json:"route"`
 	Method           string            `json:"method,omitempty"`
 	URL              string            `json:"url,omitempty"`
@@ -103,38 +105,42 @@ type SubscriptionDiagnosticRequestPreviewRequest struct {
 }
 
 type SubscriptionDiagnosticSmokeResult struct {
-	Ran              bool                                       `json:"ran"`
-	ToolPayload      bool                                       `json:"tool_payload"`
-	RetentionPayload bool                                       `json:"retention_payload"`
-	CachePayload     bool                                       `json:"cache_payload"`
-	ThinkingPayload  bool                                       `json:"thinking_payload"`
-	CompactPayload   bool                                       `json:"compact_payload"`
-	Route            string                                     `json:"route"`
-	Content          string                                     `json:"content,omitempty"`
-	Duration         string                                     `json:"duration,omitempty"`
-	UsageObserved    bool                                       `json:"usage_observed"`
-	Usage            providerdiag.SmokeUsage                    `json:"usage"`
-	Cost             providerdiag.SmokeCost                     `json:"cost"`
-	Requests         []SubscriptionDiagnosticSmokeRequestResult `json:"requests,omitempty"`
+	Ran                bool                                       `json:"ran"`
+	ToolPayload        bool                                       `json:"tool_payload"`
+	RetentionPayload   bool                                       `json:"retention_payload"`
+	CachePayload       bool                                       `json:"cache_payload"`
+	ThinkingPayload    bool                                       `json:"thinking_payload"`
+	CompactPayload     bool                                       `json:"compact_payload"`
+	WebSearchPayload   bool                                       `json:"web_search_payload"`
+	WebSearchCallCount int                                        `json:"web_search_call_count,omitempty"`
+	Route              string                                     `json:"route"`
+	Content            string                                     `json:"content,omitempty"`
+	Duration           string                                     `json:"duration,omitempty"`
+	UsageObserved      bool                                       `json:"usage_observed"`
+	Usage              providerdiag.SmokeUsage                    `json:"usage"`
+	Cost               providerdiag.SmokeCost                     `json:"cost"`
+	Requests           []SubscriptionDiagnosticSmokeRequestResult `json:"requests,omitempty"`
 }
 
 type SubscriptionDiagnosticSmokeRequestResult struct {
-	Name             string                  `json:"name"`
-	Ran              bool                    `json:"ran"`
-	Skipped          bool                    `json:"skipped,omitempty"`
-	SkipReason       string                  `json:"skip_reason,omitempty"`
-	ToolPayload      bool                    `json:"tool_payload"`
-	RetentionPayload bool                    `json:"retention_payload"`
-	CachePayload     bool                    `json:"cache_payload"`
-	ThinkingPayload  bool                    `json:"thinking_payload"`
-	CompactPayload   bool                    `json:"compact_payload"`
-	Route            string                  `json:"route"`
-	Content          string                  `json:"content,omitempty"`
-	Duration         string                  `json:"duration,omitempty"`
-	UsageObserved    bool                    `json:"usage_observed"`
-	Usage            providerdiag.SmokeUsage `json:"usage"`
-	Cost             providerdiag.SmokeCost  `json:"cost"`
-	Error            string                  `json:"error,omitempty"`
+	Name               string                  `json:"name"`
+	Ran                bool                    `json:"ran"`
+	Skipped            bool                    `json:"skipped,omitempty"`
+	SkipReason         string                  `json:"skip_reason,omitempty"`
+	ToolPayload        bool                    `json:"tool_payload"`
+	RetentionPayload   bool                    `json:"retention_payload"`
+	CachePayload       bool                    `json:"cache_payload"`
+	ThinkingPayload    bool                    `json:"thinking_payload"`
+	CompactPayload     bool                    `json:"compact_payload"`
+	WebSearchPayload   bool                    `json:"web_search_payload"`
+	WebSearchCallCount int                     `json:"web_search_call_count,omitempty"`
+	Route              string                  `json:"route"`
+	Content            string                  `json:"content,omitempty"`
+	Duration           string                  `json:"duration,omitempty"`
+	UsageObserved      bool                    `json:"usage_observed"`
+	Usage              providerdiag.SmokeUsage `json:"usage"`
+	Cost               providerdiag.SmokeCost  `json:"cost"`
+	Error              string                  `json:"error,omitempty"`
 }
 
 type subscriptionDiagnosticSmokeRequest struct {
@@ -146,6 +152,7 @@ type subscriptionDiagnosticSmokeRequest struct {
 	CachePayload     bool
 	ThinkingPayload  bool
 	CompactPayload   bool
+	WebSearchPayload bool
 }
 
 func DiagnoseOpenAISubscription(ctx context.Context, options SubscriptionDiagnosticOptions) SubscriptionDiagnosticReport {
@@ -317,7 +324,7 @@ func subscriptionDiagnosticCapabilitySnapshot(ctx context.Context, cfg *config.C
 		ChatCompletions:                false,
 		FunctionCalling:                true,
 		ImageInput:                     providerdiag.KnownCapabilityAvailability(false),
-		WebSearch:                      providerdiag.KnownCapabilityAvailability(false),
+		WebSearch:                      providerdiag.KnownCapabilityAvailability(true),
 		Thinking:                       providerdiag.KnownCapabilityAvailability(reasoning != nil),
 		LocalModelAvailable:            providerdiag.KnownCapabilityAvailability(false),
 		Retention: providerdiag.RetentionSnapshot{
@@ -417,6 +424,19 @@ func buildSubscriptionDiagnosticRequestPreview(ctx context.Context, cfg *config.
 				Route:          diagnosticRouteSubscriptionCompact,
 				Skipped:        true,
 				SkipReason:     RedactSubscriptionSecrets(err.Error()),
+			})
+			continue
+		}
+		if request.WebSearchPayload {
+			body := buildSubscriptionWebSearchRequest(config.WithContext(ctx, baseCfg), request.UserContent, report.Model)
+			preview.Requests = append(preview.Requests, SubscriptionDiagnosticRequestPreviewRequest{
+				Name:             request.Name,
+				WebSearchPayload: true,
+				Route:            report.Route,
+				Method:           "POST",
+				URL:              report.Endpoint,
+				Headers:          subscriptionDiagnosticPreviewHeaders(report.Account, report.Originator),
+				Body:             subscriptionDiagnosticWebSearchPreviewBody(body),
 			})
 			continue
 		}

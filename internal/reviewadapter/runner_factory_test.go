@@ -114,6 +114,58 @@ func TestReviewWebSearchRunnerPropagatesTruncationAndUsageAttribution(t *testing
 	}
 }
 
+func TestReviewWebSearchRunnerUsesOpenAISubscriptionProvider(t *testing.T) {
+	const provider = "openai_subscription"
+	websearch.RegisterWithContextForTest(t, provider, func(ctx context.Context, query, model string) (string, error) {
+		if query != "subscription web search docs" {
+			t.Fatalf("query = %q, want subscription web search docs", query)
+		}
+		if model != "gpt-5.5" {
+			t.Fatalf("model = %q, want gpt-5.5", model)
+		}
+		callback := websearch.UsageCallbackFromContext(ctx)
+		if callback == nil {
+			t.Fatal("UsageCallbackFromContext() = nil, want callback")
+		}
+		callback(api.Usage{InputTokens: 19, OutputTokens: 6})
+		return "Summary:\nsubscription review result\n\nSources:\n\n1. Docs\n   URL: https://docs.example.test/subscription-review\n\n2. Other\n   URL: https://docs.example.test/other", nil
+	})
+	cfg := config.DefaultConfig()
+	cfg.WebSearch.Provider = provider
+	cfg.WebSearch.CacheEnabled = false
+	cfg.SetProviderModelConfig(provider, config.ProviderModelConfig{DefaultModel: "gpt-5.5"})
+
+	var gotProvider string
+	var gotModel string
+	var gotUsage api.Usage
+	result, err := newReviewWebSearchRunner(RunnerFactoryOptions{
+		Config: cfg,
+		UsageAttribution: func(provider, model string, usage api.Usage) {
+			gotProvider = provider
+			gotModel = model
+			gotUsage = usage
+		},
+	}).SearchReviewWeb(context.Background(), "subscription web search docs", 1)
+	if err != nil {
+		t.Fatalf("SearchReviewWeb() error = %v", err)
+	}
+	if result.Provider != provider {
+		t.Fatalf("Provider = %q, want %q", result.Provider, provider)
+	}
+	if !result.Truncated {
+		t.Fatal("Truncated = false, want true")
+	}
+	if len(result.Results) != 1 || result.Results[0].URL != "https://docs.example.test/subscription-review" {
+		t.Fatalf("Results = %#v, want bounded subscription result", result.Results)
+	}
+	if gotProvider != provider || gotModel != "gpt-5.5" {
+		t.Fatalf("usage owner = %s/%s, want openai_subscription/gpt-5.5", gotProvider, gotModel)
+	}
+	if gotUsage.InputTokens != 19 || gotUsage.OutputTokens != 6 {
+		t.Fatalf("usage = %+v, want subscription usage", gotUsage)
+	}
+}
+
 type fakeReviewModel struct{}
 
 func (fakeReviewModel) CompleteReview(context.Context, review.ReviewModelRequest) (review.ReviewModelResponse, error) {

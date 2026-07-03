@@ -70,6 +70,7 @@ var displayProviderOrder = []string{
 var nativeWebSearchProviderOrder = []string{
 	"kimi",
 	"openai",
+	"openai_subscription",
 	"gemini",
 	"claude",
 }
@@ -145,6 +146,7 @@ var providerDescriptors = map[string]ProviderDescriptor{
 		CredentialKind:               "oauth",
 		SetupInstructions:            []string{"xelyon auth openai-subscription login"},
 		DefaultSubAgentModel:         "gpt-5.4-mini",
+		NativeWebSearch:              true,
 		SupportsResponsesAPI:         true,
 		PricingFamily:                "openai_subscription",
 		RuntimeFamily:                "openai_subscription",
@@ -483,7 +485,7 @@ func NativeWebSearchProviderKeys(includeAliases bool) []string {
 			continue
 		}
 		keys = append(keys, key)
-		if includeAliases {
+		if includeAliases && !entry.CanonicalizeAliasesForConfig {
 			keys = append(keys, entry.Aliases...)
 		}
 	}

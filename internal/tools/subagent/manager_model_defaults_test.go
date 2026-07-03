@@ -83,6 +83,38 @@ func TestManagerSpawn_OpenAISubscriptionProviderDefaultKeepsSubscriptionProvider
 	}
 }
 
+func TestManagerSpawn_InheritsOpenAISubscriptionWebSearchProvider(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SubAgent.DefaultModel = ""
+	cfg.WebSearch.Provider = "chatgpt"
+	provider := &managerTestProvider{name: "OpenAI Subscription", configKey: "openai_subscription"}
+	createdProvider := &managerTestProvider{name: "OpenAI Subscription", configKey: "openai_subscription"}
+
+	var gotWebSearchProvider string
+	manager := NewManagerWithOptions(ManagerOptions{
+		RunHeadless: func(_ context.Context, _ string, _ string, _ api.Provider, cfg *config.Config) *RunResult {
+			gotWebSearchProvider = cfg.WebSearch.Provider
+			return &RunResult{Status: "completed", Response: "ok"}
+		},
+		ProviderFactory: func(providerName string) (api.Provider, error) {
+			if providerName != "openai_subscription" {
+				t.Fatalf("ProviderFactory providerName = %q, want openai_subscription", providerName)
+			}
+			return createdProvider, nil
+		},
+	})
+
+	id, err := manager.Spawn(context.Background(), "inspect files", "", "", "", provider, cfg)
+	if err != nil {
+		t.Fatalf("Spawn() error = %v", err)
+	}
+	_ = manager.Wait([]string{id}, 0)
+
+	if gotWebSearchProvider != "chatgpt" {
+		t.Fatalf("sub-agent WebSearch.Provider = %q, want inherited chatgpt alias", gotWebSearchProvider)
+	}
+}
+
 func TestManagerSpawn_PreservesAnthropicAliasOwnerForClaudeRuntimeSubAgent(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Thinking.Enabled = false

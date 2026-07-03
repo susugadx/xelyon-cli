@@ -26,7 +26,7 @@
 | Provider | Doctor | `--json` | `--smoke` | `--tool-smoke` | `--image-smoke` | `--thinking-smoke` | `--web-search-smoke` | `--retention-smoke` | `--capabilities` | `--require-capability` | `--print-request` | Provider-only |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | none |
-| OpenAI Subscription | yes | yes | yes | yes | no | yes | no | yes | yes | yes | yes | none |
+| OpenAI Subscription | yes | yes | yes | yes | no | yes | yes | yes | yes | yes | yes | none |
 | Azure OpenAI | yes | yes | yes | yes | no | no | no | yes | yes | yes | yes | `--deployment`, `--print-config` |
 | Kimi | yes | yes | yes | yes | yes | no | yes | no | yes | yes | yes | none |
 | Bedrock | yes | yes | yes | yes | yes | yes | no | no | yes | yes | yes | none |
@@ -173,7 +173,7 @@ Every canonical provider doctor should eventually support:
 Specialized flags stay provider-specific:
 
 - OpenAI / Azure: `--retention-smoke`
-- Kimi: `--web-search-smoke`
+- Kimi / Gemini / Claude / OpenAI Subscription: `--web-search-smoke`
 - Bedrock: `--thinking-smoke`
 - Providers with image input: `--image-smoke`
 - Providers with tool calling: `--tool-smoke`
@@ -347,7 +347,7 @@ Values:
 | Provider | `responses_api` | `responses_streaming` | `chat_completions` | `function_calling` | `image_input` | `web_search` | `thinking` | `previous_response_id` | `session_persistence` | `server_compaction` | `local_model_available` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | OpenAI | route | route+catalog | route | config | model | model+route | route+config | route+config | route+config | route+config | no |
-| OpenAI Subscription | yes | yes | no | yes | no | no | config | no | no | no | no |
+| OpenAI Subscription | yes | yes | no | yes | no | yes | config | no | no | no | no |
 | Azure OpenAI | route | route+catalog | no | config | model | no | route+config | route+config | route+config | route+config | no |
 | Kimi | no | no | yes | config | yes | yes | model+config | no | no | no | no |
 | Bedrock | no | no | no | route+config | route | no | route+config | no | no | no | no |

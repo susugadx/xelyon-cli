@@ -137,6 +137,40 @@ func TestRunOpenAISubscriptionDoctorInvocation_PrintRequestJSONRedactsAndShowsV2
 	}
 }
 
+func TestRunOpenAISubscriptionDoctorInvocation_PrintRequestJSONShowsWebSearchShape(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XELYON_OPENAI_SUBSCRIPTION_AUTH_DIR", filepath.Join(t.TempDir(), "auth"))
+
+	cmd, out := newDoctorSubcommandTest(t, newOpenAISubscriptionDoctorCommand)
+
+	doctorOpenAISubscriptionModelFlag = "gpt-5.5"
+	doctorCatalogModelFlag = "gpt-5.5"
+	doctorOpenAISubscriptionWebSearchSmokeFlag = true
+	doctorPrintRequestFlag = true
+	doctorJSONFlag = true
+
+	if err := runOpenAISubscriptionDoctorInvocation(cmd, nil); err != nil {
+		t.Fatalf("runOpenAISubscriptionDoctorInvocation() error = %v\noutput:\n%s", err, out.String())
+	}
+
+	report := unmarshalDoctorJSON[openAISubscriptionDoctorJSONReport](t, out)
+	requireDoctorJSONRequestPreviewCount(t, report.RequestPreview, 1)
+	request := requireDoctorJSONRequestPreviewAt(t, report.RequestPreview, 0, "web_search")
+	if !request.WebSearchPayload || request.ToolPayload || request.RetentionPayload {
+		t.Fatalf("request flags = %+v, want web_search payload only", request)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(request.Body, &body); err != nil {
+		t.Fatalf("unmarshal preview body: %v", err)
+	}
+	if body["tool_choice"] != "required" || body["stream"] != true || body["store"] != false {
+		t.Fatalf("preview body = %#v, want native web_search shape", body)
+	}
+	if strings.Contains(out.String(), "xelyon openai subscription native web search smoke") {
+		t.Fatalf("doctor preview leaked smoke query:\n%s", out.String())
+	}
+}
+
 func TestRunOpenAISubscriptionDoctorInvocation_CapabilitiesAndRequiredCapabilityAreLocalOnly(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XELYON_OPENAI_SUBSCRIPTION_AUTH_DIR", filepath.Join(t.TempDir(), "auth"))
@@ -146,7 +180,7 @@ func TestRunOpenAISubscriptionDoctorInvocation_CapabilitiesAndRequiredCapability
 	doctorOpenAISubscriptionModelFlag = "gpt-5.5"
 	doctorCatalogModelFlag = "gpt-5.5"
 	doctorCapabilitiesFlag = true
-	doctorRequiredCapabilityFlags = []string{"responses_streaming", "function_calling"}
+	doctorRequiredCapabilityFlags = []string{"responses_streaming", "function_calling", "web_search"}
 	doctorJSONFlag = true
 
 	if err := runOpenAISubscriptionDoctorInvocation(cmd, nil); err != nil {
@@ -160,8 +194,12 @@ func TestRunOpenAISubscriptionDoctorInvocation_CapabilitiesAndRequiredCapability
 	requireDoctorJSONCheckStatus(t, required, "ok")
 	requireDoctorJSONCheckDetailContains(t, required, "responses_streaming=ok")
 	requireDoctorJSONCheckDetailContains(t, required, "function_calling=ok")
+	requireDoctorJSONCheckDetailContains(t, required, "web_search=ok")
 	if !report.Capabilities.ResponsesAPI || !report.Capabilities.ResponsesStreaming || report.Capabilities.ChatCompletions {
 		t.Fatalf("capabilities = %+v, want Responses streaming only", report.Capabilities)
+	}
+	if !report.Capabilities.WebSearch || !report.Capabilities.WebSearchKnown {
+		t.Fatalf("capabilities = %+v, want known web_search", report.Capabilities)
 	}
 	if report.Capabilities.Retention.PreviousResponseID || report.Capabilities.ServerCompaction.RequestPayload {
 		t.Fatalf("capabilities = %+v, want no response chain/server compaction", report.Capabilities)
@@ -183,6 +221,8 @@ type openAISubscriptionDoctorJSONReport struct {
 		ResponsesAPI       bool `json:"responses_api"`
 		ResponsesStreaming bool `json:"responses_streaming"`
 		ChatCompletions    bool `json:"chat_completions"`
+		WebSearch          bool `json:"web_search"`
+		WebSearchKnown     bool `json:"web_search_known"`
 		Retention          struct {
 			PreviousResponseID bool `json:"previous_response_id"`
 		} `json:"retention"`

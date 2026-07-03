@@ -20,7 +20,8 @@ not send network requests. Use --smoke for a live text request, --tool-smoke
 for function_call/function_call_output continuation, --cache-smoke for
 prompt_cache_key request-shape verification, --retention-smoke to confirm
 full-payload fallback policy, --thinking-smoke for the selected thinking level,
-and --compact-smoke to classify optional Compact API support. Use
+--web-search-smoke for provider-native web_search, and --compact-smoke to
+classify optional Compact API support. Use
 --print-request to print a sanitized structural request preview without
 sending it.`,
 		Args: cobra.NoArgs,
@@ -33,6 +34,7 @@ sending it.`,
 				CacheSmoke:     state.cacheSmoke,
 				CompactSmoke:   state.compactSmoke,
 				ThinkingSmoke:  state.thinkingSmoke,
+				WebSearchSmoke: state.webSearchSmoke,
 				SmokeOutput:    out,
 			})
 			return applyDoctorResult(cmd, silenceUsage, err)
@@ -49,6 +51,7 @@ sending it.`,
 	cmd.Flags().BoolVar(&state.cacheSmoke, "cache-smoke", false, "Verify OpenAI Subscription prompt_cache_key request shape")
 	cmd.Flags().BoolVar(&state.compactSmoke, "compact-smoke", false, "Classify optional OpenAI Subscription Compact API support")
 	cmd.Flags().BoolVar(&state.thinkingSmoke, "thinking-smoke", false, "Verify OpenAI Subscription reasoning.effort request shape for the configured thinking level")
+	cmd.Flags().BoolVar(&state.webSearchSmoke, "web-search-smoke", false, "Send one live OpenAI Subscription native web_search smoke request")
 	addDoctorTimeoutFlag(cmd, state, "openai-subscription", "")
 	addDoctorJSONFlag(cmd, state, "openai-subscription")
 	addDoctorPrintRequestFlag(cmd, state, "openai-subscription")
