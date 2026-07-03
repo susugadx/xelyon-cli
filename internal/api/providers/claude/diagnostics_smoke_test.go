@@ -306,11 +306,14 @@ func TestDiagnoseClaude_WebSearchSmokeUsesNativeWebSearchPayload(t *testing.T) {
 	defer server.Close()
 
 	setClaudeDiagnosticTestEnv(t, server.URL+proxyPath, "claude-key")
+	cfg := config.DefaultConfig()
+	cfg.Thinking.Enabled = true
+	cfg.Thinking.Level = "xhigh"
 
 	report := Diagnose(context.Background(), DiagnosticOptions{
-		Config:         config.DefaultConfig(),
-		Model:          defaultClaudeModel,
-		CatalogModel:   defaultClaudeModel,
+		Config:         cfg,
+		Model:          "claude-opus-4-7",
+		CatalogModel:   "claude-opus-4-7",
 		RunSmoke:       true,
 		WebSearchSmoke: true,
 	})
@@ -328,6 +331,12 @@ func TestDiagnoseClaude_WebSearchSmokeUsesNativeWebSearchPayload(t *testing.T) {
 	}
 	if len(captured.Tools) != 1 || captured.Tools[0].Type != "web_search_20250305" {
 		t.Fatalf("tools = %#v, want one Claude web search tool", captured.Tools)
+	}
+	if captured.Thinking == nil || captured.Thinking.Type != "adaptive" {
+		t.Fatalf("thinking = %#v, want adaptive", captured.Thinking)
+	}
+	if captured.OutputConfig == nil || captured.OutputConfig.Effort != "xhigh" {
+		t.Fatalf("output_config = %#v, want effort=xhigh", captured.OutputConfig)
 	}
 }
 

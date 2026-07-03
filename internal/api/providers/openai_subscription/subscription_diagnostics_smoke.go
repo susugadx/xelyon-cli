@@ -95,7 +95,7 @@ func runSubscriptionDiagnosticSmoke(ctx context.Context, cfg *config.Config, rep
 	started := time.Now()
 	for _, request := range subscriptionDiagnosticSmokeRequests(options) {
 		if request.WebSearchPayload {
-			requestResult, err := runSubscriptionDiagnosticWebSearchSmokeRequest(smokeCtx, provider, report, request)
+			requestResult, err := runSubscriptionDiagnosticWebSearchSmokeRequest(config.WithContext(smokeCtx, baseCfg), provider, report, request)
 			subscriptionDiagnosticAddSmokeRequest(&result, requestResult)
 			if err != nil {
 				result.Duration = time.Since(started).Round(time.Millisecond).String()

@@ -98,22 +98,26 @@ func (p *Provider) buildRequestFeatures(ctx context.Context, cfg *config.Config,
 	if cfg.PromptCache.Enabled {
 		features.CacheControl = api.NewCacheControlWithConfig(cfg)
 	}
-	if api.IsThinkingEnabled(ctx) {
-		if IsAdaptiveThinkingModel(catalogModel) {
-			features.Thinking = &ThinkingConfig{Type: "adaptive"}
-			features.OutputConfig = &OutputConfig{Effort: LevelToEffort(cfg.Thinking.Level, catalogModel)}
-		} else {
-			features.Thinking = &ThinkingConfig{
-				Type:         "enabled",
-				BudgetTokens: LevelToBudgetTokens(cfg.Thinking.Level),
-			}
-		}
-	}
+	features.Thinking, features.OutputConfig = buildClaudeThinkingRequestPolicy(ctx, cfg, catalogModel)
 	if api.ShouldSendToolPayload(ctx, p.IsFunctionCallingEnabled()) {
 		features.Tools = GetCombinedClaudeToolsWithContext(ctx, p.mcpTools)
 		features.ToolChoice = buildClaudeToolChoice(p.toolChoice)
 	}
 	return features
+}
+
+func buildClaudeThinkingRequestPolicy(ctx context.Context, cfg *config.Config, catalogModel string) (*ThinkingConfig, *OutputConfig) {
+	cfg = config.ResolveContext(ctx, cfg)
+	if !api.IsThinkingEnabled(ctx) {
+		return nil, nil
+	}
+	if IsAdaptiveThinkingModel(catalogModel) {
+		return &ThinkingConfig{Type: "adaptive"}, &OutputConfig{Effort: LevelToEffort(cfg.Thinking.Level, catalogModel)}
+	}
+	return &ThinkingConfig{
+		Type:         "enabled",
+		BudgetTokens: LevelToBudgetTokens(cfg.Thinking.Level),
+	}, nil
 }
 
 func claudeThinkingActiveForModel(ctx context.Context, catalogModel string) bool {
